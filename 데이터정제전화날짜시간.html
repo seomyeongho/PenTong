@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>데이터 정제 - 펜통</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 폰트 -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css" />
+
+    <!-- JSuites & Jspreadsheet -->
+    <script src="https://unpkg.com/jsuites@4/dist/jsuites.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/jsuites@4/dist/jsuites.css" type="text/css" />
+    
+    <script src="https://unpkg.com/jspreadsheet-ce@4/dist/index.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/jspreadsheet-ce@4/dist/jspreadsheet.css" type="text/css" />
+
+    <style>
+        body { font-family: 'Pretendard', sans-serif; background-color: #e5e7eb; } 
+        
+        /* 헤더 스타일 */
+        .jexcel > thead > tr > td { 
+            background-color: #f3f4f6; 
+            color: #374151; 
+            font-weight: 800; 
+            font-size: 14px;
+        }
+        
+        /* 기본 셀 스타일 */
+        .jexcel > tbody > tr > td { 
+            color: #111; 
+            font-size: 14px;
+        }
+        
+        /* Readonly 셀 기본 배경 */
+        .jexcel > tbody > tr > td.readonly {
+            color: inherit;
+            background-color: #f9fafb; 
+        }
+
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+        /* 타입 선택 버튼 활성화 스타일 */
+        .type-btn.active {
+            background-color: #4f46e5; /* Indigo 600 */
+            color: white;
+            border-color: #4f46e5;
+        }
+    </style>
+</head>
+<body class="h-screen flex justify-center overflow-hidden">
+
+    <!-- 앱 컨테이너 -->
+    <div class="w-full max-w-7xl bg-white shadow-2xl flex flex-col h-full border-x border-gray-300">
+
+        <!-- 상단 헤더 -->
+        <header class="bg-indigo-600 text-white p-4 shadow-md flex justify-between items-center z-10 shrink-0">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">🖊️</span>
+                <div>
+                    <h1 class="text-lg font-bold leading-tight">데이터 정제(전화번호, 날짜, 시간)</h1>
+                </div>
+            </div>
+        </header>
+
+        <!-- 메인 컨텐츠 영역 -->
+        <div class="flex flex-1 overflow-hidden">
+            
+            <!-- 왼쪽: 스프레드시트 영역 -->
+            <div class="flex-1 p-4 flex flex-col min-w-0 bg-white border-r border-gray-200">
+                <div class="mb-3 flex justify-between items-end shrink-0">
+                    <div>
+                        <h2 class="font-bold text-gray-800 text-lg">데이터 입력창</h2>
+                        <p class="text-sm text-gray-600 font-medium">A열에 데이터를 붙여넣고 우측에서 타입을 선택하세요.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <!-- 샘플 데이터 버튼 추가 -->
+                        <button onclick="loadSampleData()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded font-bold transition">
+                            📝 샘플 데이터
+                        </button>
+                        <button onclick="resetSheet()" class="text-xs text-gray-500 hover:text-red-600 underline self-center font-medium">
+                            전체 지우기
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="spreadsheet" class="flex-1 overflow-hidden border-2 border-gray-300 rounded shadow-sm relative"></div>
+            </div>
+
+            <!-- 오른쪽: 컨트롤 패널 -->
+            <aside class="w-80 bg-gray-50 flex flex-col shadow-xl z-20 border-l border-gray-200">
+                
+                <div class="p-6 flex-1 overflow-y-auto flex flex-col gap-6">
+                    
+                    <!-- 1. 데이터 타입 선택 (버튼형) -->
+                    <div class="shrink-0">
+                        <label class="block text-sm font-bold text-gray-800 mb-2">데이터 타입 선택</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button onclick="setType('PHONE')" id="btn-PHONE" class="type-btn py-3 px-2 border-2 border-gray-300 rounded-lg font-bold text-gray-500 hover:border-indigo-400 hover:text-indigo-500 transition text-sm">
+                                📞 전화번호
+                            </button>
+                            <button onclick="setType('DATE')" id="btn-DATE" class="type-btn py-3 px-2 border-2 border-gray-300 rounded-lg font-bold text-gray-500 hover:border-indigo-400 hover:text-indigo-500 transition text-sm">
+                                📅 날짜
+                            </button>
+                            <button onclick="setType('TIME')" id="btn-TIME" class="type-btn py-3 px-2 border-2 border-gray-300 rounded-lg font-bold text-gray-500 hover:border-indigo-400 hover:text-indigo-500 transition text-sm">
+                                ⏰ 시간
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2. 형식 선택 옵션 -->
+                    <div class="flex flex-col gap-2 shrink-0">
+                        <label class="text-sm font-bold text-gray-800">변환할 형식</label>
+                        <select id="formatSelect" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition bg-white text-sm font-medium text-gray-800">
+                            <!-- JS로 옵션 채워짐 -->
+                        </select>
+                    </div>
+
+                    <!-- 3. 변환 결과 리포트 -->
+                    <div id="resultStats" class="hidden bg-white p-4 rounded-xl shadow-sm border border-gray-200 shrink-0">
+                        <h3 class="font-bold text-gray-800 mb-3 text-sm flex items-center gap-1">
+                            📊 변환 결과 리포트
+                        </h3>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="bg-gray-100 p-2 rounded-lg border border-gray-200">
+                                <div class="text-[10px] text-gray-500 font-bold mb-1">총 데이터</div>
+                                <div id="statTotal" class="text-lg font-black text-gray-700">0</div>
+                            </div>
+                            <div class="bg-green-50 p-2 rounded-lg border border-green-100">
+                                <div class="text-[10px] text-green-600 font-bold mb-1">성공</div>
+                                <div id="statSuccess" class="text-lg font-black text-green-600">0</div>
+                            </div>
+                            <div class="bg-red-50 p-2 rounded-lg border border-red-100">
+                                <div class="text-[10px] text-red-600 font-bold mb-1">실패</div>
+                                <div id="statFail" class="text-lg font-black text-red-500">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. 사용 가이드 -->
+                    <div class="bg-white rounded-lg border border-gray-200 overflow-hidden text-sm shrink-0">
+                        <div class="bg-gray-100 px-3 py-2 font-bold text-gray-700 border-b border-gray-200">
+                            <span>💡 지원 형식 예시</span>
+                        </div>
+                        <div id="guideContent" class="p-3 space-y-3 bg-gray-50">
+                            <div>
+                                <span class="inline-block px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-xs font-bold mb-1">전화번호</span>
+                                <p class="text-gray-600 text-xs font-mono">1012345678 → 010-1234-5678<br>511234567 → 051-123-4567</p>
+                            </div>
+                            <div>
+                                <span class="inline-block px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs font-bold mb-1">날짜</span>
+                                <p class="text-gray-600 text-xs font-mono">2026.2.2 → 2026. 2. 2.</p>
+                            </div>
+                             <div>
+                                <span class="inline-block px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-xs font-bold mb-1">시간</span>
+                                <p class="text-gray-600 text-xs font-mono">1430 → 14:30</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 5. 액션 버튼 -->
+                    <div class="mt-auto flex flex-col gap-2 pt-4 shrink-0">
+                        <button onclick="applyConversion()" id="convertBtn" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition transform active:scale-95 text-lg mb-2">
+                            ⚡ 변환 실행
+                        </button>
+
+                        <button onclick="copyResult()" id="copyBtn" class="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition transform active:scale-95 flex items-center justify-center gap-2">
+                            📋 결과 복사 (B열)
+                        </button>
+                    </div>
+                </div>
+
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        let table;
+        let currentType = 'PHONE'; 
+        
+        const initialData = Array.from({ length: 50 }, () => ['', '', '']);
+
+        const TYPE_LABELS = {
+            PHONE: '전화번호',
+            DATE: '날짜',
+            TIME: '시간',
+            UNKNOWN: '알 수 없음'
+        };
+
+        const FORMAT_OPTIONS = {
+            PHONE: [
+                { value: 'hyphen', label: '010-1234-5678 (표준)' },
+                { value: 'dot', label: '010.1234.5678 (점 구분)' },
+                { value: 'plain', label: '01012345678 (숫자만)' },
+                { value: 'global', label: '+82-10-1234-5678 (국제)' }
+            ],
+            DATE: [
+                { value: 'official_kr', label: '2026. 1. 1. (공문 표준)' },
+                { value: 'official_kr_zero', label: '2026. 01. 01. (0 포함 공문)' },
+                { value: 'dot_space', label: '2026. 1. 1 (마지막 점 없음)' }, 
+                { value: 'korean', label: '2026년 1월 1일 (한글)' },
+                { value: 'korean_zero', label: '2026년 01월 01일 (0 포함 한글)' },
+                { value: 'hyphen', label: '2026-01-01 (하이픈)' },
+                { value: 'dot_compact', label: '2026.1.1 (간략)' },
+                { value: 'dot_compact_zero', label: '2026.01.01 (0 포함 간략)' },
+                { value: 'slash', label: '2026/01/01 (슬래시)' },
+                { value: 'compact', label: '20260101 (숫자만)' }
+            ],
+            TIME: [
+                { value: 'colon_24', label: '14:30 (24시간)' },
+                { value: 'korean_ampm', label: '오후 2:30' },
+                { value: 'ampm', label: '2:30 PM' },
+                { value: 'compact', label: '1430' }
+            ]
+        };
+
+        // 샘플 데이터 정의
+        const SAMPLE_DATA = {
+            PHONE: [
+                '01012345678', 
+                '1056781234', 
+                '021234567', 
+                '29876543', 
+                '031-123-4567',
+                '0519876543',
+                '511234567',
+                '010.5678.1234',
+                '07012345678'
+            ],
+            DATE: [
+                '20260101', 
+                '2026.1.1', 
+                '26.02.02', 
+                '2026-03-01', 
+                '2026/05/05', 
+                '2026 12 25',
+                '260815',
+                '2026년 10월 9일',
+                '1999.5.5'
+            ],
+            TIME: [
+                '1430', 
+                '0900', 
+                '14:30', 
+                '9:00', 
+                '오후 2시 30분', 
+                '16시 20분', 
+                '0830',
+                '2359',
+                '12:00'
+            ]
+        };
+
+        window.onload = function() {
+            try {
+                table = jspreadsheet(document.getElementById('spreadsheet'), {
+                    data: initialData,
+                    columns: [
+                        { type: 'text', title: '원본 데이터 (A열)', width: 220 },
+                        { type: 'text', title: '변환 결과 (B열)', width: 220, readOnly: true },
+                        { type: 'text', title: '상태 (C열)', width: 80, readOnly: true, align: 'center' },
+                    ],
+                    onchange: handleSheetChange,
+                    onpaste: handlePaste,
+                    allowInsertColumn: false,
+                });
+                
+                setType('PHONE');
+            } catch (e) {
+                console.error("JSpreadsheet Init Error: ", e);
+                alert("프로그램 초기화 중 오류가 발생했습니다. 새로고침 해주세요.");
+            }
+        };
+
+        function setType(type) {
+            currentType = type;
+            document.querySelectorAll('.type-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${type}`).classList.add('active');
+            
+            const select = document.getElementById('formatSelect');
+            select.innerHTML = '';
+            
+            FORMAT_OPTIONS[type].forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.text = opt.label;
+                select.add(option);
+            });
+            
+            // 타입 변경 시 데이터가 있으면 변환 재시도
+            const data = table.getColumnData(0).filter(v => v && v.toString().trim() !== '');
+            if(data.length > 0) {
+               applyConversion();
+            }
+        }
+
+        // 샘플 데이터 로드 함수
+        function loadSampleData() {
+            // 시트 초기화
+            resetSheet();
+            
+            const samples = SAMPLE_DATA[currentType];
+            if (!samples) return;
+
+            // 데이터 입력
+            samples.forEach((val, index) => {
+                table.setValueFromCoords(0, index, val);
+            });
+
+            // 즉시 변환 실행
+            setTimeout(applyConversion, 100);
+        }
+
+        document.getElementById('formatSelect').onchange = function() {
+            applyConversion();
+        };
+
+        function handleSheetChange(instance, cell, x, y, value) {
+            // 자동 변환 제외
+        }
+
+        function handlePaste(instance, data) {
+            if (!data || (Array.isArray(data) && data.length === 0)) return;
+
+            const rowCount = table.options.data.length;
+            const stylesToReset = {};
+            
+            for(let i=0; i<rowCount; i++) {
+                if(table.getValueFromCoords(1, i) || table.getValueFromCoords(2, i)) {
+                    table.setValueFromCoords(1, i, '', true);
+                    table.setValueFromCoords(2, i, '', true);
+                    
+                    const cellB = `B${i+1}`;
+                    const cellC = `C${i+1}`;
+                    
+                    stylesToReset[cellB] = 'background-color: ; color: ; text-decoration: ; font-weight: ;';
+                    stylesToReset[cellC] = 'background-color: ; color: ; font-weight: ;';
+                }
+            }
+            
+            if(Object.keys(stylesToReset).length > 0) {
+                table.setStyle(stylesToReset);
+            }
+            
+            document.getElementById('resultStats').classList.add('hidden');
+            setTimeout(() => {
+                applyConversion();
+            }, 100); 
+        }
+
+        function resetSheet() {
+            table.setData(Array.from({ length: 50 }, () => ['', '', '']));
+            
+            const rows = table.options.data.length;
+            const stylesToReset = {};
+            for(let i=0; i<rows; i++) {
+                const cellB = `B${i+1}`;
+                const cellC = `C${i+1}`;
+                stylesToReset[cellB] = 'background-color: ; color: ; text-decoration: ; font-weight: ;';
+                stylesToReset[cellC] = 'background-color: ; color: ; font-weight: ;';
+            }
+            table.setStyle(stylesToReset);
+            document.getElementById('resultStats').classList.add('hidden');
+        }
+
+        function applyConversion() {
+            const format = document.getElementById('formatSelect').value;
+            const inputData = table.getColumnData(0);
+            
+            let totalDataCount = 0;
+            let successCount = 0;
+            let failCount = 0;
+
+            const stylesToUpdate = {};
+
+            inputData.forEach((val, index) => {
+                const cellB = `B${index+1}`;
+                const cellC = `C${index+1}`;
+
+                if (val === null || val === undefined || val.toString().trim() === '') {
+                    table.setValueFromCoords(1, index, '', true); 
+                    table.setValueFromCoords(2, index, '', true);
+                    stylesToUpdate[cellB] = 'background-color: ; color: ; text-decoration: ; font-weight: ;';
+                    stylesToUpdate[cellC] = 'background-color: ; color: ; font-weight: ;';
+                    return;
+                }
+
+                totalDataCount++;
+                const strVal = val.toString();
+                let result = null;
+
+                try {
+                    if (currentType === 'PHONE') result = convertPhone(strVal, format);
+                    if (currentType === 'DATE') result = convertDate(strVal, format);
+                    if (currentType === 'TIME') result = convertTime(strVal, format);
+                } catch (e) {
+                    result = null;
+                }
+
+                if (result) {
+                    // 성공
+                    successCount++;
+                    table.setValueFromCoords(1, index, result, true);
+                    table.setValueFromCoords(2, index, '성공', true);
+                    
+                    stylesToUpdate[cellB] = 'background-color: #dcfce7 !important; color: #166534 !important; font-weight: bold !important; text-decoration: none !important;';
+                    stylesToUpdate[cellC] = 'background-color: #16a34a !important; color: #ffffff !important; font-weight: bold !important; text-align: center !important;';
+                } else {
+                    // 실패
+                    failCount++;
+                    table.setValueFromCoords(1, index, val, true); 
+                    table.setValueFromCoords(2, index, '--실패--', true);
+                    
+                    stylesToUpdate[cellB] = 'background-color: #fee2e2 !important; color: #b91c1c !important; text-decoration: line-through !important; font-weight: normal !important;';
+                    stylesToUpdate[cellC] = 'background-color: #dc2626 !important; color: #ffffff !important; font-weight: bold !important; text-align: center !important;';
+                }
+            });
+            
+            if(Object.keys(stylesToUpdate).length > 0) {
+                table.setStyle(stylesToUpdate);
+            }
+
+            updateStats(totalDataCount, successCount, failCount);
+        }
+
+        function updateStats(total, success, fail) {
+            const statsPanel = document.getElementById('resultStats');
+            const elTotal = document.getElementById('statTotal');
+            const elSuccess = document.getElementById('statSuccess');
+            const elFail = document.getElementById('statFail');
+
+            elTotal.innerText = total;
+            elSuccess.innerText = success;
+            elFail.innerText = fail;
+
+            statsPanel.classList.remove('hidden');
+        }
+
+        function convertPhone(str, format) {
+            let digits = str.replace(/[^0-9]/g, '');
+            
+            if (digits.length >= 8 && digits.length <= 10) {
+                if (digits.startsWith('10') && digits.length === 10) digits = '0' + digits;
+                else if (digits.startsWith('2') && (digits.length === 8 || digits.length === 9)) digits = '0' + digits;
+                else if (/^[3-6]/.test(digits) && (digits.length === 9 || digits.length === 10)) digits = '0' + digits;
+                else if (digits.startsWith('70') && digits.length === 10) digits = '0' + digits;
+            }
+
+            if (digits.length < 8) return null; 
+
+            let parts = [];
+            if (digits.startsWith('02')) {
+                if (digits.length === 9) parts = [digits.substring(0,2), digits.substring(2,5), digits.substring(5)]; 
+                else if (digits.length === 10) parts = [digits.substring(0,2), digits.substring(2,6), digits.substring(6)]; 
+                else return null; 
+            } else {
+                if (digits.length === 10) parts = [digits.substring(0,3), digits.substring(3,6), digits.substring(6)]; 
+                else if (digits.length === 11) parts = [digits.substring(0,3), digits.substring(3,7), digits.substring(7)]; 
+                else return null;
+            }
+
+            if (format === 'hyphen') return parts.join('-');
+            if (format === 'dot') return parts.join('.');
+            if (format === 'plain') return digits;
+            if (format === 'global') return '+82-' + parts[0].substring(1) + '-' + parts[1] + '-' + parts[2];
+            return digits;
+        }
+
+        function convertDate(str, format) {
+            const nums = str.match(/\d+/g);
+            if (!nums) return null;
+
+            let y, m, d;
+
+            if (nums.length === 1) {
+                const s = nums[0];
+                if (s.length === 8) {
+                    y = s.substring(0, 4); m = s.substring(4, 6); d = s.substring(6, 8);
+                } else if (s.length === 6) {
+                    y = '20' + s.substring(0, 2); m = s.substring(2, 4); d = s.substring(4, 6);
+                } else {
+                    return null;
+                }
+            }
+            else if (nums.length >= 3) {
+                y = nums[0];
+                m = nums[1];
+                d = nums[2];
+                if (y.length === 2) y = (parseInt(y) > 50 ? '19' : '20') + y;
+            } else {
+                return null;
+            }
+
+            const year = parseInt(y);
+            const month = parseInt(m);
+            const day = parseInt(d);
+
+            if (month < 1 || month > 12) return null;
+            if (day < 1 || day > 31) return null;
+
+            const dateObj = new Date(year, month - 1, day);
+            if (dateObj.getMonth() + 1 !== month || dateObj.getDate() !== day) return null;
+
+            const displayM = month.toString();
+            const displayD = day.toString();
+            const padM = month.toString().padStart(2, '0');
+            const padD = day.toString().padStart(2, '0');
+
+            if (format === 'official_kr') return `${year}. ${displayM}. ${displayD}.`; 
+            if (format === 'official_kr_zero') return `${year}. ${padM}. ${padD}.`;
+            if (format === 'dot_space') return `${year}. ${displayM}. ${displayD}`; 
+            
+            if (format === 'korean') return `${year}년 ${displayM}월 ${displayD}일`;
+            if (format === 'korean_zero') return `${year}년 ${padM}월 ${padD}일`;
+
+            if (format === 'hyphen') return `${year}-${padM}-${padD}`;
+            if (format === 'dot_compact') return `${year}.${displayM}.${displayD}`;
+            if (format === 'dot_compact_zero') return `${year}.${padM}.${padD}`;
+            if (format === 'compact') return `${year}${padM}${padD}`;
+            if (format === 'slash') return `${year}/${padM}/${padD}`;
+            
+            return `${year}-${padM}-${padD}`;
+        }
+
+        function convertTime(str, format) {
+            let h, m;
+            const nums = str.match(/\d+/g);
+            if (!nums) return null;
+
+            if (str.includes(':')) {
+                if (nums.length >= 2) { h = parseInt(nums[0]); m = parseInt(nums[1]); }
+                else return null;
+            } else if (nums.length === 1 && nums[0].length === 4) {
+                h = parseInt(nums[0].substring(0, 2));
+                m = parseInt(nums[0].substring(2, 4));
+            } else if (str.includes('시')) {
+                h = parseInt(nums[0]);
+                m = nums.length > 1 ? parseInt(nums[1]) : 0;
+            } else {
+                return null;
+            }
+
+            if ((str.includes('오후') || str.toUpperCase().includes('PM')) && h < 12) h += 12;
+            if ((str.includes('오전') || str.toUpperCase().includes('AM')) && h === 12) h = 0;
+
+            if (h < 0 || h > 24 || m < 0 || m > 59) return null;
+
+            const pad = (n) => n.toString().padStart(2, '0');
+            
+            if (format === 'colon_24') return `${pad(h)}:${pad(m)}`;
+            if (format === 'compact') return `${pad(h)}${pad(m)}`;
+            
+            let ampm = h >= 12 ? '오후' : '오전';
+            let ampmEng = h >= 12 ? 'PM' : 'AM';
+            let h12 = h % 12;
+            h12 = h12 ? h12 : 12; 
+
+            if (format === 'korean_ampm') return `${ampm} ${h12}:${pad(m)}`;
+            if (format === 'ampm') return `${h12}:${pad(m)} ${ampmEng}`;
+
+            return `${pad(h)}:${pad(m)}`;
+        }
+
+        function copyResult() {
+            const data = table.getColumnData(1).filter(v => v !== '');
+            if (data.length === 0) {
+                alert('복사할 데이터가 없습니다.');
+                return;
+            }
+            const textToCopy = data.join('\n');
+            const textArea = document.createElement("textarea");
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand("Copy");
+            textArea.remove();
+            
+            const btn = document.getElementById('copyBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✅ 복사 완료!';
+            setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+        }
+    </script>
+</body>
+</html>

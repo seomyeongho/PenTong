@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>컴퓨터 정보 및 관리</title>
+    <style>
+        /* 기본 스타일 초기화 및 폰트 설정 */
+        :root {
+            --primary-color: #4a6ee0;
+            --primary-hover: #3a5bbf;
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-muted: #6c757d;
+            --border-color: #e0e4e8;
+            --danger-color: #e74c3c;
+            --success-color: #2ecc71;
+        }
+
+        body {
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto; 
+        }
+
+        * { box-sizing: border-box; }
+
+        .header {
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            color: var(--primary-color);
+        }
+
+        .btn-refresh {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        .btn-refresh:hover { background-color: var(--primary-hover); }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            margin-bottom: 16px;
+            font-size: 18px;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 14px;
+            min-height: 24px;
+        }
+
+        .info-label {
+            color: var(--text-muted);
+            font-weight: bold;
+            flex-shrink: 0;
+            margin-right: 15px;
+        }
+
+        .info-value {
+            text-align: right;
+            word-break: break-all;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .disk-item {
+            background-color: var(--bg-color);
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar-bg {
+            background-color: #ddd;
+            height: 10px;
+            border-radius: 5px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            border-radius: 5px;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
+        .tool-btn {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 12px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .tool-btn:hover {
+            background-color: #eef2ff;
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .btn-action {
+            background-color: var(--text-main);
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .btn-action:hover { background-color: #555; }
+
+        /* 팝업(Modal) 스타일 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal {
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 420px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .modal-title {
+            margin-top: 0;
+            color: var(--primary-color);
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+
+        .modal-message {
+            margin-bottom: 20px;
+            font-size: 15px;
+            line-height: 1.5;
+            white-space: pre-line;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-modal {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .btn-modal-primary { background-color: var(--primary-color); color: white; }
+        .btn-modal-primary:hover { background-color: var(--primary-hover); }
+        .btn-modal-cancel { background-color: #f1f1f1; color: #333; }
+        .btn-modal-cancel:hover { background-color: #e2e2e2; }
+
+        /* 로딩 오버레이 */
+        .loading-overlay {
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255,255,255,0.8);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 로딩 화면 -->
+    <div id="loading" class="loading-overlay">
+        <div class="spinner"></div>
+        <div>시스템 정보를 불러오는 중입니다...</div>
+    </div>
+
+    <!-- 범용 알림 팝업 -->
+    <div id="alertModal" class="modal-overlay">
+        <div class="modal">
+            <h3 id="alertTitle" class="modal-title">알림</h3>
+            <div id="alertMessage" class="modal-message">메시지 내용</div>
+            <div class="modal-buttons">
+                <button class="btn-modal btn-modal-primary" onclick="closeModal('alertModal')">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- IP 변경 안내 팝업 -->
+    <div id="ipModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">🌐 IP 주소 관리 및 변경</h3>
+            <div class="modal-message" style="text-align: left; font-size: 14px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e0e4e8;">
+                보안 정책상 IP 주소는 <b>네트워크 설정</b>에서 직접 변경해야 합니다.<br><br>
+                1. 아래 <b>[네트워크 연결 열기]</b> 버튼 클릭<br>
+                2. 사용 중인 어댑터(이더넷 등) <b>우클릭 → 속성</b><br>
+                3. <b>인터넷 프로토콜 버전 4 (TCP/IPv4)</b> 더블클릭<br>
+                4. 지정받은 IP 주소 입력 후 확인
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-modal btn-modal-cancel" onclick="closeModal('ipModal')">닫기</button>
+                <button class="btn-modal btn-modal-primary" onclick="openNetworkConnections()">네트워크 연결 열기</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="header">
+        <h1>컴퓨터 정보 및 관리</h1>
+        <button class="btn-refresh" onclick="loadSystemInfo()">🔄 정보 새로고침</button>
+    </div>
+
+    <div class="grid-container">
+        <!-- 기본 시스템 정보 카드 -->
+        <div class="card">
+            <h2>🖥️ 시스템 기본 정보</h2>
+            <div class="info-row"><span class="info-label">운영체제</span><span class="info-value" id="os-system">-</span></div>
+            <div class="info-row"><span class="info-label">버전</span><span class="info-value" id="os-version">-</span></div>
+            <div class="info-row"><span class="info-label">종류</span><span class="info-value" id="os-arch">-</span></div>
+            <div class="info-row"><span class="info-label">부팅 시간</span><span class="info-value" id="os-boot">-</span></div>
+            
+            <h2 style="margin-top: 25px;">🌐 네트워크 정보</h2>
+            <div class="info-row">
+                <span class="info-label">PC 이름 (호스트)</span>
+                <span class="info-value">
+                    <span id="net-hostname">-</span>
+                    <!-- 윈도우 기본 시스템 속성(sysdm.cpl) 창 띄우기 -->
+                    <button class="btn-action" onclick="runTool('sys_properties')">변경</button>
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">IP 주소 (IPv4)</span>
+                <span class="info-value">
+                    <span id="net-ip">-</span>
+                    <button class="btn-action" onclick="openIpModal()">관리</button>
+                </span>
+            </div>
+            <div class="info-row"><span class="info-label">MAC 주소</span><span class="info-value" id="net-mac">-</span></div>
+        </div>
+
+        <!-- 하드웨어 정보 카드 -->
+        <div class="card">
+            <h2>⚙️ 하드웨어 정보 (CPU / RAM 등)</h2>
+            <div class="info-row"><span class="info-label">프로세서</span><span class="info-value" id="cpu-name">-</span></div>
+            <div class="info-row"><span class="info-label">코어 수</span><span class="info-value" id="cpu-cores">-</span></div>
+            <div class="info-row"><span class="info-label">메인보드</span><span class="info-value" id="mb-name">-</span></div>
+            <div class="info-row"><span class="info-label">그래픽(GPU)</span><span class="info-value" id="gpu-name">-</span></div>
+            <hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 15px 0;">
+            <div class="info-row"><span class="info-label">총 메모리(RAM)</span><span class="info-value" id="ram-total">-</span></div>
+            <div class="info-row"><span class="info-label">사용 중인 메모리</span><span class="info-value" id="ram-used">-</span></div>
+            <div class="info-row"><span class="info-label">메모리 사용률</span><span class="info-value" id="ram-percent">-</span></div>
+            <div class="progress-bar-bg"><div id="ram-bar" class="progress-bar-fill" style="width: 0%;"></div></div>
+        </div>
+
+        <!-- 디스크 드라이브 카드 -->
+        <div class="card">
+            <h2>💾 디스크 드라이브 상태</h2>
+            <div id="disk-container">
+                <div style="text-align: center; color: var(--text-muted); padding: 20px;">정보를 불러오는 중...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 시스템 관리 도구 카드 -->
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>🚀 시스템 관리 및 설정</h2>
+        <div class="tools-grid">
+            <button class="tool-btn" onclick="runTool('control_panel')">🎛️ 제어판</button>
+            <button class="tool-btn" onclick="runTool('device_manager')">🔧 장치 관리자</button>
+            <button class="tool-btn" onclick="runTool('network_connections')">🌐 네트워크 연결</button>
+            <button class="tool-btn" onclick="runTool('printers')">🖨️ 장치 및 프린터</button>
+            <button class="tool-btn" onclick="runTool('programs')">🗑️ 프로그램 추가/제거</button>
+            <button class="tool-btn" onclick="runTool('sys_properties')">⚙️ 시스템 속성</button>
+            <button class="tool-btn" onclick="runTool('disk_management')">💽 디스크 관리</button>
+            <button class="tool-btn" onclick="runTool('services')">🛠️ 서비스 관리</button>
+            <button class="tool-btn" onclick="runTool('taskmgr')">📊 작업 관리자</button>
+            <button class="tool-btn" onclick="runTool('cmd')">💻 명령 프롬프트</button>
+            <button class="tool-btn" onclick="runTool('regedit')">📝 레지스트리 편집</button>
+            <button class="tool-btn" onclick="runTool('eventvwr')">📋 이벤트 뷰어</button>
+            <button class="tool-btn" onclick="runTool('dxdiag')">🎮 DirectX 진단</button>
+        </div>
+    </div>
+
+    <!-- 보조 프로그램 유틸리티 카드 -->
+    <div class="card" style="margin-bottom: 30px;">
+        <h2>🧰 기본 보조 프로그램 (유틸리티)</h2>
+        <div class="tools-grid">
+            <button class="tool-btn" onclick="runTool('explorer')">📁 파일 탐색기</button>
+            <button class="tool-btn" onclick="runTool('calc')">🧮 계산기</button>
+            <button class="tool-btn" onclick="runTool('notepad')">📝 메모장</button>
+            <button class="tool-btn" onclick="runTool('mspaint')">🎨 그림판</button>
+            <button class="tool-btn" onclick="runTool('snippingtool')">✂️ 캡처 도구</button>
+            <button class="tool-btn" onclick="runTool('soundrecorder')">🎙️ 음성 녹음기</button>
+            <button class="tool-btn" onclick="runTool('magnify')">🔍 돋보기</button>
+            <button class="tool-btn" onclick="runTool('osk')">⌨️ 화상 키보드</button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // iframe 내부에서 부모 창의 API를 호출하기 위한 브릿지 통신 함수
+        // ==========================================
+        function callPywebViewApi(method, payload = null) {
+            return new Promise((resolve, reject) => {
+                if (window === window.parent) {
+                    console.warn("단독 실행 테스트 모드: API(" + method + ") 호출 차단");
+                    setTimeout(() => reject(new Error("Not in pywebview iframe")), 100);
+                    return;
+                }
+
+                const messageId = Date.now() + Math.random().toString(36).substring(2, 9);
+                
+                const messageHandler = function(event) {
+                    const data = event.data;
+                    if (data && data.id === messageId) {
+                        window.removeEventListener('message', messageHandler);
+                        if (data.status === 'success') {
+                            resolve(data.response);
+                        } else {
+                            reject(data.error);
+                        }
+                    }
+                };
+
+                window.addEventListener('message', messageHandler);
+
+                window.parent.postMessage({
+                    type: 'pywebview-call',
+                    id: messageId,
+                    method: method,
+                    payload: payload
+                }, '*');
+            });
+        }
+
+        // ==========================================
+        // UI 팝업 및 제어 함수
+        // ==========================================
+        function showAlert(title, message) {
+            document.getElementById('alertTitle').innerText = title;
+            document.getElementById('alertMessage').innerText = message;
+            document.getElementById('alertModal').style.display = 'flex';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'flex' : 'none';
+        }
+
+        function openIpModal() {
+            document.getElementById('ipModal').style.display = 'flex';
+        }
+
+        function openNetworkConnections() {
+            closeModal('ipModal');
+            runTool('network_connections');
+        }
+
+        // ==========================================
+        // 파이썬 연동 주요 기능
+        // ==========================================
+
+        async function loadSystemInfo() {
+            showLoading(true);
+            try {
+                const info = await callPywebViewApi('get_all_system_info');
+                
+                if (info.error) {
+                    showAlert('오류', '정보를 불러오는 중 오류가 발생했습니다.\n' + info.error);
+                    showLoading(false);
+                    return;
+                }
+
+                document.getElementById('os-system').innerText = info.os.system;
+                document.getElementById('os-version').innerText = info.os.version;
+                document.getElementById('os-arch').innerText = info.os.architecture;
+                document.getElementById('os-boot').innerText = info.os.boot_time;
+
+                document.getElementById('net-hostname').innerText = info.network.hostname;
+                document.getElementById('net-ip').innerText = info.network.ip;
+                document.getElementById('net-mac').innerText = info.network.mac;
+
+                document.getElementById('cpu-name').innerText = info.cpu.name;
+                document.getElementById('cpu-cores').innerText = `${info.cpu.physical_cores} 물리 / ${info.cpu.total_cores} 논리`;
+                
+                // GPU 및 메인보드 렌더링 (값이 있으면 출력, 없으면 -)
+                if(info.cpu.gpu) document.getElementById('gpu-name').innerText = info.cpu.gpu;
+                if(info.cpu.motherboard) document.getElementById('mb-name').innerText = info.cpu.motherboard;
+
+                document.getElementById('ram-total').innerText = info.ram.total;
+                document.getElementById('ram-used').innerText = `${info.ram.used} / 사용 가능: ${info.ram.available}`;
+                document.getElementById('ram-percent').innerText = info.ram.percentage;
+                document.getElementById('ram-bar').style.width = info.ram.percentage;
+                
+                if (parseFloat(info.ram.percentage) > 85) {
+                    document.getElementById('ram-bar').style.backgroundColor = 'var(--danger-color)';
+                } else {
+                    document.getElementById('ram-bar').style.backgroundColor = 'var(--primary-color)';
+                }
+
+                const diskContainer = document.getElementById('disk-container');
+                diskContainer.innerHTML = ''; 
+                
+                if (info.disk.length === 0) {
+                    diskContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted);">디스크 정보를 불러올 수 없습니다.</div>';
+                } else {
+                    info.disk.forEach(disk => {
+                        const barColor = parseFloat(disk.percentage) > 90 ? 'var(--danger-color)' : 'var(--primary-color)';
+                        const diskHtml = `
+                            <div class="disk-item">
+                                <div class="info-row" style="margin-bottom: 5px;">
+                                    <span class="info-label" style="color: var(--text-main); font-size: 15px;">로컬 디스크 (${disk.device})</span>
+                                    <span class="info-value">${disk.percentage} 사용됨</span>
+                                </div>
+                                <div style="font-size: 12px; color: var(--text-muted); text-align: right; margin-bottom: 5px;">
+                                    ${disk.free} 남음 / 전체 ${disk.total}
+                                </div>
+                                <div class="progress-bar-bg">
+                                    <div class="progress-bar-fill" style="width: ${disk.percentage}; background-color: ${barColor};"></div>
+                                </div>
+                            </div>
+                        `;
+                        diskContainer.innerHTML += diskHtml;
+                    });
+                }
+            } catch (error) {
+                showAlert('통신 오류', '파이썬 백엔드와 통신에 실패했습니다.\n(' + error + ')');
+                console.error(error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function runTool(toolId) {
+            try {
+                const result = await callPywebViewApi('run_management_tool', toolId);
+                if (result.status === 'error') {
+                    showAlert('실행 실패', result.message);
+                }
+            } catch (error) {
+                showAlert('통신 오류', toolId + ' 실행 요청 실패');
+            }
+        }
+
+        // ==========================================
+        // 페이지 초기화 
+        // ==========================================
+        window.addEventListener('DOMContentLoaded', function() {
+            if (window !== window.parent) {
+                setTimeout(loadSystemInfo, 100);
+            } else {
+                setTimeout(() => {
+                    showLoading(false);
+                    showAlert("연결 알림", "PenTong 프로그램(pywebview) 내부가 아닙니다. 껍데기 UI만 표시됩니다.");
+                }, 1000);
+            }
+        });
+
+    </script>
+</body>
+</html>

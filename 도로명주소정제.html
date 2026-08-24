@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>도로명 주소 정제</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc;
+            overflow: hidden;
+        }
+
+        .excel-grid {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+        }
+        
+        .excel-grid th, .excel-grid td {
+            border-right: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0;
+            position: relative;
+        }
+
+        .excel-grid th {
+            background-color: #f1f5f9;
+            color: #475569;
+            font-weight: 600;
+            padding: 8px;
+            text-align: center;
+            font-size: 0.9rem;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .excel-grid td input {
+            width: 100%;
+            height: 100%;
+            border: none;
+            padding: 8px 12px;
+            outline: none;
+            font-size: 0.95rem;
+            background: transparent;
+            transition: background 0.2s;
+        }
+
+        .excel-grid td input:focus {
+            background-color: #e0f2fe;
+            box-shadow: inset 0 0 0 2px #3b82f6;
+        }
+
+        .readonly-cell {
+            background-color: #f8fafc;
+            color: #334155;
+        }
+
+        .status-cell {
+            text-align: left;
+            padding-left: 8px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            height: 40px;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        
+        .status-cell::-webkit-scrollbar {
+            display: none;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .toast {
+            transform: translateY(100%);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .index-col {
+            background-color: #f8fafc;
+            text-align: center;
+            color: #64748b;
+            font-size: 0.8rem;
+            width: 50px;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- 상단 헤더 -->
+    <div class="bg-white border-b border-gray-200 p-4 shadow-sm z-20">
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <i data-lucide="check-square" class="w-6 h-6 text-blue-600"></i>
+                    도로명 주소 정제
+                </h1>
+                <p class="text-sm text-gray-500 mt-1">
+                    올바른 도로명 주소 형식(행정구역 + 도로명 + 건물번호)인 경우만 변환됩니다.
+                </p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="loadSampleData()" class="flex items-center gap-1 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition">
+                    <i data-lucide="flask-conical" class="w-4 h-4"></i> 샘플 데이터
+                </button>
+                <button onclick="clearAllData()" class="flex items-center gap-1 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> 전체 지우기
+                </button>
+            </div>
+        </div>
+
+        <!-- 액션 버튼 -->
+        <div class="flex justify-between items-center bg-gray-50 p-2 rounded-lg border border-gray-200">
+            <div class="text-xs text-gray-500 flex items-center gap-2">
+                <span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-bold">Tip</span>
+                <span>'성균관로5길 12' 처럼 도로명은 붙이고 번호는 띄워야 정상입니다.</span>
+            </div>
+            <button onclick="copyResults()" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 active:transform active:scale-95 transition font-medium">
+                <i data-lucide="copy" class="w-4 h-4"></i>
+                변환 결과(B열) 복사하기
+            </button>
+        </div>
+    </div>
+
+    <!-- 메인 그리드 -->
+    <div class="flex-1 overflow-auto bg-white relative">
+        <table class="excel-grid">
+            <thead>
+                <tr>
+                    <th class="w-[50px]">No.</th>
+                    <th class="w-[35%]">원본 데이터 (A열)</th>
+                    <th class="w-[35%]">변환 결과 (B열)</th>
+                    <th class="w-[25%]">상태 (C열)</th>
+                </tr>
+            </thead>
+            <tbody id="gridBody">
+                <!-- JS Generated -->
+            </tbody>
+        </table>
+        <div id="emptyState" class="hidden absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none">
+            <i data-lucide="table" class="w-16 h-16 mb-4 opacity-20"></i>
+            <p>데이터가 없습니다.</p>
+        </div>
+    </div>
+
+    <!-- 토스트 -->
+    <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3 toast z-50">
+        <i id="toastIcon" data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
+        <span id="toastMessage" class="text-sm font-medium">알림 메시지</span>
+    </div>
+
+    <script>
+        const MAX_ROWS = 50;
+        lucide.createIcons();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            createGrid(MAX_ROWS);
+            updateEmptyState();
+        });
+
+        function createGrid(rows) {
+            const tbody = document.getElementById('gridBody');
+            tbody.innerHTML = '';
+
+            for (let i = 1; i <= rows; i++) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="index-col">${i}</td>
+                    <td>
+                        <input type="text" id="src_${i}" oninput="processRow(${i})" onpaste="handlePaste(event, ${i})" placeholder="">
+                    </td>
+                    <td class="readonly-cell">
+                        <input type="text" id="res_${i}" readonly tabindex="-1" class="text-blue-700 font-medium">
+                    </td>
+                    <td>
+                        <div id="stat_${i}" class="status-cell text-gray-400">-</div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        // --- 지역명 표준화 함수 ---
+        function standardizeRegion(text) {
+            let processed = text;
+            processed = processed.replace(/^서울(시|광역시)?(?=\s)/, '서울특별시');
+            processed = processed.replace(/^부산(시|직할시)?(?=\s)/, '부산광역시');
+            processed = processed.replace(/^대구(시|직할시)?(?=\s)/, '대구광역시');
+            processed = processed.replace(/^인천(시|직할시)?(?=\s)/, '인천광역시');
+            processed = processed.replace(/^광주(시|직할시)?(?=\s)/, '광주광역시');
+            processed = processed.replace(/^대전(시|직할시)?(?=\s)/, '대전광역시');
+            processed = processed.replace(/^울산(시)?(?=\s)/, '울산광역시');
+            processed = processed.replace(/^세종(시)?(?=\s)/, '세종특별자치시');
+            
+            processed = processed.replace(/^경기(도)?(?=\s)/, '경기도');
+            processed = processed.replace(/^강원(도)?(?=\s)/, '강원특별자치도');
+            processed = processed.replace(/^전북(?=\s)/, '전북특별자치도');
+            processed = processed.replace(/^전라북도(?=\s)/, '전북특별자치도'); 
+            processed = processed.replace(/^충북(?=\s)/, '충청북도');
+            processed = processed.replace(/^충남(?=\s)/, '충청남도');
+            processed = processed.replace(/^전남(?=\s)/, '전라남도');
+            processed = processed.replace(/^경북(?=\s)/, '경상북도');
+            processed = processed.replace(/^경남(?=\s)/, '경상남도');
+            processed = processed.replace(/^제주(도)?(?=\s)/, '제주특별자치도');
+            
+            return processed;
+        }
+
+        // --- 주소 완전성 검사 (시/도, 시/군/구 포함 여부) ---
+        function checkAddressCompleteness(address) {
+            if (!address) return { complete: false };
+
+            const parts = address.split(' ');
+            let roadIndex = -1;
+            
+            // 도로명 위치 찾기
+            for(let i=0; i<parts.length; i++) {
+                // '성균관로', '성균관로5길' 등을 찾음
+                // [수정] roadIndex를 찾을 때도 접미사 패턴을 더 유연하게 확인
+                if(/(대로|로|길)$/.test(parts[i]) || /(대로|로|길)\d+길$/.test(parts[i])) {
+                    roadIndex = i;
+                    break;
+                }
+            }
+
+            // 도로명을 못 찾았거나, 도로명이 맨 앞에 있으면(인덱스 0) 앞지역 정보가 없는 것
+            if (roadIndex === -1) {
+                // [수정] undefined 방지를 위해 모든 리턴 객체에 label, color 포함
+                return { complete: false, type: 'error', label: '도로명 인식실패', color: 'bg-red-50 text-red-600 border-red-200' };
+            }
+            
+            // 도로명 앞부분 분석 (행정구역)
+            const prefixParts = parts.slice(0, roadIndex);
+            
+            if (prefixParts.length === 0) {
+                return { complete: false, type: 'error', label: '지역명 누락', color: 'bg-red-50 text-red-600 border-red-200' };
+            }
+
+            const sido = prefixParts[0];
+            const sigungu = prefixParts.length > 1 ? prefixParts[1] : '';
+
+            // 1. 시/도 체크
+            const isSidoValid = /(특별시|광역시|자치시|도)$/.test(sido) || 
+                                ['서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'].some(n => sido.startsWith(n));
+
+            if (!isSidoValid) {
+                return { complete: false, type: 'warning', label: '시/도 확인', color: 'bg-orange-50 text-orange-600 border-orange-200' };
+            }
+
+            // 2. 시/군/구 체크
+            if (!sido.startsWith('세종')) {
+                const isSigunguValid = sigungu && /(시|군|구)$/.test(sigungu);
+                if (!isSigunguValid) {
+                    return { complete: false, type: 'warning', label: '시/군/구 누락', color: 'bg-yellow-50 text-yellow-600 border-yellow-200' };
+                }
+            }
+
+            return { complete: true };
+        }
+
+        // --- 주소 정제 로직 ---
+        function cleanAddress(text) {
+            if (!text) return '';
+
+            let cleaned = text.trim();
+            cleaned = cleaned.replace(/[!@#$%^&*_+=]/g, '');
+            cleaned = cleaned.replace(/\[[0-9-]+\]/g, ''); 
+            cleaned = cleaned.replace(/\s+/g, ' ');
+
+            // 지역명 표준화
+            cleaned = standardizeRegion(cleaned + ' ').trim();
+
+            // [수정] 도로명 접미사 앞의 공백 제거 (테헤란 로 -> 테헤란로)
+            // 가-힣(한글) 뒤에 공백이 있고 바로 '대로/로/길'이 나오면 붙임
+            cleaned = cleaned.replace(/([가-힣])\s+(대로|로|길)/g, '$1$2');
+
+            // 오타 및 서식 교정
+            cleaned = cleaned.replace(/(\d+)\s+길/g, '$1길'); 
+            cleaned = cleaned.replace(/번\s+길/g, '번길');
+            cleaned = cleaned.replace(/(대로|로)\s+(\d+)길/g, '$1$2길');
+
+            // 핵심: 도로명 주소 띄어쓰기 규정 적용
+            cleaned = cleaned.replace(/([가-힣])(대로|로|길)(\d+)(?!길)/g, '$1$2 $3');
+            cleaned = cleaned.replace(/(길)(\d+)/g, '$1 $2');
+            
+            // 괄호 처리
+            cleaned = cleaned.replace(/([가-힣0-9])\(/g, '$1 (');
+
+            return cleaned.trim();
+        }
+
+        // --- 도로명 규칙 정밀 검사 ---
+        function verifyStrictRules(cleanedAddress) {
+            if (!cleanedAddress) return false;
+            // 도로명+공백+건물번호 패턴 확인
+            const strictPattern = /([가-힣0-9]+(대로|로|길)) (\d+)/;
+            const match = cleanedAddress.match(strictPattern);
+            if (match) {
+                if (match[1].includes(' ')) return false;
+                return true;
+            }
+            return false;
+        }
+
+        // --- 기본 포맷 검사 ---
+        function validateAddressFormat(address) {
+            if (!address || address.length < 2) return { status: 'empty', label: '-' };
+            const hasRoadName = /(대로|로|길)(\s|$|\d)/.test(address);
+            const hasBuildingNumber = /\d+/.test(address);
+            const isJibun = /(동|리)\s+\d+/.test(address.split('(')[0]);
+
+            if (address.length < 5) return { status: 'fail', label: '너무 짧음', color: 'bg-red-50 text-red-600 border-red-200' };
+            if (!hasRoadName) {
+                if (isJibun) return { status: 'fail', label: '지번 의심', color: 'bg-orange-50 text-orange-600 border-orange-200' };
+                return { status: 'fail', label: '도로명 아님', color: 'bg-red-50 text-red-600 border-red-200' };
+            }
+            if (!hasBuildingNumber) return { status: 'fail', label: '건물번호 없음', color: 'bg-yellow-50 text-yellow-600 border-yellow-200' };
+            return { status: 'success', label: '형식 정상', color: 'bg-green-100 text-green-700' };
+        }
+
+        function processRow(index) {
+            const sourceInput = document.getElementById(`src_${index}`);
+            const resultInput = document.getElementById(`res_${index}`);
+            const statusDiv = document.getElementById(`stat_${index}`);
+
+            const originalText = sourceInput.value;
+            
+            if (!originalText) {
+                resultInput.value = '';
+                statusDiv.innerHTML = '-';
+                return;
+            }
+
+            const cleanedText = cleanAddress(originalText);
+            
+            // 1. 기본 포맷 검사
+            const validation = validateAddressFormat(cleanedText);
+            
+            // 2. 완전성 검사 (지역명)
+            const completeness = checkAddressCompleteness(cleanedText);
+
+            // 3. 정밀 규칙 검사 (띄어쓰기)
+            const isStrictlyValid = verifyStrictRules(cleanedText);
+
+            let statusHtml = '';
+            
+            // [조건 판별 및 결과 입력]
+            // 모든 조건이 통과되어야만 결과창에 입력
+            if (validation.status === 'success' && completeness.complete && isStrictlyValid) {
+                resultInput.value = cleanedText;
+                statusHtml = `<span class="px-2 py-0.5 rounded text-xs font-bold border border-green-200 bg-green-50 text-green-700 whitespace-nowrap flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i>정상</span>`;
+                
+                // 지역명 변경 등 알림이 필요한 경우 추가
+                if (originalText.substring(0,2) !== cleanedText.substring(0,2)) { // 단순 비교
+                     statusHtml += `<span class="ml-1 px-2 py-0.5 rounded text-xs font-medium border border-blue-100 bg-blue-50 text-blue-700 whitespace-nowrap">지역명보정</span>`;
+                }
+            } else {
+                resultInput.value = ''; // 실패 시 결과 비움
+                
+                // 실패 원인 표시 (우선순위대로)
+                if (validation.status === 'fail') {
+                    statusHtml = `<span class="px-2 py-0.5 rounded text-xs font-bold border whitespace-nowrap flex items-center gap-1 ${validation.color}"><i data-lucide="alert-circle" class="w-3 h-3"></i>${validation.label}</span>`;
+                } else if (!completeness.complete) {
+                     statusHtml = `<span class="px-2 py-0.5 rounded text-xs font-bold border whitespace-nowrap flex items-center gap-1 ${completeness.color}"><i data-lucide="alert-circle" class="w-3 h-3"></i>${completeness.label}</span>`;
+                } else if (!isStrictlyValid) {
+                    statusHtml = `<span class="px-2 py-0.5 rounded text-xs font-bold border border-orange-200 bg-orange-50 text-orange-700 whitespace-nowrap flex items-center gap-1"><i data-lucide="alert-triangle" class="w-3 h-3"></i>도로명 규칙 위반</span>`;
+                }
+            }
+
+            statusDiv.innerHTML = statusHtml;
+            lucide.createIcons(); 
+        }
+
+        function handlePaste(e, startIndex) {
+            e.preventDefault();
+            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+            const lines = pasteData.split(/\r\n|\r|\n/g).filter(line => line.trim() !== '');
+            let currentIdx = startIndex;
+            
+            lines.forEach(line => {
+                if (currentIdx > MAX_ROWS) return;
+                const input = document.getElementById(`src_${currentIdx}`);
+                if (input) {
+                    input.value = line;
+                    processRow(currentIdx);
+                    currentIdx++;
+                }
+            });
+            showToast(`${lines.length}개의 데이터 붙여넣기 완료`, 'success');
+            updateEmptyState();
+        }
+
+        function loadSampleData() {
+            const samples = [
+                "서울시 종로구 송월길 48",                 // 서울특별시교육청 (정상: 지역명 표준화)
+                "경기도 수원시 영통구 도청 로 28",          // 경기도교육청 (정상: '도청 로' 띄어쓰기 오타 보정)
+                "화지로 12",                              // 부산광역시교육청 (실패: 시/도, 시/군/구 누락)
+                "강원도 춘천시 영서로",                    // 강원특별자치도교육청 (실패: 건물번호 누락)
+                "세종특별자치시 한누리대로 2154",           // 세종특별자치시교육청 (정상: 구 없음)
+                "광주광역시 서구 화운로 93"                // 광주광역시교육청 (정상)
+            ];
+
+            samples.forEach((text, i) => {
+                const input = document.getElementById(`src_${i + 1}`);
+                if (input) {
+                    input.value = text;
+                    processRow(i + 1);
+                }
+            });
+            showToast('교육청 주소 샘플이 로드되었습니다.', 'info');
+            updateEmptyState();
+        }
+
+        function clearAllData() {
+            for (let i = 1; i <= MAX_ROWS; i++) {
+                document.getElementById(`src_${i}`).value = '';
+                document.getElementById(`res_${i}`).value = '';
+                document.getElementById(`stat_${i}`).innerHTML = '-';
+            }
+            showToast('전체 초기화 완료', 'info');
+            updateEmptyState();
+        }
+
+        function copyResults() {
+            const rows = [];
+            for (let i = 1; i <= MAX_ROWS; i++) {
+                const res = document.getElementById(`res_${i}`);
+                if (res.value.trim() !== "") {
+                    rows.push(res.value);
+                }
+            }
+
+            if (rows.length === 0) {
+                showToast('복사할 정상 데이터가 없습니다.', 'error');
+                return;
+            }
+
+            const textArea = document.createElement("textarea");
+            textArea.value = rows.join('\n');
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                showToast(`정상 변환된 ${rows.length}건 복사 완료!`, 'success');
+            } catch (err) {
+                showToast('복사 실패', 'error');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const msgSpan = document.getElementById('toastMessage');
+            const icon = document.getElementById('toastIcon');
+
+            msgSpan.textContent = message;
+
+            if (type === 'success') {
+                icon.setAttribute('data-lucide', 'check-circle');
+                icon.className = 'w-5 h-5 text-green-400';
+            } else if (type === 'error') {
+                icon.setAttribute('data-lucide', 'alert-circle');
+                icon.className = 'w-5 h-5 text-red-400';
+            } else {
+                icon.setAttribute('data-lucide', 'info');
+                icon.className = 'w-5 h-5 text-blue-400';
+            }
+            lucide.createIcons();
+            toast.classList.add('show');
+            if (window.toastTimeout) clearTimeout(window.toastTimeout);
+            window.toastTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function updateEmptyState() {}
+    </script>
+</body>
+</html>

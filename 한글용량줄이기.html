@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한글 파일 용량 줄이기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+
+        .modal-enter {
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans h-screen flex flex-col overflow-hidden select-none">
+
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shrink-0 shadow-sm">
+        <h1 class="text-xl font-bold text-blue-700 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            한글 파일 용량 줄이기
+        </h1>
+        <button onclick="clearAllFiles()" class="text-sm text-gray-500 hover:text-red-500 transition-colors">
+            전체 초기화
+        </button>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+
+        <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-gray-700 shadow-sm shrink-0 flex items-start gap-3">
+            <div class="mt-0.5 text-blue-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <div class="flex flex-col gap-1">
+                <p class="font-semibold text-blue-800">에듀파인 첨부용 한글 파일 이미지 최적화 (용량 줄이기)</p>
+                <p class="text-gray-600">본 기능은 이미지 압축 효율이 뛰어나고 파일 구조가 안전한 <span class="font-bold text-blue-600">최신 한글 포맷(.hwpx) 전용</span>입니다.</p>
+                <p class="text-gray-500 text-xs mt-0.5">* 기존 <span class="font-semibold">.hwp</span> 파일은 한글 프로그램에서 <b class="text-gray-700">[파일] ➔ [다른 이름으로 저장] ➔ [파일 형식: 한글 문서(*.hwpx)]</b>로 새로 저장하신 후 추가해 주세요.</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col shrink-0">
+
+            <div class="p-4 flex flex-col xl:flex-row gap-4 items-center border-b border-gray-100 bg-gray-50 rounded-t-lg">
+                <button onclick="callPythonSelectFiles()" class="shrink-0 bg-blue-600 text-white hover:bg-blue-700 px-5 py-2.5 rounded-md font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm w-full xl:w-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                    파일 추가
+                </button>
+
+                <div class="flex-1 flex flex-wrap items-center justify-center xl:justify-start gap-5 w-full xl:pl-2">
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm font-medium text-gray-700 whitespace-nowrap">저장 파일명:</label>
+                        <input type="text" id="name-format" value="{name}_압축.hwpx" class="border border-gray-300 rounded px-3 py-1.5 w-48 text-sm focus:outline-none focus:border-blue-500 bg-white shadow-sm">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm font-medium text-gray-700 whitespace-nowrap">품질:</label>
+                        <select id="img-quality" class="border border-gray-300 rounded px-3 py-1.5 w-36 text-sm focus:outline-none focus:border-blue-500 bg-white cursor-pointer shadow-sm">
+                            <option value="90">고화질 (90%)</option>
+                            <option value="70" selected>권장 (70%)</option>
+                            <option value="50">강력 (50%)</option>
+                            <option value="30">최대 (30%)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onclick="startCompression()" id="btn-compress" class="shrink-0 bg-gray-800 text-white hover:bg-gray-900 px-6 py-2.5 rounded-md font-semibold transition-colors shadow-sm w-full xl:w-auto flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    압축 실행
+                </button>
+            </div>
+
+            <div class="p-3 px-4 flex flex-col sm:flex-row items-center gap-3 bg-white rounded-b-lg">
+                <button onclick="selectOutputFolder()" class="shrink-0 bg-gray-100 hover:bg-gray-200 border border-gray-300 px-4 py-2 rounded text-sm font-medium text-gray-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+                    저장 폴더 지정
+                </button>
+                <div id="output-folder-display" class="flex-1 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap cursor-text select-all w-full sm:w-auto">
+                    저장할 폴더를 선택해주세요.
+                </div>
+                <button onclick="openOutputFolder()" class="shrink-0 text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center justify-center gap-1 transition-colors px-2 w-full sm:w-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-4l-2-2h-4z" /></svg>
+                    폴더 열기
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col overflow-hidden">
+            <div class="bg-gray-100 border-b border-gray-200 px-4 py-2 grid grid-cols-12 gap-2 text-sm font-semibold text-gray-600 text-center items-center">
+                <div class="col-span-3 text-left">원본 파일명</div>
+                <div class="col-span-3 text-left">저장 파일명</div>
+                <div class="col-span-2">원본 용량</div>
+                <div class="col-span-2">압축 후 용량</div>
+                <div class="col-span-1">압축률</div>
+                <div class="col-span-1">상태</div>
+            </div>
+
+            <ul id="file-list-container" class="overflow-y-auto flex-1 p-2">
+                <li id="empty-state" class="h-full flex flex-col items-center justify-center text-gray-400 gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                    </svg>
+                    <span>추가된 파일이 없습니다. [파일 추가] 버튼을 눌러주세요.</span>
+                </li>
+            </ul>
+        </div>
+    </main>
+
+    <div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-80 max-w-sm modal-enter overflow-hidden flex flex-col">
+            <div id="modal-header" class="px-4 py-3 font-bold text-white bg-blue-600">알림</div>
+            <div class="p-5 text-gray-700 text-sm leading-relaxed" id="modal-message">메시지 내용</div>
+            <div class="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-end gap-2" id="modal-buttons"></div>
+        </div>
+    </div>
+
+    <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-80 hidden items-center justify-center z-40 flex-col gap-4">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
+        <p class="text-blue-700 font-semibold" id="loading-message">압축을 진행하고 있습니다. 잠시만 기다려주세요...</p>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+    <div id="dragOverlay" class="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm bg-blue-500 bg-opacity-10 border-4 border-dashed border-blue-500 m-4 rounded-2xl pointer-events-none hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-xl text-center">
+            <div class="w-20 h-20 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">여기에 한글 파일(.hwpx)을 놓으세요</h2>
+            <p class="text-gray-500">여러 개의 파일을 한 번에 추가할 수 있습니다.</p>
+        </div>
+    </div>
+
+    
+    <script>
+        // 전역 상태
+        let fileList = [];
+        let outputFolderPath = "";
+
+        async function selectOutputFolder() {
+            const apiObj = window.pywebview || window.parent.pywebview;
+            if (apiObj && apiObj.api) {
+                try {
+                    const result = await apiObj.api.select_folder();
+                    if (result && result.length > 0) {
+                        outputFolderPath = Array.isArray(result) ? result[0] : result;
+                        const display = document.getElementById('output-folder-display');
+                        display.textContent = outputFolderPath;
+                        display.classList.remove('text-gray-400');
+                        display.classList.add('text-blue-600', 'font-medium');
+                    }
+                } catch (error) {
+                    showToast("폴더 선택 중 오류가 발생했습니다.", true);
+                }
+            }
+        }
+
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        function showMessage(title, message, type = 'info') {
+            const modal = document.getElementById('custom-modal');
+            const header = document.getElementById('modal-header');
+            const msgEl = document.getElementById('modal-message');
+            const btnArea = document.getElementById('modal-buttons');
+
+            header.textContent = title;
+            msgEl.innerHTML = message.replace(/\n/g, '<br>');
+            header.className = `px-4 py-3 font-bold text-white ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-blue-600'}`;
+            btnArea.innerHTML = `<button onclick="closeModal()" class="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-colors text-sm font-medium">확인</button>`;
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('custom-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function showLoading(message = "작업을 진행 중입니다...") {
+            document.getElementById('loading-message').textContent = message;
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            document.getElementById('loading-overlay').classList.add('flex');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            document.getElementById('loading-overlay').classList.remove('flex');
+        }
+
+        function showToast(message, isError = false) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `px-4 py-3 rounded shadow-lg text-sm font-medium text-white transition-all duration-300 transform translate-y-10 opacity-0 ${isError ? 'bg-red-500' : 'bg-gray-800'}`;
+            toast.innerHTML = message;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('translate-y-10', 'opacity-0'));
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // [핵심] 파일 선택 시 이름표 속성(isAlreadyCompressed) 그대로 활용
+        async function callPythonSelectFiles() {
+            const apiObj = window.pywebview || window.parent.pywebview;
+            if (apiObj && apiObj.api) {
+                try {
+                    const selectedFiles = await apiObj.api.select_hwp_files();
+                    if (selectedFiles && selectedFiles.length > 0) {
+                        const existingPaths = fileList.map(f => f.path);
+                        const newFiles = selectedFiles.filter(f => !existingPaths.includes(f.path));
+
+                        const mappedFiles = newFiles.map(f => ({
+                            ...f,
+                            status: '대기중',
+                            newSize: null
+                        }));
+
+                        fileList = [...fileList, ...mappedFiles];
+                        renderFileList();
+                    }
+                } catch (error) {
+                    showMessage("오류", "파일을 불러오는 중 문제가 발생했습니다.", "error");
+                }
+            } else {
+                showMessage("테스트 환경", "파이썬 API(pyWebView)가 연결되지 않았습니다.");
+            }
+        }
+
+        // [핵심] 압축 실행 시 이미 압축된 파일 자동 제외
+        async function startCompression() {
+            if (fileList.length === 0) return;
+
+            if (!outputFolderPath) {
+                showToast("압축한 파일을 저장할 '폴더'를 먼저 선택해주세요.", true);
+                return;
+            }
+
+            const apiObj = window.pywebview || window.parent.pywebview;
+            if (apiObj && apiObj.api) {
+
+                // 대기 중인 파일 중 정상적으로 압축 가능한 파일만 걸러냄
+                const validFiles = fileList.filter(f => f.status === '대기중' && !f.isAlreadyCompressed);
+
+                // 제외 대상 파일 상태 업데이트
+                fileList.forEach(f => {
+                    if (f.status === '대기중' && f.isAlreadyCompressed) f.status = '제외됨';
+                });
+                renderFileList();
+
+                if (validFiles.length === 0) {
+                    showToast("압축할 수 있는 파일이 없습니다. (이미 압축된 파일은 자동 제외)", true);
+                    return;
+                }
+
+                showLoading("선택하신 폴더에 파일을 압축하여 저장하고 있습니다...");
+
+                try {
+                    const nameFormat = document.getElementById('name-format').value || "{name}_압축.hwpx";
+                    const quality = parseInt(document.getElementById('img-quality').value) || 70;
+
+                    const payload = {
+                        paths: validFiles.map(f => f.path),
+                        nameFormat: nameFormat,
+                        quality: quality,
+                        targetDir: outputFolderPath
+                    };
+
+                    const results = await apiObj.api.compress_hwp_files(payload);
+
+                    if (results && results.error) {
+                        showToast(`알림: ${results.error}`, true);
+                    }
+                    else if (Array.isArray(results) && results.length > 0) {
+                        results.forEach(res => {
+                            const index = fileList.findIndex(f => f.path === res.path);
+                            if (index !== -1) {
+                                fileList[index].status = res.success ? '완료' : '실패';
+                                fileList[index].newSize = res.newSize;
+                                fileList[index].savedName = res.savedName;
+                            }
+                        });
+                        renderFileList();
+                        const successCount = results.filter(r => r.success).length;
+                        showToast(`총 ${results.length}개 중 ${successCount}개 일괄 압축 완료`);
+                    }
+                } catch (error) {
+                    showToast("통신 오류가 발생했습니다.", true);
+                } finally {
+                    hideLoading();
+                }
+            } else {
+                showToast("파이썬 API에 연결할 수 없습니다.", true);
+            }
+        }
+
+        function clearAllFiles() {
+            if (fileList.length === 0) return;
+            showMessage("목록 초기화", "추가된 파일 목록을 모두 지우시겠습니까?");
+
+            const btnArea = document.getElementById('modal-buttons');
+            btnArea.innerHTML = `
+                    <button onclick="closeModal()" class="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-colors text-sm font-medium">취소</button>
+                    <button onclick="executeClear()" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium">확인</button>
+                `;
+        }
+
+        function executeClear() {
+            fileList = [];
+            renderFileList();
+            closeModal();
+        }
+
+        async function openFile(filePath) {
+            const apiObj = window.pywebview || window.parent.pywebview;
+            if (apiObj && apiObj.api && apiObj.api.execute_file) {
+                const res = await apiObj.api.execute_file(filePath);
+                if (res && res.success === false) showToast("파일을 열 수 없습니다: " + res.message, true);
+            }
+        }
+
+        async function openOutputFolder() {
+            if (!outputFolderPath) {
+                showToast("먼저 저장 폴더를 지정해주세요.", true);
+                return;
+            }
+            const apiObj = window.pywebview || window.parent.pywebview;
+            if (apiObj && apiObj.api && apiObj.api.execute_file) {
+                const res = await apiObj.api.execute_file(outputFolderPath);
+                if (res && res.success === false) showToast("폴더를 열 수 없습니다: " + res.message, true);
+            }
+        }
+
+        // 재압축 방지 경고 모달 함수
+        function showCompressionExplanation() {
+            const title = "왜 압축한 파일을 또 압축하면 안 되나요?";
+            const msg = `<div class="text-left space-y-3 mt-1"><p><span class="font-bold text-red-500">수건을 두 번 짤 수 없는 것과 같습니다!</span><br>펜통이 한 번 압축한 파일은 내부 이미지가 이미 최적화된 상태입니다.</p><p>이것을 다시 압축하려고 하면, 컴퓨터가 억지로 재포장하는 과정에서 <b>'압축 헤더(포장지)' 용량만 추가되어 오히려 파일 크기가 커집니다.</b></p><div class="bg-blue-50 border border-blue-200 p-3 rounded"><p class="text-blue-800 font-bold mb-1">💡 펜통의 해결 방법</p><p class="text-blue-700 text-xs">더 작은 용량을 원하신다면, 이미 압축된 파일이 아닌 <b>[원본 파일]</b>을 목록에 추가하신 뒤 <b>'압축 품질' 옵션을 더 낮춰서(강력/최대)</b> 실행해 주세요!<br>(※ 이미 추가된 압축 파일은 자동으로 작업에서 제외됩니다)</p></div></div>`;
+            showMessage(title, msg);
+        }
+
+        // 리스트 렌더링
+        function renderFileList() {
+            const container = document.getElementById('file-list-container');
+            const btnCompress = document.getElementById('btn-compress');
+
+            if (fileList.length === 0) {
+                container.innerHTML = `<li id="empty-state" class="h-full flex flex-col items-center justify-center text-gray-400 gap-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg><span>추가된 파일이 없습니다. [파일 추가] 버튼을 눌러주세요.</span></li>`;
+                btnCompress.disabled = true;
+                return;
+            }
+
+            btnCompress.disabled = false;
+            container.innerHTML = '';
+
+            fileList.forEach((file, index) => {
+                const li = document.createElement('li');
+                li.className = "grid grid-cols-12 gap-2 items-center px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors";
+
+                let statusClass = "bg-gray-100 text-gray-600";
+                if (file.status === '완료') statusClass = "bg-green-100 text-green-700";
+                else if (file.status === '실패') statusClass = "bg-red-100 text-red-700";
+                else if (file.status === '제외됨') statusClass = "bg-orange-100 text-orange-700";
+
+                let compressionRateText = '-';
+                if (file.newSize && file.size) {
+                    const rate = ((file.size - file.newSize) / file.size) * 100;
+                    compressionRateText = rate < 0 ? `<span class="text-red-500 font-bold">+${Math.abs(rate).toFixed(1)}%</span>` : `<span class="text-blue-600 font-bold">-${rate.toFixed(1)}%</span>`;
+                }
+
+                const escapedOriginalPath = file.path.replace(/\\/g, '\\\\');
+
+                let savedNameHtml = `<span class="text-sm text-gray-500 truncate" title="${file.savedName || '-'}">${file.savedName || '-'}</span>`;
+
+                if (file.isAlreadyCompressed && (file.status === '대기중' || file.status === '제외됨')) {
+                    savedNameHtml = `<button onclick="showCompressionExplanation()" class="text-xs font-bold text-orange-600 hover:text-orange-800 bg-orange-100 hover:bg-orange-200 px-2 py-1 rounded flex items-center gap-1 transition-colors w-fit shadow-sm">⚠️ 재압축 불가 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></button>`;
+                }
+                else if (file.status === '완료' && file.savedName && outputFolderPath) {
+                    const sep = outputFolderPath.includes('\\') ? '\\\\' : '/';
+                    const escapedSavedPath = (outputFolderPath + sep + file.savedName).replace(/\\/g, '\\\\');
+                    savedNameHtml = `<button onclick="openFile('${escapedSavedPath}')" class="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline truncate cursor-pointer text-left" title="클릭하여 파일 열기">${file.savedName}</button>`;
+                }
+
+                li.innerHTML = `
+                        <div class="col-span-3 flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
+                            <button onclick="openFile('${escapedOriginalPath}')" class="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline truncate cursor-pointer text-left" title="클릭하여 원본 파일 열기">${file.name}</button>
+                        </div>
+                        <div class="col-span-3 text-left overflow-hidden text-ellipsis whitespace-nowrap flex items-center">
+                            ${savedNameHtml}
+                        </div>
+                        <div class="col-span-2 text-center text-sm text-gray-500">${formatBytes(file.size)}</div>
+                        <div class="col-span-2 text-center text-sm font-medium ${file.newSize ? 'text-blue-600' : 'text-gray-400'}">
+                            ${file.newSize ? formatBytes(file.newSize) : '-'}
+                        </div>
+                        <div class="col-span-1 text-center text-sm">
+                            ${compressionRateText}
+                        </div>
+                        <div class="col-span-1 text-center flex justify-center items-center gap-1">
+                            <span class="px-2 py-1 rounded text-xs font-semibold ${statusClass}">${file.status}</span>
+                            ${(file.status === '대기중' || file.status === '제외됨') ? `<button onclick="removeFile(${index})" class="text-gray-400 hover:text-red-500 p-1" title="제외"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>` : ''}
+                        </div>
+                    `;
+                container.appendChild(li);
+            });
+        }
+
+        function removeFile(index) {
+            fileList.splice(index, 1);
+            renderFileList();
+        }
+        // ==========================================
+        // [추가] 드래그 앤 드롭 프론트엔드 제어
+        // ==========================================
+        const dragOverlay = document.getElementById('dragOverlay');
+
+        document.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            // 부모 창(index.html)의 투명 방패 강제 활성화
+            if (window.parent && window.parent.document) {
+                const shield = window.parent.document.getElementById('global-drop-zone');
+                if (shield) shield.classList.add('active');
+            }
+            dragOverlay.classList.remove('hidden');
+        });
+
+        document.addEventListener('dragover', (e) => e.preventDefault());
+
+        document.addEventListener('dragleave', (e) => {
+            dragOverlay.classList.add('hidden');
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragOverlay.classList.add('hidden');
+        });
+
+        // 파이썬 전역 D&D 이벤트가 감지한 경로들을 이 함수로 찔러줍니다.
+        window.addDroppedFiles = async function (paths) {
+            // [수정] 자바스크립트 문법에 맞게 endswith -> endsWith 로 변경 (대문자 W)
+            const validPaths = paths.filter(p => p.toLowerCase().endsWith('.hwpx'));
+
+            if (validPaths.length === 0) {
+                showToast("최신 한글 포맷(.hwpx) 파일만 추가할 수 있습니다.", true);
+                return;
+            }
+
+            const apiObj = window.pywebview || window.parent.pywebview;
+            if (apiObj && apiObj.api && apiObj.api.get_hwp_info) {
+                try {
+                    // 파이썬에 경로를 보내서 파일 용량과 압축 여부 메타데이터를 받아옵니다.
+                    const fileInfos = await apiObj.api.get_hwp_info(validPaths);
+
+                    if (fileInfos && fileInfos.length > 0) {
+                        const existingPaths = fileList.map(f => f.path);
+                        const newFiles = fileInfos.filter(f => !existingPaths.includes(f.path));
+
+                        const mappedFiles = newFiles.map(f => ({
+                            ...f,
+                            status: '대기중',
+                            newSize: null
+                        }));
+
+                        if (mappedFiles.length > 0) {
+                            fileList = [...fileList, ...mappedFiles];
+                            renderFileList();
+                        } else {
+                            showToast("이미 목록에 추가된 파일입니다.");
+                        }
+                    }
+                } catch (error) {
+                    showToast("파일 정보를 불러오는 중 오류가 발생했습니다.", true);
+                }
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프리미엄 세계 시간 대시보드 (PC Pro)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Three.js 및 OrbitControls 추가 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&family=Orbitron:wght@500;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+        
+        body {
+            font-family: 'Montserrat', sans-serif;
+            transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), color 0.5s;
+        }
+
+        /* --- 스타일별 컨테이너 디자인 --- */
+        .style-luxury-light {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            box-shadow: 20px 20px 60px #bebebe, -20px -20px 60px #ffffff;
+            border-radius: 30px;
+            color: #2c3e50;
+        }
+        .style-luxury-dark {
+            background: linear-gradient(135deg, #2d3436 0%, #000000 100%);
+            box-shadow: 15px 15px 40px #0a0a0a, -15px -15px 40px #383838;
+            border-radius: 30px;
+            color: #dfe6e9;
+        }
+        .text-luxury {
+            font-family: 'Playfair Display', serif;
+            letter-spacing: 0.05em;
+        }
+
+        .style-modern-light {
+            background-color: #ffffff;
+            border: 8px solid #1a1a1a;
+            box-shadow: 15px 15px 0px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            color: #1a1a1a;
+        }
+        .style-modern-dark {
+            background-color: #1a1a1a;
+            border: 8px solid #ffffff;
+            box-shadow: 15px 15px 0px rgba(255,255,255,0.1);
+            border-radius: 10px;
+            color: #ffffff;
+        }
+        .text-modern {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 900;
+            letter-spacing: -0.05em;
+        }
+
+        .style-cyber {
+            background: #050505;
+            border: 2px solid #00f3ff;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.2), inset 0 0 30px rgba(0, 243, 255, 0.1);
+            border-radius: 15px;
+            color: #00f3ff;
+            background-image: linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .text-cyber {
+            font-family: 'Orbitron', sans-serif;
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.8);
+            letter-spacing: 0.1em;
+        }
+
+        /* 드래그 상태일 때 그림자/크기 효과 */
+        .clock-instance.dragging {
+            transform: scale(1.02);
+            opacity: 0.95;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.3) !important;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .clock-instance {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 유틸리티 */
+        .btn-press:active { transform: scale(0.95); }
+        .modal-transition { transition: opacity 0.3s ease, visibility 0.3s; }
+        .hidden-modal { opacity: 0; visibility: hidden; pointer-events: none; }
+        .visible-modal { opacity: 1; visibility: visible; pointer-events: auto; }
+        .modal-content { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .hidden-modal .modal-content { transform: scale(0.9) translateY(10px); }
+        .visible-modal .modal-content { transform: scale(1) translateY(0); }
+
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+        
+        /* 스크롤바 디자인 */
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 5px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+    </style>
+</head>
+<body id="body" class="bg-gray-50 text-gray-800 min-h-screen flex flex-col items-center justify-start overflow-x-hidden selection:bg-indigo-500 selection:text-white transition-colors duration-500 relative pb-10">
+
+    <!-- 우측 상단 컨트롤 버튼 그룹 -->
+    <div class="fixed top-8 right-8 z-50 flex gap-4">
+        <button onclick="openCityModal()" class="w-14 h-14 rounded-full bg-indigo-500 text-white shadow-xl hover:bg-indigo-600 hover:shadow-indigo-500/40 hover:-translate-y-1 transition-all flex items-center justify-center btn-press focus:outline-none" title="새 도시 추가">
+            <i class="fas fa-plus text-2xl"></i>
+        </button>
+        <button onclick="toggleModal('settingsModal')" class="w-14 h-14 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-xl hover:scale-105 transition-all flex items-center justify-center btn-press focus:outline-none ring-1 ring-gray-200 dark:ring-gray-700" title="테마 및 스타일 설정">
+            <i class="fas fa-palette text-2xl text-gray-600 dark:text-gray-300"></i>
+        </button>
+    </div>
+
+    <!-- 타이틀 -->
+    <div class="w-full text-center mt-12 mb-6 px-6 relative z-10 pointer-events-none">
+        <h1 class="text-4xl font-black text-gray-800 dark:text-white tracking-tight">세계 시계</h1>
+    </div>
+
+    <!-- 메인 워크스페이스 (지구본 + 시계 통합 컨테이너) -->
+    <div class="relative w-full max-w-[95vw] 2xl:max-w-[1800px] mx-auto h-[650px] lg:h-[800px] mb-10 rounded-3xl overflow-hidden shadow-inner bg-black/5 dark:bg-white/5 border border-gray-200 dark:border-gray-800">
+        
+        <!-- 3D 지구본 컨테이너 -->
+        <div id="globeContainer" class="absolute inset-0 z-0 cursor-grab active:cursor-grabbing">
+            <!-- Javascript를 통해 3D 캔버스와 실시간 라벨이 여기에 추가됩니다. -->
+        </div>
+
+        <!-- 자유 배치 시계 워크스페이스 (오버레이) -->
+        <div id="clocksWorkspace" class="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+            <!-- Javascript를 통해 시계 박스들이 absolute 포지션으로 렌더링 됩니다. -->
+        </div>
+    </div>
+
+    <!-- 1. 메인 테마/스타일 설정 모달 -->
+    <div id="settingsModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm hidden-modal modal-transition">
+        <div class="absolute inset-0" onclick="toggleModal('settingsModal')"></div>
+        <div class="modal-content relative bg-white dark:bg-gray-900 w-80 rounded-3xl shadow-2xl p-6 ring-1 ring-gray-200 dark:ring-gray-700">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-bold text-gray-800 dark:text-white">전체 설정</h2>
+                <button onclick="toggleModal('settingsModal')" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                    <i class="fas fa-times text-gray-500 dark:text-gray-400"></i>
+                </button>
+            </div>
+
+            <div class="mb-6">
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wider">테마 모드</p>
+                <div class="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+                    <button onclick="setTheme(false)" id="btn-theme-light" class="flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2">
+                        <i class="fas fa-sun text-amber-500"></i> 라이트
+                    </button>
+                    <button onclick="setTheme(true)" id="btn-theme-dark" class="flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2">
+                        <i class="fas fa-moon text-indigo-400"></i> 다크
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wider">시계 디자인</p>
+                <div class="space-y-2">
+                    <button onclick="changeStyle('luxury')" id="btn-style-luxury" class="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-amber-500 transition-all group">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-serif italic font-bold text-gray-700 dark:text-gray-300">Luxury</span>
+                        </div>
+                        <i class="fas fa-check text-amber-500 opacity-0 group-[.active]:opacity-100"></i>
+                    </button>
+
+                    <button onclick="changeStyle('modern')" id="btn-style-modern" class="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-rose-500 transition-all group">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-sans font-black text-gray-700 dark:text-gray-300 tracking-tighter">MODERN</span>
+                        </div>
+                        <i class="fas fa-check text-rose-500 opacity-0 group-[.active]:opacity-100"></i>
+                    </button>
+
+                    <button onclick="changeStyle('cyber')" id="btn-style-cyber" class="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-cyan-500 transition-all group">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-mono font-bold text-gray-700 dark:text-gray-300 tracking-widest" style="font-family: 'Orbitron'">CYBER</span>
+                        </div>
+                        <i class="fas fa-check text-cyan-500 opacity-0 group-[.active]:opacity-100"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 도시 선택/추가 모달 -->
+    <div id="cityModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm hidden-modal modal-transition">
+        <div class="absolute inset-0" onclick="toggleModal('cityModal')"></div>
+        <div class="modal-content relative bg-white dark:bg-gray-900 w-80 rounded-3xl shadow-2xl p-6 ring-1 ring-gray-200 dark:ring-gray-700">
+            <h2 id="cityModalTitle" class="text-lg font-bold text-gray-800 dark:text-white mb-2">새 도시 추가</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-5">원하는 지역의 타임존을 선택하세요.</p>
+            
+            <select id="timezoneSelect" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white mb-6 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer">
+                <!-- Javascript에서 옵션 렌더링 -->
+            </select>
+            
+            <div class="flex gap-2">
+                <button onclick="toggleModal('cityModal')" class="flex-1 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">취소</button>
+                <button onclick="saveCity()" class="flex-1 py-2.5 rounded-xl text-sm font-bold bg-indigo-500 hover:bg-indigo-600 text-white shadow-md transition-colors">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 전역 상태 변수
+        let isDark = false;
+        let currentStyle = 'luxury';
+        let editingClockId = null;
+        let clockIdCounter = 2;
+        let highestZ = 10; // 드래그 시 최상단 배치를 위한 Z-index 제어
+
+        // 3D 지구본 관련 전역 변수
+        let scene, camera, renderer, controls, earthMesh;
+        let earthTextures = { dark: null, light: null };
+
+        // 지원하는 타임존 및 도시 목록 데이터 (동일 타임존 문제 해결을 위해 'name' 식별)
+        const TIMEZONES = [
+            // 아시아
+            { zone: 'Asia/Seoul', country: '대한민국', name: '서울', lat: 37.5665, lng: 126.9780 },
+            { zone: 'Asia/Tokyo', country: '일본', name: '도쿄', lat: 35.6762, lng: 139.6503 },
+            { zone: 'Asia/Tokyo', country: '일본', name: '오사카', lat: 34.6937, lng: 135.5023 }, // 동일 타임존
+            { zone: 'Asia/Shanghai', country: '중국', name: '상하이', lat: 31.2304, lng: 121.4737 },
+            { zone: 'Asia/Shanghai', country: '중국', name: '베이징', lat: 39.9042, lng: 116.4074 },
+            { zone: 'Asia/Hong_Kong', country: '중국', name: '홍콩', lat: 22.3193, lng: 114.1694 },
+            { zone: 'Asia/Taipei', country: '대만', name: '타이베이', lat: 25.0330, lng: 121.5654 },
+            { zone: 'Asia/Bangkok', country: '태국', name: '방콕', lat: 13.7563, lng: 100.5018 },
+            { zone: 'Asia/Ho_Chi_Minh', country: '베트남', name: '호찌민', lat: 10.8231, lng: 106.6297 },
+            { zone: 'Asia/Bangkok', country: '베트남', name: '하노이', lat: 21.0285, lng: 105.8542 },
+            { zone: 'Asia/Singapore', country: '싱가포르', name: '싱가포르', lat: 1.3521, lng: 103.8198 },
+            { zone: 'Asia/Kuala_Lumpur', country: '말레이시아', name: '쿠알라룸푸르', lat: 3.1390, lng: 101.6869 },
+            { zone: 'Asia/Jakarta', country: '인도네시아', name: '자카르타', lat: -6.2088, lng: 106.8456 },
+            { zone: 'Asia/Manila', country: '필리핀', name: '마닐라', lat: 14.5995, lng: 120.9842 },
+            { zone: 'Asia/Dubai', country: '아랍에미리트', name: '두바이', lat: 25.2048, lng: 55.2708 },
+            { zone: 'Asia/Riyadh', country: '사우디아라비아', name: '리야드', lat: 24.7136, lng: 46.6753 },
+            { zone: 'Asia/Tehran', country: '이란', name: '테헤란', lat: 35.6892, lng: 51.3890 },
+            { zone: 'Asia/Baghdad', country: '이라크', name: '바그다드', lat: 33.3128, lng: 44.3615 },
+            { zone: 'Asia/Jerusalem', country: '이스라엘', name: '예루살렘', lat: 31.7683, lng: 35.2137 },
+            { zone: 'Asia/Kolkata', country: '인도', name: '뉴델리', lat: 28.6139, lng: 77.2090 },
+            { zone: 'Asia/Dhaka', country: '방글라데시', name: '다카', lat: 23.8103, lng: 90.4125 },
+            { zone: 'Asia/Karachi', country: '파키스탄', name: '카라치', lat: 24.8607, lng: 67.0011 },
+            { zone: 'Asia/Tashkent', country: '우즈베키스탄', name: '타슈켄트', lat: 41.2995, lng: 69.2401 },
+            { zone: 'Asia/Almaty', country: '카자흐스탄', name: '알마티', lat: 43.2220, lng: 76.8512 },
+            
+            // 유럽
+            { zone: 'Europe/London', country: '영국', name: '런던', lat: 51.5074, lng: -0.1278 },
+            { zone: 'Europe/Paris', country: '프랑스', name: '파리', lat: 48.8566, lng: 2.3522 },
+            { zone: 'Europe/Berlin', country: '독일', name: '베를린', lat: 52.5200, lng: 13.4050 },
+            { zone: 'Europe/Rome', country: '이탈리아', name: '로마', lat: 41.9028, lng: 12.4964 },
+            { zone: 'Europe/Madrid', country: '스페인', name: '마드리드', lat: 40.4168, lng: -3.7038 },
+            { zone: 'Europe/Lisbon', country: '포르투갈', name: '리스본', lat: 38.7223, lng: -9.1393 },
+            { zone: 'Europe/Amsterdam', country: '네덜란드', name: '암스테르담', lat: 52.3676, lng: 4.9041 },
+            { zone: 'Europe/Brussels', country: '벨기에', name: '브뤼셀', lat: 50.8503, lng: 4.3517 },
+            { zone: 'Europe/Zurich', country: '스위스', name: '취리히', lat: 47.3769, lng: 8.5417 },
+            { zone: 'Europe/Vienna', country: '오스트리아', name: '빈', lat: 48.2082, lng: 16.3738 },
+            { zone: 'Europe/Warsaw', country: '폴란드', name: '바르샤바', lat: 52.2297, lng: 21.0122 },
+            { zone: 'Europe/Prague', country: '체코', name: '프라하', lat: 50.0755, lng: 14.4378 },
+            { zone: 'Europe/Budapest', country: '헝가리', name: '부다페스트', lat: 47.4979, lng: 19.0402 },
+            { zone: 'Europe/Athens', country: '그리스', name: '아테네', lat: 37.9838, lng: 23.7275 },
+            { zone: 'Europe/Moscow', country: '러시아', name: '모스크바', lat: 55.7558, lng: 37.6173 },
+            { zone: 'Europe/Kyiv', country: '우크라이나', name: '키이우', lat: 50.4501, lng: 30.5234 },
+            { zone: 'Europe/Istanbul', country: '튀르키예', name: '이스탄불', lat: 41.0082, lng: 28.9784 },
+            { zone: 'Europe/Stockholm', country: '스웨덴', name: '스톡홀름', lat: 59.3293, lng: 18.0686 },
+            { zone: 'Europe/Oslo', country: '노르웨이', name: '오슬로', lat: 59.9139, lng: 10.7522 },
+            { zone: 'Europe/Copenhagen', country: '덴마크', name: '코펜하겐', lat: 55.6761, lng: 12.5683 },
+            { zone: 'Europe/Helsinki', country: '핀란드', name: '헬싱키', lat: 60.1695, lng: 24.9355 },
+
+            // 북미/남미 (아메리카)
+            { zone: 'America/New_York', country: '미국', name: '뉴욕', lat: 40.7128, lng: -74.0060 },
+            { zone: 'America/New_York', country: '미국', name: '워싱턴 D.C.', lat: 38.8951, lng: -77.0364 },
+            { zone: 'America/Chicago', country: '미국', name: '시카고', lat: 41.8781, lng: -87.6298 },
+            { zone: 'America/Los_Angeles', country: '미국', name: '로스앤젤레스', lat: 34.0522, lng: -118.2437 },
+            { zone: 'America/Los_Angeles', country: '미국', name: '샌프란시스코', lat: 37.7749, lng: -122.4194 },
+            { zone: 'America/Los_Angeles', country: '미국', name: '시애틀', lat: 47.6062, lng: -122.3321 },
+            { zone: 'America/Denver', country: '미국', name: '덴버', lat: 39.7392, lng: -104.9903 },
+            { zone: 'America/New_York', country: '미국', name: '마이애미', lat: 25.7617, lng: -80.1918 },
+            { zone: 'America/Anchorage', country: '미국', name: '앵커리지', lat: 61.2181, lng: -149.9003 },
+            { zone: 'America/Toronto', country: '캐나다', name: '토론토', lat: 43.6510, lng: -79.3470 },
+            { zone: 'America/Vancouver', country: '캐나다', name: '밴쿠버', lat: 49.2827, lng: -123.1207 },
+            { zone: 'America/Toronto', country: '캐나다', name: '오타와', lat: 45.4215, lng: -75.6972 },
+            { zone: 'America/Mexico_City', country: '멕시코', name: '멕시코시티', lat: 19.4326, lng: -99.1332 },
+            { zone: 'America/Havana', country: '쿠바', name: '아바나', lat: 23.1136, lng: -82.3666 },
+            { zone: 'America/Sao_Paulo', country: '브라질', name: '상파울루', lat: -23.5505, lng: -46.6333 },
+            { zone: 'America/Sao_Paulo', country: '브라질', name: '리우데자네이루', lat: -22.9068, lng: -43.1729 },
+            { zone: 'America/Argentina/Buenos_Aires', country: '아르헨티나', name: '부에노스아이레스', lat: -34.6037, lng: -58.3816 },
+            { zone: 'America/Santiago', country: '칠레', name: '산티아고', lat: -33.4489, lng: -70.6693 },
+            { zone: 'America/Bogota', country: '콜롬비아', name: '보고타', lat: 4.7110, lng: -74.0721 },
+            { zone: 'America/Lima', country: '페루', name: '리마', lat: -12.0464, lng: -77.0428 },
+
+            // 오세아니아 / 태평양
+            { zone: 'Australia/Sydney', country: '호주', name: '시드니', lat: -33.8688, lng: 151.2093 },
+            { zone: 'Australia/Melbourne', country: '호주', name: '멜버른', lat: -37.8136, lng: 144.9631 },
+            { zone: 'Australia/Brisbane', country: '호주', name: '브리즈번', lat: -27.4698, lng: 153.0251 },
+            { zone: 'Australia/Perth', country: '호주', name: '퍼스', lat: -31.9505, lng: 115.8605 },
+            { zone: 'Pacific/Auckland', country: '뉴질랜드', name: '오클랜드', lat: -36.8485, lng: 174.7633 },
+            { zone: 'Pacific/Auckland', country: '뉴질랜드', name: '웰링턴', lat: -41.2865, lng: 174.7762 },
+            { zone: 'Pacific/Fiji', country: '피지', name: '수바', lat: -18.1248, lng: 178.4501 },
+            { zone: 'Pacific/Honolulu', country: '미국', name: '호놀룰루', lat: 21.3069, lng: -157.8583 },
+
+            // 아프리카
+            { zone: 'Africa/Cairo', country: '이집트', name: '카이로', lat: 30.0444, lng: 31.2357 },
+            { zone: 'Africa/Johannesburg', country: '남아프리카 공화국', name: '요하네스버그', lat: -26.2041, lng: 28.0473 },
+            { zone: 'Africa/Johannesburg', country: '남아프리카 공화국', name: '케이프타운', lat: -33.9249, lng: 18.4241 },
+            { zone: 'Africa/Nairobi', country: '케냐', name: '나이로비', lat: -1.2921, lng: 36.8219 },
+            { zone: 'Africa/Lagos', country: '나이지리아', name: '라고스', lat: 6.5244, lng: 3.3792 },
+            { zone: 'Africa/Casablanca', country: '모로코', name: '카사블랑카', lat: 33.5731, lng: -7.5898 },
+            { zone: 'Africa/Addis_Ababa', country: '에티오피아', name: '아디스아바바', lat: 9.0300, lng: 38.7400 },
+
+            // 기타
+            { zone: 'UTC', country: '표준시', name: '협정 세계시 (UTC)', lat: 51.4826, lng: -0.0077 }
+        ];
+
+        // 자유 배치 위치 (x, y) 정보를 포함한 초기 화면 시계 배열
+        let clocks = [
+            { id: 1, name: '서울', x: 50, y: 50, zIndex: 10 },
+            { id: 2, name: '뉴욕', x: 600, y: 50, zIndex: 11 } // 초기값, window.onload에서 화면 크기에 맞춰 재조정됨
+        ];
+
+        // 초기화
+        window.onload = () => {
+            isDark = false; 
+            
+            // 화면 너비에 맞춰 뉴욕 시계를 우측으로 자동 배치
+            const workspace = document.getElementById('clocksWorkspace');
+            if (workspace && workspace.clientWidth > 1100) {
+                clocks[1].x = workspace.clientWidth - 530; // 우측 여백에 배치
+            }
+
+            initCitySelect(); 
+            setTheme(isDark); 
+            renderClocks();   
+            initGlobe();
+            initDragEvents();
+            
+            setInterval(updateTime, 1000);
+        };
+
+        // --- 자유 드래그 이벤트 로직 ---
+        function initDragEvents() {
+            const workspace = document.getElementById('clocksWorkspace');
+            let activeDrag = null;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            document.addEventListener('mousedown', (e) => {
+                const clockEl = e.target.closest('.clock-instance');
+                if (!clockEl) return;
+                
+                // 버튼 클릭 시 드래그 무시
+                if (e.target.closest('button')) return;
+
+                const clockId = parseInt(clockEl.id.split('-')[1]);
+                activeDrag = clocks.find(c => c.id === clockId);
+                
+                if (!activeDrag) return;
+
+                // 클릭 시 해당 시계를 맨 앞으로 띄움
+                activeDrag.zIndex = ++highestZ;
+                clockEl.style.zIndex = activeDrag.zIndex;
+                
+                // 드래그 시 시각 효과 추가 (그림자, 스케일업)
+                clockEl.classList.add('dragging');
+
+                const workspaceRect = workspace.getBoundingClientRect();
+                const clockRect = clockEl.getBoundingClientRect();
+
+                // 클릭 지점과 박스의 왼쪽/상단 모서리간의 거리 계산
+                offsetX = e.clientX - clockRect.left;
+                offsetY = e.clientY - clockRect.top;
+
+                function onMouseMove(moveEvent) {
+                    if (!activeDrag) return;
+                    
+                    // 마우스 이동 시 워크스페이스 기준 상대 좌표 재계산
+                    let newX = moveEvent.clientX - workspaceRect.left - offsetX;
+                    let newY = moveEvent.clientY - workspaceRect.top - offsetY;
+
+                    // 화면 밖으로 완전히 나가지 않도록 최소한의 경계 설정 (선택사항)
+                    if (newX < -100) newX = -100;
+                    if (newY < -50) newY = -50;
+                    if (newX > workspaceRect.width - 200) newX = workspaceRect.width - 200;
+                    if (newY > workspaceRect.height - 100) newY = workspaceRect.height - 100;
+
+                    activeDrag.x = newX;
+                    activeDrag.y = newY;
+                    clockEl.style.left = `${newX}px`;
+                    clockEl.style.top = `${newY}px`;
+                }
+
+                function onMouseUp() {
+                    if (clockEl) {
+                        clockEl.classList.remove('dragging');
+                    }
+                    activeDrag = null;
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                }
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+
+
+        // --- 3D 지구본 로직 ---
+        function getVector3(lat, lng, radius) {
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = (lng + 180) * (Math.PI / 180);
+            
+            const x = -(radius * Math.cos(theta) * Math.sin(phi));
+            const y = radius * Math.cos(phi);
+            const z = radius * Math.sin(theta) * Math.sin(phi); 
+            
+            return new THREE.Vector3(x, y, z);
+        }
+
+        function initGlobe() {
+            const container = document.getElementById('globeContainer');
+            if (!container) return;
+
+            scene = new THREE.Scene();
+            
+            // 시야각 최적화
+            camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 2000);
+            
+            // 지구본 크기 확대를 위해 카메라를 넉넉히 뒤로 배치
+            camera.position.z = 320; 
+
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.enablePan = false;
+            // 줌 범위 대폭 확대 (Clipping 방지용)
+            controls.minDistance = 110;
+            controls.maxDistance = 800;
+
+            const textureLoader = new THREE.TextureLoader();
+            earthTextures.light = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-day.jpg');
+            earthTextures.dark = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-dark.jpg');
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight.position.set(5, 3, 5);
+            scene.add(directionalLight);
+
+            // 반경 100 구체
+            const geometry = new THREE.SphereGeometry(100, 64, 64);
+            
+            const material = new THREE.MeshStandardMaterial({ 
+                color: isDark ? 0x222222 : 0xcccccc,
+                map: isDark ? earthTextures.dark : earthTextures.light,
+                roughness: 0.6,
+                metalness: 0.1
+            });
+            earthMesh = new THREE.Mesh(geometry, material);
+            
+            // 서울 중심 각도 
+            earthMesh.rotation.y = 2.5; 
+            scene.add(earthMesh);
+
+            window.addEventListener('resize', onWindowResize, false);
+            animateGlobe();
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('globeContainer');
+            if(!container || !camera || !renderer) return;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function updateGlobeLabels() {
+            const container = document.getElementById('globeContainer');
+            if (!container || !camera || !earthMesh) return;
+
+            const halfWidth = container.clientWidth / 2;
+            const halfHeight = container.clientHeight / 2;
+
+            clocks.forEach(clock => {
+                let marker = document.getElementById(`marker-${clock.id}`);
+                
+                if (!marker) {
+                    marker = document.createElement('div');
+                    marker.id = `marker-${clock.id}`;
+                    marker.className = 'absolute pointer-events-none transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center transition-opacity duration-300 z-10';
+                    
+                    const dot = document.createElement('div');
+                    dot.className = 'w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,1)] border border-white dark:border-gray-800';
+                    
+                    const textBox = document.createElement('div');
+                    textBox.className = 'mt-1 px-1.5 py-0.5 rounded bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-md text-xs font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap border border-gray-200 dark:border-gray-700 transition-colors';
+                    
+                    marker.appendChild(dot);
+                    marker.appendChild(textBox);
+                    container.appendChild(marker);
+                }
+
+                // 타임존 문자열 대신 '고유 도시명(name)'으로 조회하여 오사카/도쿄 겹침 완벽 해결
+                const zoneInfo = TIMEZONES.find(t => t.name === clock.name);
+                if (!zoneInfo || zoneInfo.lat === undefined) return;
+
+                const worldPos = getVector3(zoneInfo.lat, zoneInfo.lng, 100);
+                worldPos.applyMatrix4(earthMesh.matrixWorld);
+
+                const camToEarth = camera.position.clone().normalize();
+                const dotProduct = worldPos.clone().normalize().dot(camToEarth);
+
+                worldPos.project(camera);
+
+                if (dotProduct < 0 || worldPos.z > 1) {
+                    marker.style.opacity = '0';
+                } else {
+                    marker.style.opacity = '1';
+                    const x = (worldPos.x * halfWidth) + halfWidth;
+                    const y = -(worldPos.y * halfHeight) + halfHeight;
+                    marker.style.left = `${x}px`;
+                    marker.style.top = `${y}px`;
+
+                    if (clock.currentTimeStr) {
+                        marker.querySelector('div:nth-child(2)').innerText = `${zoneInfo.country}, ${zoneInfo.name} ${clock.currentTimeStr}`;
+                    }
+                }
+            });
+
+            const allMarkers = container.querySelectorAll('[id^="marker-"]');
+            allMarkers.forEach(m => {
+                const id = parseInt(m.id.replace('marker-', ''));
+                if (!clocks.find(c => c.id === id)) {
+                    m.remove();
+                }
+            });
+        }
+
+        function animateGlobe() {
+            requestAnimationFrame(animateGlobe);
+            if(controls) controls.update();
+            updateGlobeLabels();
+            if(renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+        // --- 3D 지구본 로직 끝 ---
+
+        function initCitySelect() {
+            const select = document.getElementById('timezoneSelect');
+            
+            TIMEZONES.sort((a, b) => {
+                if (a.zone === 'UTC') return -1;
+                if (b.zone === 'UTC') return 1;
+                if (a.country === b.country) return a.name.localeCompare(b.name, 'ko-KR');
+                return a.country.localeCompare(b.country, 'ko-KR');
+            });
+
+            TIMEZONES.forEach(tz => {
+                const option = document.createElement('option');
+                // value를 zone 대신 고유한 name 값으로 사용하여 동일 타임존 이슈 해결
+                option.value = tz.name;
+                option.textContent = `[${tz.country}] ${tz.name}`;
+                select.appendChild(option);
+            });
+        }
+
+        function renderClocks() {
+            const wrapper = document.getElementById('clocksWorkspace');
+            // 워크스페이스 배경을 덮어쓰지 않도록, 기존의 clock-instance들만 제거
+            const existingClocks = wrapper.querySelectorAll('.clock-instance');
+            existingClocks.forEach(el => el.remove());
+            
+            clocks.forEach(clock => {
+                const zoneInfo = TIMEZONES.find(t => t.name === clock.name);
+                if (!zoneInfo) return;
+
+                // PC용으로 사이즈를 넓고(고정 폭 480px) 큼직하게 변경. absolute 포지션 및 pointer-events-auto 적용.
+                const template = `
+                <div id="clock-${clock.id}" style="position: absolute; left: ${clock.x}px; top: ${clock.y}px; z-index: ${clock.zIndex}; width: 480px;" class="clock-instance pointer-events-auto aspect-[2/1] transition-all flex flex-col items-center justify-center group select-none overflow-hidden cursor-move">
+                    <div class="absolute top-6 left-8 z-20 pointer-events-none">
+                        <div class="text-sm font-semibold opacity-70 time-text mb-1">${zoneInfo.country}</div>
+                        <div class="text-3xl font-bold tracking-widest uppercase opacity-90 time-text leading-none">${zoneInfo.name}</div>
+                    </div>
+                    
+                    <div class="absolute top-6 right-6 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex gap-2">
+                        <button onclick="openCityModal(${clock.id})" class="w-12 h-12 rounded-full bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 flex items-center justify-center transition-colors backdrop-blur-sm" title="도시 변경">
+                            <i class="fas fa-edit text-base opacity-80 time-text"></i>
+                        </button>
+                        ${clocks.length > 1 ? `
+                        <button onclick="removeClock(${clock.id})" class="w-12 h-12 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors backdrop-blur-sm" title="시계 삭제">
+                            <i class="fas fa-trash text-base opacity-90"></i>
+                        </button>` : ''}
+                    </div>
+
+                    <div class="flex items-end justify-center leading-none mb-6 z-10 mt-10 pointer-events-none">
+                        <div class="hour-display text-8xl transition-all duration-300 time-text">--</div>
+                        <div class="text-6xl mb-2 mx-4 opacity-80 blink time-text">:</div>
+                        <div class="minute-display text-8xl transition-all duration-300 time-text">--</div>
+                        
+                        <div class="flex flex-col justify-end ml-4 mb-2">
+                            <div class="ampm-display text-xl font-bold opacity-60 mb-2 time-text">--</div>
+                            <div class="second-display text-4xl font-medium opacity-90 w-14 time-text">--</div>
+                        </div>
+                    </div>
+
+                    <div class="date-display text-base font-medium opacity-70 tracking-widest transition-all duration-300 z-10 time-text pointer-events-none">
+                        Loading...
+                    </div>
+
+                    <div class="cyber-deco absolute inset-0 pointer-events-none hidden">
+                        <div class="absolute top-5 left-5 w-5 h-5 border-t-2 border-l-2 border-cyan-400"></div>
+                        <div class="absolute top-5 right-5 w-5 h-5 border-t-2 border-r-2 border-cyan-400"></div>
+                        <div class="absolute bottom-5 left-5 w-5 h-5 border-b-2 border-l-2 border-cyan-400"></div>
+                        <div class="absolute bottom-5 right-5 w-5 h-5 border-b-2 border-r-2 border-cyan-400"></div>
+                    </div>
+                </div>
+                `;
+                wrapper.insertAdjacentHTML('beforeend', template);
+            });
+            
+            updateUI(); 
+            updateTime(); 
+        }
+
+        function updateTime() {
+            const nowLocal = new Date();
+            const daysKo = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+
+            clocks.forEach(clock => {
+                const clockEl = document.getElementById(`clock-${clock.id}`);
+                if(!clockEl) return;
+
+                const zoneInfo = TIMEZONES.find(t => t.name === clock.name);
+                if (!zoneInfo) return;
+
+                const tzStr = nowLocal.toLocaleString('en-US', { timeZone: zoneInfo.zone });
+                const tzDate = new Date(tzStr);
+                
+                let h = tzDate.getHours();
+                const m = tzDate.getMinutes();
+                const s = tzDate.getSeconds();
+                const ampm = h >= 12 ? '오후' : '오전';
+                
+                h = h % 12;
+                h = h ? h : 12; 
+
+                const hStr = h < 10 ? '0' + h : h;
+                const mStr = m < 10 ? '0' + m : m;
+                const sStr = s < 10 ? '0' + s : s;
+
+                const timeFormat = currentStyle === 'cyber' ? `${hStr}:${mStr}` : `${ampm} ${hStr}:${mStr}`;
+                clock.currentTimeStr = timeFormat;
+
+                clockEl.querySelector('.hour-display').innerText = hStr;
+                clockEl.querySelector('.minute-display').innerText = mStr;
+                clockEl.querySelector('.second-display').innerText = sStr;
+                clockEl.querySelector('.ampm-display').innerText = ampm;
+
+                const dateDisplay = clockEl.querySelector('.date-display');
+                if (currentStyle === 'cyber') {
+                    dateDisplay.innerText = `${tzDate.getFullYear()}년 ${tzDate.getMonth() + 1}월 ${tzDate.getDate()}일 // ${daysKo[tzDate.getDay()].substring(0,1)}`;
+                } else {
+                    dateDisplay.innerText = `${tzDate.getMonth() + 1}월 ${tzDate.getDate()}일 ${daysKo[tzDate.getDay()]}`;
+                }
+            });
+        }
+
+        function toggleModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal.classList.contains('hidden-modal')) {
+                modal.classList.remove('hidden-modal');
+                modal.classList.add('visible-modal');
+            } else {
+                modal.classList.remove('visible-modal');
+                modal.classList.add('hidden-modal');
+            }
+        }
+
+        function openCityModal(clockId = null) {
+            editingClockId = clockId;
+            const title = document.getElementById('cityModalTitle');
+            const select = document.getElementById('timezoneSelect');
+            
+            if (clockId) {
+                title.innerText = '도시 변경';
+                const clock = clocks.find(c => c.id === clockId);
+                select.value = clock.name;
+            } else {
+                title.innerText = '새 도시 추가';
+                select.value = '런던'; 
+            }
+            
+            toggleModal('cityModal');
+        }
+
+        function saveCity() {
+            const select = document.getElementById('timezoneSelect');
+            // value를 고유한 도시 이름(name)으로 가져와서 완벽 매칭
+            const selectedName = select.value;
+            const zoneInfo = TIMEZONES.find(t => t.name === selectedName);
+            
+            if (editingClockId) {
+                const idx = clocks.findIndex(c => c.id === editingClockId);
+                clocks[idx].name = zoneInfo.name;
+            } else {
+                // 새 박스 추가 시 워크스페이스 내 랜덤 위치에 배치
+                const workspace = document.getElementById('clocksWorkspace');
+                const maxX = workspace.clientWidth - 500;
+                const maxY = workspace.clientHeight - 250;
+                
+                clocks.push({
+                    id: ++clockIdCounter,
+                    name: zoneInfo.name,
+                    x: Math.random() * (maxX > 0 ? maxX : 100) + 20,
+                    y: Math.random() * (maxY > 0 ? maxY : 100) + 20,
+                    zIndex: ++highestZ
+                });
+            }
+            
+            toggleModal('cityModal');
+            renderClocks();
+        }
+
+        function removeClock(clockId) {
+            clocks = clocks.filter(c => c.id !== clockId);
+            renderClocks();
+        }
+
+        function setTheme(dark) {
+            isDark = dark;
+            const body = document.getElementById('body');
+            
+            if (isDark) {
+                body.classList.add('dark', 'bg-gray-900', 'text-gray-100');
+                body.classList.remove('bg-gray-50', 'text-gray-800');
+            } else {
+                body.classList.remove('dark', 'bg-gray-900', 'text-gray-100');
+                body.classList.add('bg-gray-50', 'text-gray-800');
+            }
+
+            if (earthMesh) {
+                earthMesh.material.map = isDark ? earthTextures.dark : earthTextures.light;
+                earthMesh.material.color.setHex(isDark ? 0x222222 : 0xcccccc);
+                earthMesh.material.needsUpdate = true;
+            }
+
+            updateUI();
+        }
+
+        function changeStyle(styleName) {
+            currentStyle = styleName;
+            updateUI();
+        }
+
+        function updateUI() {
+            const clockElements = document.querySelectorAll('.clock-instance');
+            
+            clockElements.forEach(clock => {
+                // drag 때문에 덮어씌워진 클래스를 지키면서 렌더링
+                clock.classList.remove('style-luxury-dark', 'style-luxury-light', 'style-modern-dark', 'style-modern-light', 'style-cyber');
+                
+                const texts = clock.querySelectorAll('.time-text');
+                texts.forEach(el => el.classList.remove('text-luxury', 'text-modern', 'text-cyber'));
+                
+                const cyberDeco = clock.querySelector('.cyber-deco');
+                
+                if (currentStyle === 'luxury') {
+                    clock.classList.add(isDark ? 'style-luxury-dark' : 'style-luxury-light');
+                    texts.forEach(el => el.classList.add('text-luxury'));
+                    cyberDeco.classList.add('hidden');
+                } else if (currentStyle === 'modern') {
+                    clock.classList.add(isDark ? 'style-modern-dark' : 'style-modern-light');
+                    texts.forEach(el => el.classList.add('text-modern'));
+                    cyberDeco.classList.add('hidden');
+                } else if (currentStyle === 'cyber') {
+                    clock.classList.add('style-cyber');
+                    texts.forEach(el => el.classList.add('text-cyber'));
+                    cyberDeco.classList.remove('hidden');
+                }
+            });
+
+            const btnLight = document.getElementById('btn-theme-light');
+            const btnDark = document.getElementById('btn-theme-dark');
+            
+            if (isDark) {
+                btnLight.className = "flex-1 py-2 rounded-lg text-sm font-medium text-gray-500 transition-all duration-200 flex items-center justify-center gap-2 hover:bg-gray-200/50";
+                btnDark.className = "flex-1 py-2 rounded-lg text-sm font-bold bg-white text-gray-900 shadow-sm transition-all duration-200 flex items-center justify-center gap-2";
+            } else {
+                btnLight.className = "flex-1 py-2 rounded-lg text-sm font-bold bg-white text-gray-900 shadow-sm transition-all duration-200 flex items-center justify-center gap-2";
+                btnDark.className = "flex-1 py-2 rounded-lg text-sm font-medium text-gray-500 transition-all duration-200 flex items-center justify-center gap-2 hover:bg-gray-200/50";
+            }
+
+            ['luxury', 'modern', 'cyber'].forEach(style => {
+                const btn = document.getElementById(`btn-style-${style}`);
+                if (style === currentStyle) {
+                    btn.classList.add('active', 'border-indigo-500', 'bg-indigo-50', 'dark:bg-indigo-900/30', 'dark:border-indigo-500');
+                    btn.classList.remove('border-gray-200', 'dark:border-gray-700');
+                } else {
+                    btn.classList.remove('active', 'border-indigo-500', 'bg-indigo-50', 'dark:bg-indigo-900/30', 'dark:border-indigo-500');
+                    btn.classList.add('border-gray-200', 'dark:border-gray-700');
+                }
+            });
+        }
+    </script>
+</body>
+</html>

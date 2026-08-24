@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사용자 월드</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f0f1a; /* 아주 짙은 남색 배경 */
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+        }
+        .overlay {
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- UI 오버레이 -->
+    <div class="overlay absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center text-white opacity-60 select-none z-10">
+        <!-- 이름이 들어갈 곳에 ID 추가 -->
+        <h1 id="ui-name" class="text-6xl md:text-9xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-500 to-pink-500 drop-shadow-2xl animate-pulse">
+            Loading...
+        </h1>
+        <p id="ui-desc" class="text-lg md:text-xl font-medium text-gray-300 mt-4 bg-black bg-opacity-40 px-6 py-2 rounded-full border border-gray-700">
+            몬스터들과 함께하는 세상 🌟
+        </p>
+    </div>
+
+    <canvas id="canvas1"></canvas>
+
+    <!-- [중요] Python 통신을 위한 스크립트 로드 -->
+    <script src="api_client.js"></script>
+
+    <script>
+        // 전역 변수로 사용자 이름 관리
+        let currentUserName = "사용자";
+
+        const canvas = document.getElementById('canvas1');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let particlesArray = [];
+        let monstersArray = [];
+        let hue = 0;
+        
+        // [추가] 애니메이션 실행 상태 플래그
+        let isAnimating = true;
+
+        // 몬스터 종류
+        const monsterTypes = ['👾', '👹', '👻', '🤖', '👽', '🦖', '🦄'];
+
+        const mouse = {
+            x: undefined,
+            y: undefined,
+        }
+
+        window.addEventListener('resize', function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initMonsters();
+            floatingName.resetPosition(); // 리사이즈 시 이름 위치 재설정
+        });
+
+        canvas.addEventListener('click', function(event){
+            mouse.x = event.x;
+            mouse.y = event.y;
+            for(let i = 0; i < 20; i++){ // 클릭 시 더 많은 파티클
+                particlesArray.push(new Particle());
+            }
+        });
+
+        canvas.addEventListener('mousemove', function(event){
+            mouse.x = event.x;
+            mouse.y = event.y;
+            for(let i = 0; i < 3; i++){
+                particlesArray.push(new Particle());
+            }
+        });
+
+        canvas.addEventListener('touchmove', function(event){
+            mouse.x = event.touches[0].clientX;
+            mouse.y = event.touches[0].clientY;
+            for(let i = 0; i < 4; i++){
+                particlesArray.push(new Particle());
+            }
+        });
+
+        // --- 파티클 클래스 ---
+        class Particle {
+            constructor(){
+                this.x = mouse.x;
+                this.y = mouse.y;
+                this.size = Math.random() * 10 + 1;
+                this.speedX = Math.random() * 6 - 3;
+                this.speedY = Math.random() * 6 - 3;
+                this.color = 'hsl(' + hue + ', 100%, 60%)';
+            }
+            update(){
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.speedY += 0.1; // 중력
+                
+                if (this.y + this.size > canvas.height) {
+                    this.speedY = -this.speedY * 0.5; 
+                    this.y = canvas.height - this.size;
+                }
+                if (this.x + this.size > canvas.width || this.x - this.size < 0) {
+                    this.speedX = -this.speedX * 0.5;
+                }
+                if (this.size > 0.1) this.size -= 0.07;
+            }
+            draw(){
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // --- 몬스터 클래스 ---
+        class Monster {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.speedX = (Math.random() * 3) - 1.5;
+                this.speedY = (Math.random() * 3) - 1.5;
+                this.emoji = monsterTypes[Math.floor(Math.random() * monsterTypes.length)];
+                this.baseSize = 30;
+                this.currentSize = 30;
+                this.angle = Math.random() * 360;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.angle += 0.05;
+                this.y += Math.sin(this.angle) * 0.8; // 둥둥 떠다님
+
+                if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+
+                if (this.currentSize > this.baseSize) this.currentSize -= 0.5;
+            }
+            draw() {
+                ctx.font = `${this.currentSize}px serif`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(this.emoji, this.x, this.y);
+            }
+            checkCollision(particles) {
+                for (let i = 0; i < particles.length; i++) {
+                    const dx = this.x - particles[i].x;
+                    const dy = this.y - particles[i].y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < this.currentSize / 1.2) {
+                        particles.splice(i, 1);
+                        i--;
+                        this.currentSize = Math.min(this.currentSize + 3, 80);
+                    }
+                }
+            }
+        }
+
+        // --- 떠다니는 이름 클래스 ---
+        class FloatingName {
+            constructor() {
+                this.text = currentUserName; // 전역 변수 값 사용
+                this.x = canvas.width / 2;
+                this.y = canvas.height / 2;
+                this.speedX = 2;
+                this.speedY = 1.5;
+                this.size = 40;
+                this.colorHue = 0;
+            }
+            
+            resetPosition() {
+                this.x = canvas.width / 2;
+                this.y = canvas.height / 2;
+            }
+
+            // 이름을 업데이트하는 메서드 추가
+            updateText(newName) {
+                this.text = newName;
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.colorHue += 1;
+
+                // 벽 튕기기
+                if (this.x + (this.size * 2) > canvas.width || this.x - (this.size * 2) < 0) {
+                    this.speedX = -this.speedX;
+                }
+                if (this.y + this.size > canvas.height || this.y - this.size < 0) {
+                    this.speedY = -this.speedY;
+                }
+            }
+
+            draw() {
+                ctx.font = `bold ${this.size}px 'Malgun Gothic', sans-serif`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                
+                // 네온 효과
+                ctx.shadowColor = `hsl(${this.colorHue}, 100%, 50%)`;
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = "#fff"; // 글자색은 흰색
+                ctx.fillText(this.text, this.x, this.y);
+                
+                // 그림자 초기화 (다른 객체에 영향 안 주게)
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        let floatingName = new FloatingName();
+
+        function initMonsters() {
+            monstersArray = [];
+            const numberOfMonsters = Math.floor(canvas.width / 100);
+            for (let i = 0; i < numberOfMonsters; i++){
+                monstersArray.push(new Monster());
+            }
+        }
+        initMonsters();
+
+        function handleParticles(){
+            for (let i = 0; i < particlesArray.length; i++){
+                particlesArray[i].update();
+                particlesArray[i].draw();
+
+                // 파티클 연결선
+                for (let j = i; j < particlesArray.length; j++){
+                    const dx = particlesArray[i].x - particlesArray[j].x;
+                    const dy = particlesArray[i].y - particlesArray[j].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < 80){
+                        ctx.beginPath();
+                        ctx.strokeStyle = particlesArray[i].color;
+                        ctx.lineWidth = 0.15;
+                        ctx.moveTo(particlesArray[i].x, particlesArray[i].y);
+                        ctx.lineTo(particlesArray[j].x, particlesArray[j].y);
+                        ctx.stroke();
+                    }
+                }
+                
+                if (particlesArray[i].size <= 0.3){
+                    particlesArray.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        function handleMonsters() {
+            for (let i = 0; i < monstersArray.length; i++) {
+                monstersArray[i].update();
+                monstersArray[i].draw();
+                monstersArray[i].checkCollision(particlesArray);
+            }
+        }
+
+        function animate(){
+            // [수정] 화면에 보이지 않으면 루프 중단 (리소스 절약)
+            if (!isAnimating) return;
+
+            ctx.fillStyle = 'rgba(15, 15, 26, 0.2)'; // 배경색과 맞춤 (잔상 효과)
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            handleParticles();
+            handleMonsters();
+            
+            // 떠다니는 이름 업데이트 및 그리기
+            floatingName.update();
+            floatingName.draw();
+            
+            hue += 2;
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        // [추가] 화면 노출 여부 감지
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    if (!isAnimating) {
+                        isAnimating = true;
+                        animate();
+                    }
+                } else {
+                    isAnimating = false;
+                }
+            });
+        }, { threshold: 0.1 });
+
+        observer.observe(document.body);
+
+        // [중요] Python에서 사용자 이름 불러오기
+        async function loadUserName() {
+            try {
+                // api_client.js에 정의된 함수 사용
+                const name = await getUserName(); 
+                
+                if (name) {
+                    currentUserName = name;
+                    
+                    // 1. UI 오버레이 업데이트
+                    document.getElementById('ui-name').innerText = name;
+                    document.getElementById('ui-desc').innerText = `몬스터들과 함께하는 ${name} 님의 세상 🌟`;
+                    
+                    // 2. 캔버스 내 떠다니는 이름 업데이트
+                    if (floatingName) {
+                        floatingName.updateText(name);
+                    }
+                }
+            } catch (error) {
+                console.error("이름 로드 실패:", error);
+                // 실패 시 기본값 유지
+                document.getElementById('ui-name').innerText = "사용자";
+                document.getElementById('ui-desc').innerText = "몬스터들과 함께하는 세상 🌟";
+            }
+        }
+
+        // 페이지 로드 후 실행
+        document.addEventListener('DOMContentLoaded', loadUserName);
+
+    </script>
+</body>
+</html>

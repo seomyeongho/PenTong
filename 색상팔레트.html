@@ -1,0 +1,886 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>색상 팔레트</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+
+        .hide-scroll::-webkit-scrollbar {
+            display: none;
+        }
+
+        .hide-scroll {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* 슬라이더 커스텀 */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+        }
+
+            input[type=range]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                height: 16px;
+                width: 16px;
+                border-radius: 50%;
+                background: #ffffff;
+                border: 2px solid #ccc;
+                cursor: pointer;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            }
+
+        #slider-r::-webkit-slider-runnable-track {
+            background: linear-gradient(to right, #000, #ff0000);
+            border-radius: 3px;
+        }
+
+        #slider-g::-webkit-slider-runnable-track {
+            background: linear-gradient(to right, #000, #00ff00);
+            border-radius: 3px;
+        }
+
+        #slider-b::-webkit-slider-runnable-track {
+            background: linear-gradient(to right, #000, #0000ff);
+            border-radius: 3px;
+        }
+
+        #slider-r::-webkit-slider-thumb {
+            border-color: #ff0000;
+        }
+
+        #slider-g::-webkit-slider-thumb {
+            border-color: #00ff00;
+        }
+
+        #slider-b::-webkit-slider-thumb {
+            border-color: #0000ff;
+        }
+
+        .color-chip {
+            transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+        }
+
+            .color-chip:hover {
+                transform: scale(1.1);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                z-index: 10;
+            }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans h-screen flex flex-col md:flex-row overflow-hidden select-none">
+    <div id="help-modal" class="fixed inset-0 bg-black bg-opacity-40 hidden flex justify-center items-center z-50 p-4 opacity-0 transition-opacity duration-300 select-text">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden transform scale-95 transition-transform duration-300" id="help-modal-content">
+            <div class="bg-blue-600 px-5 py-4 flex justify-between items-center">
+                <h2 class="text-white text-lg font-bold flex items-center gap-2">
+                    <span class="text-2xl">💡</span> 색상 팔레트 활용 방법
+                </h2>
+                <button id="close-help-btn" class="text-white hover:text-gray-200 focus:outline-none transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 text-gray-700 space-y-5 text-sm max-h-[70vh] overflow-y-auto">
+                <p>펜통 색상 팔레트는 교재, 가정통신문, PPT를 만들 때 <b>전문가처럼 세련된 색상을 클릭 한 번에 복사</b>하여 사용할 수 있도록 돕는 도구입니다.</p>
+
+                <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <h3 class="font-bold text-blue-700 mb-3 text-base">📊 파워포인트(PPT) 적용 예시</h3>
+                    <ol class="list-decimal pl-5 space-y-2">
+                        <li>펜통 팔레트에서 마음에 드는 색상을 <b>클릭하여 선택</b>합니다.</li>
+                        <li>좌측 패널에서 파란색 <b>[복사하기]</b> 버튼을 누릅니다.<br><span class="text-xs text-gray-500">(이때 클립보드에 코드가 저장되며 최근 사용 목록에도 추가됩니다. 예: <code class="bg-white border border-gray-200 px-1 rounded text-red-500">#FFB3BA</code>)</span></li>
+                        <li>파워포인트에서 색상을 바꿀 <b>도형이나 글자를 선택</b>합니다.</li>
+                        <li>상단 메뉴에서 <b>[도형 채우기]</b> 또는 <b>[글꼴 색]</b> 버튼을 누르고 맨 아래의 <b>[다른 색(M)...]</b>을 클릭합니다.</li>
+                        <li>색상 팝업창 상단의 <b>[사용자 지정]</b> 탭을 누릅니다.</li>
+                        <li>하단의 <b>'Hex(16진수)'</b> 입력칸에 복사해 둔 코드를 <b>붙여넣기(Ctrl+V)</b> 한 뒤 [확인]을 누르면 끝!</li>
+                    </ol>
+                </div>
+
+                <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                    <h3 class="font-bold text-gray-800 mb-2">📝 한글(hwp) / 기타 프로그램</h3>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li>한글, 미리캔버스, 웹 디자인 도구 등 대부분의 프로그램도 <b>'16진수' 또는 'HEX 코드'</b> 입력란에 코드를 붙여넣어 사용합니다.</li>
+                        <li>프로그램에 코드를 입력하는 곳이 없다면, 펜통 좌측 패널에 표시된 <b>R, G, B 숫자</b> 세 개를 확인하여 그대로 입력해 주세요.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 커스텀 토스트 알림 -->
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg opacity-0 pointer-events-none transition-all duration-300 z-50 flex items-center gap-2 text-sm font-medium">
+        <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        <span id="toast-message">알림 메시지</span>
+    </div>
+
+    <!-- 좌측 컨트롤 패널 (고정 영역) -->
+    <aside class="w-full md:w-80 lg:w-96 bg-white border-r border-gray-200 flex flex-col shrink-0 h-1/2 md:h-full shadow-sm z-10">
+
+        <div class="p-5 border-b border-gray-200">
+            <div class="flex items-center gap-2 mb-4">
+                <span class="p-1.5 bg-blue-100 rounded-lg shrink-0 inline-flex">
+                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path></svg>
+                </span>
+                <h1 class="text-xl font-bold text-gray-800 m-0">펜통 색상 팔레트</h1>
+                <button id="help-btn" class="ml-auto w-6 h-6 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0" title="사용 방법 안내">?</button>
+            </div>
+
+            <!-- 색상 미리보기 및 네이티브 선택기 -->
+            <div id="current-color-preview" class="w-full h-24 sm:h-32 rounded-xl shadow-inner border border-gray-200 mb-4 relative group cursor-pointer overflow-hidden flex items-center justify-center transition-colors">
+                <input type="color" id="native-color-picker" class="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10">
+                <div class="opacity-0 group-hover:opacity-100 transition-opacity bg-black bg-opacity-30 text-white px-3 py-1.5 rounded-lg text-sm font-medium drop-shadow-md z-0 pointer-events-none">
+                    클릭하여 시스템 팔레트 열기
+                </div>
+            </div>
+
+            <!-- HEX 코드 및 이름 -->
+            <div class="flex justify-between items-end mb-5">
+                <div class="flex flex-col">
+                    <label class="text-xs text-gray-500 font-bold mb-1">HEX 코드</label>
+                    <div class="flex items-center gap-3">
+                        <input type="text" id="hex-input" class="text-3xl font-bold font-mono text-gray-800 bg-transparent uppercase border-b-2 border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none w-36 transition-colors" value="#4F46E5" maxlength="7">
+
+                        <button id="eyedropper-btn" class="hidden flex items-center justify-center gap-1.5 bg-gray-800 hover:bg-gray-900 text-white px-3 py-1.5 rounded-lg transition-colors shadow-md text-sm font-bold active:scale-95" title="화면의 색상 추출하기">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                            스포이트
+                        </button>
+                    </div>
+                </div>
+                <span id="current-color-name" class="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1 rounded-full hidden">이름</span>
+            </div>
+
+            <!-- RGB 미세조정 패널 -->
+            <div class="space-y-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs font-bold text-gray-600">RGB 미세조정</span>
+                </div>
+                <!-- Red -->
+                <div class="flex items-center gap-3">
+                    <span class="text-sm font-bold text-red-500 w-4 text-center">R</span>
+                    <input type="range" id="slider-r" min="0" max="255" value="79" class="flex-1">
+                    <input type="number" id="input-r" min="0" max="255" value="79" class="w-14 text-sm font-mono border border-gray-300 rounded-lg p-1 text-center focus:outline-none focus:border-red-500">
+                </div>
+                <!-- Green -->
+                <div class="flex items-center gap-3">
+                    <span class="text-sm font-bold text-green-500 w-4 text-center">G</span>
+                    <input type="range" id="slider-g" min="0" max="255" value="70" class="flex-1">
+                    <input type="number" id="input-g" min="0" max="255" value="70" class="w-14 text-sm font-mono border border-gray-300 rounded-lg p-1 text-center focus:outline-none focus:border-green-500">
+                </div>
+                <!-- Blue -->
+                <div class="flex items-center gap-3">
+                    <span class="text-sm font-bold text-blue-500 w-4 text-center">B</span>
+                    <input type="range" id="slider-b" min="0" max="255" value="229" class="flex-1">
+                    <input type="number" id="input-b" min="0" max="255" value="229" class="w-14 text-sm font-mono border border-gray-300 rounded-lg p-1 text-center focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <!-- 액션 버튼 -->
+            <div class="flex gap-2">
+                <button id="copy-btn" class="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-xl font-bold transition-all shadow-sm active:scale-95 text-lg">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    복사하기
+                </button>
+                <button id="fav-btn" class="flex items-center justify-center w-14 bg-white border-2 border-gray-200 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-xl transition-all shadow-sm active:scale-95" title="즐겨찾기에 추가">
+                    <svg id="fav-icon" class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- 즐겨찾기 및 최근 항목 (스크롤 영역) -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-6 bg-gray-50">
+            <!-- 즐겨찾기 -->
+            <section>
+                <h2 class="text-sm font-bold text-gray-700 flex items-center gap-1.5 mb-3">
+                    <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg>
+                    즐겨찾는 색상
+                </h2>
+                <div id="favorites-container" class="flex flex-wrap gap-3 min-h-[48px]">
+                    <!-- JS -->
+                </div>
+            </section>
+
+            <!-- 최근 사용 -->
+            <section>
+                <h2 class="text-sm font-bold text-gray-700 flex items-center gap-1.5 mb-3">
+                    <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    최근 사용한 색상
+                </h2>
+                <div id="recents-container" class="flex flex-wrap gap-3 min-h-[48px]">
+                    <!-- JS -->
+                </div>
+            </section>
+        </div>
+    </aside>
+
+    <!-- 우측 메인 패널 (팔레트 영역) -->
+    <main class="flex-1 flex flex-col h-1/2 md:h-full overflow-hidden bg-white">
+
+
+
+        <!-- 팔레트 컨텐츠 스크롤 영역 -->
+        <div class="flex-1 overflow-y-auto p-5 sm:p-8 space-y-10">
+
+            <!-- 추천 테마 (위로 배치) -->
+            <section>
+                <h2 class="text-lg font-bold text-gray-800 mb-3">교육 자료 추천 색상 조합</h2>
+                <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3" id="themes-container">
+                </div>
+            </section>
+
+            <hr class="border-gray-200">
+
+            <!-- 이름표 색상 그리드 (아래로 배치) -->
+            <section>
+                <div class="flex justify-between items-end mb-4">
+                    <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        기본 색상표
+                    </h2>
+                    <span class="text-sm text-gray-500">클릭하여 색상 선택 (복사는 좌측 버튼)</span>
+                </div>
+
+                <div class="flex items-center gap-3 overflow-x-auto hide-scroll mb-6 pb-2" id="category-tabs">
+                </div>
+
+                <div id="named-palette-container" class="grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 xl:grid-cols-12 gap-x-2 gap-y-5">
+                </div>
+            </section>
+
+            <div class="h-10"></div>
+        </div>
+    </main>
+
+    <script>
+        const MAX_RECENTS = 50; // 최대 50개 보관
+        const DATA_FILENAME = 'color_palette_data.json';
+
+        const btnHelp = document.getElementById('help-btn');
+        const modalHelp = document.getElementById('help-modal');
+        const modalHelpContent = document.getElementById('help-modal-content');
+        const btnCloseHelp = document.getElementById('close-help-btn');
+
+        let state = {
+            favorites: [],
+            recents: []
+        };
+
+        const colorDatabase = [
+            {
+                id: 'red',
+                name: '빨강/분홍',
+                colors: [
+                    { name: '빨강', hex: '#FF0000' }, { name: '다홍', hex: '#FF2400' }, { name: '진홍', hex: '#DC143C' },
+                    { name: '체리', hex: '#DE3163' }, { name: '버건디', hex: '#800020' }, { name: '와인', hex: '#722F37' },
+                    { name: '루비', hex: '#E0115F' }, { name: '크림슨', hex: '#DC143C' }, { name: '카민', hex: '#960018' },
+                    { name: '석류색', hex: '#C0392B' }, { name: '토마토', hex: '#FF6347' }, { name: '마젠타', hex: '#FF00FF' },
+                    { name: '핫핑크', hex: '#FF69B4' }, { name: '딥핑크', hex: '#FF1493' }, { name: '장미색', hex: '#FF007F' },
+                    { name: '홍매색', hex: '#F08080' }, { name: '분홍', hex: '#FFC0CB' }, { name: '연분홍', hex: '#FFD1DC' },
+                    { name: '베이비핑크', hex: '#F4C2C2' }, { name: '인디핑크', hex: '#CD5C5C' }, { name: '산호색', hex: '#FF7F50' },
+                    { name: '연어색', hex: '#FA8072' }, { name: '복숭아', hex: '#FFDAB9' }
+                ]
+            },
+            {
+                id: 'orange',
+                name: '주황',
+                colors: [
+                    { name: '주황', hex: '#FFA500' }, { name: '다크오렌지', hex: '#FF8C00' }, { name: '오렌지레드', hex: '#FF4500' },
+                    { name: '탠저린', hex: '#F28500' }, { name: '귤색', hex: '#F39C12' }, { name: '당근색', hex: '#ED9121' },
+                    { name: '번트오렌지', hex: '#CC5500' }, { name: '망고', hex: '#FFC324' }, { name: '금잔화', hex: '#EAA221' },
+                    { name: '호박색', hex: '#FFBF00' }, { name: '앰버', hex: '#FFBF00' }, { name: '살구색', hex: '#FBCEB1' },
+                    { name: '피치오렌지', hex: '#FFCC99' }, { name: '코랄오렌지', hex: '#FF7F50' }, { name: '구리색', hex: '#B87333' }
+                ]
+            },
+            {
+                id: 'yellow',
+                name: '노랑',
+                colors: [
+                    { name: '노랑', hex: '#FFFF00' }, { name: '개나리', hex: '#F8E473' }, { name: '카나리아', hex: '#FFFF99' },
+                    { name: '금색', hex: '#FFD700' }, { name: '골든로드', hex: '#DAA520' }, { name: '머스타드', hex: '#FFDB58' },
+                    { name: '샤프란', hex: '#F4C430' }, { name: '꿀색', hex: '#FFC30B' }, { name: '레몬색', hex: '#FFFACD' },
+                    { name: '바닐라', hex: '#F3E5AB' }, { name: '버터', hex: '#FFFDD0' }, { name: '연노랑', hex: '#FFFFE0' },
+                    { name: '크림색', hex: '#FFFDD0' }, { name: '옥수수', hex: '#FBEC5D' }, { name: '샴페인', hex: '#F7E7CE' }
+                ]
+            },
+            {
+                id: 'green',
+                name: '초록',
+                colors: [
+                    { name: '초록', hex: '#008000' }, { name: '딥그린', hex: '#006400' }, { name: '포레스트', hex: '#228B22' },
+                    { name: '잔디색', hex: '#4CBB17' }, { name: '애플그린', hex: '#8DB600' }, { name: '라임색', hex: '#00FF00' },
+                    { name: '스프링그린', hex: '#00FF7F' }, { name: '연두', hex: '#8FBC8F' }, { name: '에메랄드', hex: '#50C878' },
+                    { name: '제이드(옥색)', hex: '#00A86B' }, { name: '민트', hex: '#3EB489' }, { name: '청록', hex: '#008B8B' },
+                    { name: '씨그린', hex: '#2E8B57' }, { name: '틸(Teal)', hex: '#008080' }, { name: '올리브', hex: '#808000' },
+                    { name: '올리브드랩', hex: '#6B8E23' }, { name: '카키', hex: '#BDB76B' }, { name: '피스타치오', hex: '#93C572' },
+                    { name: '말차색', hex: '#B0D36D' }, { name: '쑥색', hex: '#3F5D26' }, { name: '아스파라거스', hex: '#87A96B' }
+                ]
+            },
+            {
+                id: 'blue',
+                name: '파랑',
+                colors: [
+                    { name: '파랑', hex: '#0000FF' }, { name: '코발트', hex: '#0047AB' }, { name: '사파이어', hex: '#0F52BA' },
+                    { name: '바다색', hex: '#006994' }, { name: '마린블루', hex: '#1E3F66' }, { name: '로열블루', hex: '#4169E1' },
+                    { name: '남색', hex: '#191970' }, { name: '네이비', hex: '#000080' }, { name: '미드나잇블루', hex: '#191970' },
+                    { name: '군청색', hex: '#0000CD' }, { name: '인디고블루', hex: '#1D2951' }, { name: '도저블루', hex: '#1E90FF' },
+                    { name: '스틸블루', hex: '#4682B4' }, { name: '세룰리안', hex: '#007BA7' }, { name: '스카이블루', hex: '#87CEEB' },
+                    { name: '베이비블루', hex: '#89CFF0' }, { name: '하늘색', hex: '#B0E0E6' }, { name: '아쿠아', hex: '#00FFFF' },
+                    { name: '페리윙클', hex: '#CCCCFF' }
+                ]
+            },
+            {
+                id: 'purple',
+                name: '보라',
+                colors: [
+                    { name: '보라', hex: '#800080' }, { name: '딥퍼플', hex: '#301934' }, { name: '바이올렛', hex: '#EE82EE' },
+                    { name: '인디고', hex: '#4B0082' }, { name: '아메시스트', hex: '#9966CC' }, { name: '플럼', hex: '#8E4585' },
+                    { name: '자두색', hex: '#DDA0DD' }, { name: '포도색', hex: '#6F2DA8' }, { name: '가지색', hex: '#614051' },
+                    { name: '라벤더', hex: '#E6E6FA' }, { name: '연보라', hex: '#D8BFD8' }, { name: '라일락', hex: '#C8A2C8' },
+                    { name: '모브', hex: '#E0B0FF' }, { name: '오키드', hex: '#DA70D6' }, { name: '자주', hex: '#C71585' }
+                ]
+            },
+            {
+                id: 'brown',
+                name: '갈색',
+                colors: [
+                    { name: '갈색', hex: '#A52A2A' }, { name: '마호가니', hex: '#C04000' }, { name: '시에나', hex: '#A0522D' },
+                    { name: '고동색', hex: '#5C4033' }, { name: '밤색', hex: '#800000' }, { name: '초콜릿', hex: '#D2691E' },
+                    { name: '코코아', hex: '#D2691E' }, { name: '커피색', hex: '#6F4E37' }, { name: '모카', hex: '#4E312D' },
+                    { name: '월넛', hex: '#773F1A' }, { name: '카라멜', hex: '#C68E17' }, { name: '카멜', hex: '#C19A6B' },
+                    { name: '브론즈', hex: '#CD7F32' }, { name: '오크', hex: '#DFB67A' }, { name: '흙색', hex: '#9B7653' },
+                    { name: '샌드', hex: '#C2B280' }, { name: '비스킷', hex: '#FFE4C4' }, { name: '베이지', hex: '#F5F5DC' }
+                ]
+            },
+            {
+                id: 'gray',
+                name: '무채색',
+                colors: [
+                    { name: '검정', hex: '#000000' }, { name: '차콜', hex: '#36454F' }, { name: '다크그레이', hex: '#A9A9A9' },
+                    { name: '쥐색', hex: '#696969' }, { name: '짙은회색', hex: '#555555' }, { name: '회색', hex: '#808080' },
+                    { name: '슬레이트', hex: '#708090' }, { name: '은색', hex: '#C0C0C0' }, { name: '실버', hex: '#C0C0C0' },
+                    { name: '스모크', hex: '#738276' }, { name: '밝은회색', hex: '#D3D3D3' }, { name: '진주색', hex: '#EAE0C8' },
+                    { name: '알라바스터', hex: '#F2F0E6' }, { name: '아이보리', hex: '#FFFFF0' }, { name: '스노우', hex: '#FFFAFA' },
+                    { name: '하양', hex: '#FFFFFF' }
+                ]
+            }
+        ];
+
+        const hexToNameMap = {};
+        colorDatabase.forEach(category => {
+            if (category.colors) {
+                category.colors.forEach(c => hexToNameMap[c.hex.toUpperCase()] = c.name);
+            }
+        });
+
+        const predefinedThemes = [
+            { name: "편안한 파스텔 (배경용)", colors: ["#FFB3BA", "#FFDFBA", "#FFFFBA", "#BAFFC9", "#BAE1FF", "#E2CBF7"] },
+            { name: "가독성 높은 강조색", colors: ["#E63946", "#F4A261", "#2A9D8F", "#264653", "#1D3557", "#457B9D"] },
+            { name: "깔끔한 무채색 (본문/테두리)", colors: ["#212529", "#495057", "#ADB5BD", "#E9ECEF", "#F8F9FA", "#FFFFFF"] },
+            { name: "차분한 숲속 (안내문)", colors: ["#2C363F", "#6D9773", "#0C3B2E", "#BBC7A4", "#FFBA00", "#F2F2F2"] },
+            { name: "따뜻한 봄날 (가정통신문)", colors: ["#FF9A9E", "#FECFEF", "#FDFBFB", "#E2E2E2", "#A1C4FD", "#C2E9FB"] },
+            { name: "시원한 여름 바다 (행사)", colors: ["#00B4DB", "#0083B0", "#E0EAFC", "#CFDEF3", "#4CA1AF", "#2C3E50"] },
+            { name: "가을의 단풍 (계절 자료)", colors: ["#D35400", "#E67E22", "#F39C12", "#F1C40F", "#8E44AD", "#2C3E50"] },
+            { name: "신뢰감 주는 블루 (기안/보고)", colors: ["#003F5C", "#2F4B7C", "#665191", "#A05195", "#D45087", "#F95D6A"] },
+            { name: "레트로 빈티지 (디자인)", colors: ["#CB997E", "#DDBEA9", "#FFE8D6", "#B7B7A4", "#A5A58D", "#6B705C"] },
+            { name: "형광펜 밑줄 (핵심 강조)", colors: ["#FFFF00", "#00FF00", "#00FFFF", "#FF00FF", "#FF9900", "#FF0099"] }
+        ];
+
+        // UI 요소
+        const elPreview = document.getElementById('current-color-preview');
+        const elNativePicker = document.getElementById('native-color-picker');
+        const elHexInput = document.getElementById('hex-input');
+        const elColorName = document.getElementById('current-color-name');
+
+        const elSliderR = document.getElementById('slider-r');
+        const elInputR = document.getElementById('input-r');
+        const elSliderG = document.getElementById('slider-g');
+        const elInputG = document.getElementById('input-g');
+        const elSliderB = document.getElementById('slider-b');
+        const elInputB = document.getElementById('input-b');
+
+        const btnCopy = document.getElementById('copy-btn');
+        const btnFav = document.getElementById('fav-btn');
+        const iconFav = document.getElementById('fav-icon');
+        const btnEyedropper = document.getElementById('eyedropper-btn');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toast-message');
+
+        let currentColor = "#4F46E5";
+        let activeCategory = 'red';
+
+        async function init() {
+            renderTabs();
+            renderNamedPalette();
+            renderThemes();
+            await loadDataFromPython();
+
+            // 초기 색상 세팅
+            updateColorUI(currentColor);
+            checkEyedropperSupport();
+
+            // 이벤트 리스너 바인딩
+            elNativePicker.addEventListener('input', (e) => updateColorUI(e.target.value));
+            elNativePicker.addEventListener('change', (e) => updateColorUI(e.target.value)); // 복사할 때만 기록하므로 UI만 업데이트
+
+            // HEX 직접 입력
+            elHexInput.addEventListener('change', (e) => {
+                let val = e.target.value.trim();
+                if (!val.startsWith('#')) val = '#' + val;
+                if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                    updateColorUI(val);
+                } else {
+                    elHexInput.value = currentColor; // 원상복구
+                    showToast("올바른 HEX 코드를 입력하세요.");
+                }
+            });
+
+            // RGB 슬라이더 & 인풋 이벤트
+            const rgbElements = [
+                { slider: elSliderR, input: elInputR },
+                { slider: elSliderG, input: elInputG },
+                { slider: elSliderB, input: elInputB }
+            ];
+
+            rgbElements.forEach(({ slider, input }) => {
+                // 슬라이더 조작 시 (실시간)
+                slider.addEventListener('input', (e) => {
+                    input.value = e.target.value;
+                    syncRgbToHex();
+                });
+                slider.addEventListener('change', () => syncRgbToHex());
+
+                // 숫자 직접 입력 시
+                input.addEventListener('change', (e) => {
+                    let val = parseInt(e.target.value);
+                    if (isNaN(val) || val < 0) val = 0;
+                    if (val > 255) val = 255;
+                    e.target.value = val;
+                    slider.value = val;
+                    syncRgbToHex();
+                });
+            });
+
+            btnCopy.addEventListener('click', () => {
+                doCopyAndSave(currentColor);
+            });
+            btnFav.addEventListener('click', toggleFavorite);
+            btnEyedropper.addEventListener('click', openEyedropper);
+
+            // --- 도움말 모달 동작 로직 ---
+            function openHelpModal() {
+                modalHelp.classList.remove('hidden');
+                setTimeout(() => {
+                    modalHelp.classList.remove('opacity-0');
+                    modalHelpContent.classList.remove('scale-95');
+                }, 10);
+            }
+
+            function closeHelpModal() {
+                modalHelp.classList.add('opacity-0');
+                modalHelpContent.classList.add('scale-95');
+                setTimeout(() => {
+                    modalHelp.classList.add('hidden');
+                }, 300); // 애니메이션 시간 대기
+            }
+
+            btnHelp.addEventListener('click', openHelpModal);
+            btnCloseHelp.addEventListener('click', closeHelpModal);
+            // 팝업 바깥의 어두운 배경을 클릭해도 닫히도록 설정
+            modalHelp.addEventListener('click', (e) => {
+                if (e.target === modalHelp) closeHelpModal();
+            });
+        }
+
+        // 복사와 최근 항목 저장을 동시에 처리하는 함수
+        function doCopyAndSave(hex) {
+            copyToClipboard(hex);
+            addToRecents(hex);
+        }
+
+        // RGB 값들을 취합하여 HEX로 변환하고 UI 업데이트
+        function syncRgbToHex() {
+            const r = parseInt(elSliderR.value);
+            const g = parseInt(elSliderG.value);
+            const b = parseInt(elSliderB.value);
+            const hex = rgbToHex(r, g, b);
+            updateColorUI(hex);
+        }
+
+
+        // RGB 슬라이더 & 인풋 이벤트
+        const rgbElements = [
+            { slider: elSliderR, input: elInputR },
+            { slider: elSliderG, input: elInputG },
+            { slider: elSliderB, input: elInputB }
+        ];
+
+        rgbElements.forEach(({ slider, input }) => {
+            // 슬라이더 조작 시 (실시간)
+            slider.addEventListener('input', (e) => {
+                input.value = e.target.value;
+                syncRgbToHex(false);
+            });
+            slider.addEventListener('change', () => syncRgbToHex(true)); // 마우스 뗐을 때 기록
+
+            // 숫자 직접 입력 시
+            input.addEventListener('change', (e) => {
+                let val = parseInt(e.target.value);
+                if (isNaN(val) || val < 0) val = 0;
+                if (val > 255) val = 255;
+                e.target.value = val;
+                slider.value = val;
+                syncRgbToHex(true);
+            });
+        });
+
+        btnCopy.addEventListener('click', () => {
+            copyToClipboard(currentColor);
+            addToRecents(currentColor);
+        });
+        btnFav.addEventListener('click', toggleFavorite);
+        btnEyedropper.addEventListener('click', openEyedropper);
+
+
+        // RGB 값들을 취합하여 HEX로 변환하고 UI 업데이트
+        function syncRgbToHex(saveToRecent = false) {
+            const r = parseInt(elSliderR.value);
+            const g = parseInt(elSliderG.value);
+            const b = parseInt(elSliderB.value);
+            const hex = rgbToHex(r, g, b);
+            updateColorUI(hex, saveToRecent);
+        }
+
+        function hexToRgb(hex) {
+            let r = 0, g = 0, b = 0;
+            if (hex.length === 7) {
+                r = parseInt(hex.substring(1, 3), 16);
+                g = parseInt(hex.substring(3, 5), 16);
+                b = parseInt(hex.substring(5, 7), 16);
+            }
+            return { r, g, b };
+        }
+
+        function rgbToHex(r, g, b) {
+            return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1).toUpperCase();
+        }
+
+        // 전체 UI(미리보기, HEX, RGB, 이름) 업데이트 (최근 항목 저장 로직 분리)
+        function updateColorUI(hex) {
+            currentColor = hex.toUpperCase();
+
+            // 색상 박스 및 네이티브 피커
+            elPreview.style.backgroundColor = currentColor;
+            elNativePicker.value = currentColor;
+
+            // HEX 인풋
+            elHexInput.value = currentColor;
+
+            // RGB 슬라이더 및 인풋 업데이트
+            const rgb = hexToRgb(currentColor);
+            elSliderR.value = elInputR.value = rgb.r;
+            elSliderG.value = elInputG.value = rgb.g;
+            elSliderB.value = elInputB.value = rgb.b;
+
+            // 이름 매칭
+            const name = hexToNameMap[currentColor];
+            if (name) {
+                elColorName.textContent = name;
+                elColorName.classList.remove('hidden');
+            } else {
+                elColorName.classList.add('hidden');
+            }
+
+            updateFavoriteIcon();
+        }
+
+        async function loadDataFromPython() {
+            try {
+                // iframe 내부 및 pywebview 로딩 지연 대응
+                const api = window.pywebview?.api || window.parent?.pywebview?.api;
+                if (api && api.load_color_data) {
+                    const rawData = await api.load_color_data();
+                    if (rawData) {
+                        state = JSON.parse(rawData);
+                        renderState();
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.warn("Python 연동 실패, 로컬 스토리지 시도:", error);
+            }
+
+            // 파이썬 로드가 실패하거나 브라우저에서 단독 실행 시 로컬스토리지 사용
+            const localData = localStorage.getItem('pentong_colors');
+            if (localData) {
+                state = JSON.parse(localData);
+                renderState();
+            }
+        }
+
+        async function saveDataToPython() {
+            renderState();
+            const jsonString = JSON.stringify(state);
+            try {
+                const api = window.pywebview?.api || window.parent?.pywebview?.api;
+                if (api && api.save_color_data) {
+                    await api.save_color_data(jsonString);
+                    return;
+                }
+            } catch (error) {
+                console.warn("Python 연동 실패, 로컬 스토리지에 저장:", error);
+            }
+
+            localStorage.setItem('pentong_colors', jsonString);
+        }
+
+        function copyToClipboard(hex) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(hex).then(() => showToast(`${hex} 복사 완료!`));
+            } else {
+                const textArea = document.createElement("textarea");
+                textArea.value = hex;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast(`${hex} 복사 완료!`);
+                } catch (err) { }
+                textArea.remove();
+            }
+        }
+
+        function showToast(message) {
+            toastMsg.textContent = message;
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            // 알림이 나타날 때 위로 살짝 떠오르는 효과 (-translate-y-2)
+            toast.classList.add('opacity-100', '-translate-y-2');
+
+            if (window.toastTimer) clearTimeout(window.toastTimer);
+            window.toastTimer = setTimeout(() => {
+                toast.classList.remove('opacity-100', '-translate-y-2');
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 2000);
+        }
+
+        function toggleFavorite() {
+            const index = state.favorites.indexOf(currentColor);
+            if (index === -1) {
+                state.favorites.unshift(currentColor);
+                showToast("즐겨찾기에 추가되었습니다.");
+            } else {
+                state.favorites.splice(index, 1);
+                showToast("즐겨찾기에서 제거되었습니다.");
+            }
+            saveDataToPython();
+            updateFavoriteIcon();
+        }
+
+        function updateFavoriteIcon() {
+            if (state.favorites.includes(currentColor)) {
+                iconFav.setAttribute('fill', 'currentColor');
+                btnFav.classList.add('text-red-500', 'bg-red-50', 'border-red-200');
+                btnFav.classList.remove('text-gray-400', 'bg-white', 'border-gray-200');
+            } else {
+                iconFav.setAttribute('fill', 'none');
+                btnFav.classList.remove('text-red-500', 'bg-red-50', 'border-red-200');
+                btnFav.classList.add('text-gray-400', 'bg-white', 'border-gray-200');
+            }
+        }
+
+        function addToRecents(hex) {
+            hex = hex.toUpperCase();
+            state.recents = state.recents.filter(c => c !== hex);
+            state.recents.unshift(hex);
+            if (state.recents.length > MAX_RECENTS) state.recents.pop();
+            saveDataToPython();
+        }
+
+        function removeFromFavorites(hex) {
+            state.favorites = state.favorites.filter(c => c !== hex);
+            saveDataToPython();
+            updateFavoriteIcon();
+            renderState();
+            showToast("즐겨찾기에서 삭제되었습니다.");
+        }
+
+        function removeFromRecents(hex) {
+            state.recents = state.recents.filter(c => c !== hex);
+            saveDataToPython();
+            renderState();
+        }
+
+        function checkEyedropperSupport() {
+            if (window.EyeDropper) btnEyedropper.classList.remove('hidden');
+        }
+
+        async function openEyedropper() {
+            if (!window.EyeDropper) return;
+            const eyeDropper = new EyeDropper();
+            try {
+                const result = await eyeDropper.open();
+                updateColorUI(result.sRGBHex);
+            } catch (e) { }
+        }
+
+        function isLightColor(color) {
+            const hex = color.replace('#', '');
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            return ((r * 299) + (g * 587) + (b * 114)) / 1000 > 220;
+        }
+
+        // 공통 색상 칩 (삭제 버튼 기능 추가)
+        function createColorChip(hex, name = null, sizeClass = "w-12 h-12", roundedClass = "rounded-full", listType = null) {
+            const wrapper = document.createElement('div');
+            wrapper.className = "flex flex-col items-center gap-2 group cursor-pointer relative";
+
+            const btn = document.createElement('button');
+            const borderClass = isLightColor(hex) ? 'border-2 border-gray-300' : 'border border-transparent';
+            btn.className = `color-chip ${sizeClass} ${roundedClass} ${borderClass} focus:outline-none focus:ring-4 focus:ring-blue-300 shrink-0 shadow-sm`;
+            btn.style.backgroundColor = hex;
+            btn.title = name ? `${name} (${hex})` : hex;
+
+            btn.addEventListener('click', () => {
+                updateColorUI(hex);
+            });
+            wrapper.appendChild(btn);
+
+            if (name) {
+                const nameLabel = document.createElement('span');
+                nameLabel.className = "text-xs font-bold text-gray-600 w-full text-center truncate group-hover:text-blue-600 transition-colors";
+                nameLabel.textContent = name;
+                wrapper.appendChild(nameLabel);
+            }
+
+            // 즐겨찾기/최근항목일 경우 X 삭제 버튼 추가
+            if (listType) {
+                const delBtn = document.createElement('button');
+                delBtn.className = "absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 focus:outline-none z-10";
+                delBtn.innerHTML = "×";
+                delBtn.title = "삭제";
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // 부모(칩)의 클릭 이벤트 방지
+                    if (listType === 'favorite') removeFromFavorites(hex);
+                    if (listType === 'recent') removeFromRecents(hex);
+                });
+                wrapper.appendChild(delBtn);
+            }
+
+            return wrapper;
+        }
+
+        function renderState() {
+            const favContainer = document.getElementById('favorites-container');
+            const recContainer = document.getElementById('recents-container');
+
+            favContainer.innerHTML = '';
+            if (state.favorites.length === 0) {
+                favContainer.innerHTML = '<p class="text-sm text-gray-400 w-full text-center py-4 bg-white rounded-xl border border-gray-100">하트 아이콘을 눌러 추가</p>';
+            } else {
+                state.favorites.forEach(hex => favContainer.appendChild(createColorChip(hex, null, "w-10 h-10", "rounded-xl", "favorite")));
+            }
+
+            recContainer.innerHTML = '';
+            if (state.recents.length === 0) {
+                recContainer.innerHTML = '<p class="text-sm text-gray-400 w-full text-center py-4 bg-white rounded-xl border border-gray-100">기록 없음</p>';
+            } else {
+                state.recents.forEach(hex => recContainer.appendChild(createColorChip(hex, null, "w-10 h-10", "rounded-xl", "recent")));
+            }
+        }
+
+        function renderTabs() {
+            const tabs = document.getElementById('category-tabs');
+            tabs.innerHTML = '';
+            colorDatabase.forEach(category => {
+                const btn = document.createElement('button');
+                const isActive = activeCategory === category.id;
+                btn.className = `px-4 py-2 text-sm font-bold rounded-full whitespace-nowrap transition-colors border ${isActive ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`;
+                btn.textContent = category.name;
+                btn.addEventListener('click', () => {
+                    activeCategory = category.id;
+                    renderTabs();
+                    renderNamedPalette();
+                });
+                tabs.appendChild(btn);
+            });
+        }
+
+        function renderNamedPalette() {
+            const container = document.getElementById('named-palette-container');
+            container.innerHTML = '';
+
+            let colorsToRender = [];
+            if (activeCategory === 'all') {
+                colorDatabase.forEach(cat => {
+                    if (cat.colors) colorsToRender = colorsToRender.concat(cat.colors);
+                });
+            } else {
+                const category = colorDatabase.find(c => c.id === activeCategory);
+                if (category && category.colors) colorsToRender = category.colors;
+            }
+
+            colorsToRender.forEach(colorObj => {
+                // 칩 크기를 w-14 h-14 에서 w-9 h-9 로 대폭 축소
+                const chip = createColorChip(colorObj.hex, colorObj.name, "w-9 h-9", "rounded-full");
+                container.appendChild(chip);
+            });
+        }
+
+        function renderThemes() {
+            const container = document.getElementById('themes-container');
+            container.innerHTML = '';
+            predefinedThemes.forEach(theme => {
+                const card = document.createElement('div');
+                // 패딩 축소 (p-4 -> p-3), 둥글기 조절
+                card.className = "bg-gray-50 border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow group";
+
+                const title = document.createElement('h3');
+                // 텍스트 크기 및 여백 축소 (mb-3 -> mb-2, text-sm -> text-xs), 글자 넘침 방지(truncate) 추가
+                title.className = "text-xs font-bold text-gray-700 mb-2 group-hover:text-blue-600 transition-colors truncate";
+                title.textContent = theme.name;
+                card.appendChild(title);
+
+                const colorRow = document.createElement('div');
+                // 색상 막대 높이 및 간격 축소 (h-12 -> h-8, gap-1.5 -> gap-1)
+                colorRow.className = "flex gap-1 h-8";
+                theme.colors.forEach(hex => {
+                    const chip = document.createElement('button');
+                    chip.className = `flex-1 rounded-md transition-transform hover:scale-110 hover:-translate-y-0.5 shadow-sm ${isLightColor(hex) ? 'border border-gray-300' : ''}`;
+                    chip.style.backgroundColor = hex;
+                    chip.title = hex;
+                    chip.addEventListener('click', (e) => {
+                        updateColorUI(hex);
+                    });
+                    colorRow.appendChild(chip);
+                });
+                card.appendChild(colorRow);
+                container.appendChild(card);
+            });
+        }
+
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

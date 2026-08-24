@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>미온 사다리: 운명의 선택</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #1a1a2e;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .font-jua {
+            font-family: 'Jua', sans-serif;
+        }
+
+        /* Neon Glow Effects */
+        .neon-text {
+            text-shadow: 0 0 10px #e94560, 0 0 20px #e94560, 0 0 40px #e94560;
+        }
+        
+        .ladder-container {
+            position: relative;
+            background: rgba(22, 33, 62, 0.8);
+            border-radius: 16px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            cursor: pointer;
+        }
+
+        /* Input styling fixed for visibility */
+        .custom-input {
+            background-color: #16213e !important;
+            border: 1px solid #30475e !important;
+            color: #ffffff !important;
+            transition: all 0.2s;
+        }
+        
+        .custom-input:focus {
+            border-color: #e94560 !important;
+            box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.3);
+            outline: none;
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .animate-pulse-custom {
+            animation: pulse 2s infinite;
+        }
+
+        .modal-transition {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .hidden-modal {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.9);
+            display: none; /* Ensure it doesn't block clicks */
+        }
+
+        .visible-modal {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+            display: flex;
+        }
+
+        /* Confetti */
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            animation: confetti-fall 3s linear forwards;
+        }
+
+        @keyframes confetti-fall {
+            0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f3460; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #e94560; 
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Header -->
+    <header class="text-center mb-6">
+        <h1 class="text-4xl md:text-6xl font-jua text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-yellow-500 animate-pulse-custom">
+            운명의 사다리
+        </h1>
+        <p class="text-gray-400 mt-2 text-sm md:text-base">누가 걸릴까? 심장이 쫄깃한 순간!</p>
+    </header>
+
+    <!-- Setup Phase -->
+    <div id="setup-panel" class="w-full max-w-4xl bg-gray-800 p-6 rounded-xl shadow-2xl border border-gray-700">
+        <div class="flex flex-col md:flex-row gap-4 items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <label class="font-bold text-lg text-pink-400">참가자 수</label>
+                <div class="flex items-center bg-gray-900 rounded-lg p-1">
+                    <button onclick="adjustCount(-1)" class="w-8 h-8 rounded bg-gray-700 hover:bg-gray-600 flex items-center justify-center font-bold text-xl">-</button>
+                    <span id="player-count-display" class="w-12 text-center font-bold text-xl">4</span>
+                    <button onclick="adjustCount(1)" class="w-8 h-8 rounded bg-gray-700 hover:bg-gray-600 flex items-center justify-center font-bold text-xl">+</button>
+                </div>
+            </div>
+            <button onclick="startGame()" class="w-full md:w-auto px-8 py-3 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-lg font-bold text-lg shadow-lg transform transition hover:scale-105">
+                <i class="fas fa-play mr-2"></i> 게임 시작
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Player Names -->
+            <div>
+                <h3 class="text-lg font-semibold mb-3 text-cyan-400"><i class="fas fa-users mr-2"></i>참가자 이름</h3>
+                <div id="player-inputs" class="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                    <!-- Dynamic Inputs -->
+                </div>
+            </div>
+            <!-- Results -->
+            <div>
+                <h3 class="text-lg font-semibold mb-3 text-yellow-400"><i class="fas fa-gift mr-2"></i>당첨/벌칙 항목</h3>
+                <div id="result-inputs" class="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                    <!-- Dynamic Inputs -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Preset Buttons -->
+        <div class="mt-6 p-4 bg-gray-900 rounded-lg border border-gray-700">
+            <p class="text-sm text-gray-400 mb-2 text-center"><i class="fas fa-magic mr-1"></i> 빠른 설정 (클릭하여 자동 채우기)</p>
+            <div class="flex flex-wrap justify-center gap-2">
+                <button onclick="fillPreset('money')" class="px-3 py-1.5 bg-green-700 hover:bg-green-600 rounded text-sm font-medium transition">
+                    💸 용돈 몰아주기
+                </button>
+                <button onclick="fillPreset('snack')" class="px-3 py-1.5 bg-orange-700 hover:bg-orange-600 rounded text-sm font-medium transition">
+                    🍔 간식 내기
+                </button>
+                <button onclick="fillPreset('chores')" class="px-3 py-1.5 bg-blue-700 hover:bg-blue-600 rounded text-sm font-medium transition">
+                    🧹 청소 당번
+                </button>
+                <button onclick="fillPreset('random')" class="px-3 py-1.5 bg-purple-700 hover:bg-purple-600 rounded text-sm font-medium transition">
+                    🎲 완전 랜덤
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Phase -->
+    <div id="game-panel" class="hidden w-full max-w-6xl flex flex-col items-center">
+        
+        <div class="w-full flex justify-between items-center mb-4 px-2">
+            <button onclick="resetGame()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition">
+                <i class="fas fa-arrow-left mr-2"></i> 설정으로
+            </button>
+            <div class="flex gap-2">
+                <button onclick="toggleSpeed()" id="speed-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm transition font-bold shadow-lg">
+                    <i class="fas fa-bolt mr-1"></i> 2배속
+                </button>
+                <button onclick="revealAll()" class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm transition font-bold shadow-lg">
+                    <i class="fas fa-eye mr-1"></i> 전체 결과
+                </button>
+            </div>
+        </div>
+
+        <div class="ladder-container p-4 w-full overflow-x-auto">
+            <canvas id="ladderCanvas"></canvas>
+        </div>
+
+        <div class="mt-4 text-gray-400 text-sm animate-pulse">
+            * 참가자 이름을 클릭하면 사다리를 탑니다!
+        </div>
+    </div>
+
+    <!-- Individual Result Modal -->
+    <div id="result-modal" class="fixed inset-0 z-50 items-center justify-center bg-black bg-opacity-80 hidden-modal modal-transition">
+        <div class="bg-gray-800 border-2 border-pink-500 p-8 rounded-2xl shadow-2xl text-center max-w-sm w-full mx-4 relative overflow-hidden">
+            <div id="confetti-container" class="absolute inset-0 pointer-events-none"></div>
+            
+            <h2 id="modal-player" class="text-3xl font-jua text-cyan-400 mb-2">플레이어</h2>
+            <div class="text-gray-400 mb-4">님의 결과는?</div>
+            
+            <div class="py-6 border-y border-gray-700 mb-6">
+                <h1 id="modal-result" class="text-5xl font-jua text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500">
+                    당첨!
+                </h1>
+            </div>
+
+            <button onclick="closeModal('result-modal')" class="w-full py-3 bg-pink-600 hover:bg-pink-500 rounded-xl font-bold text-lg transition">
+                확인
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Modal (For 'Reveal All') -->
+    <div id="summary-modal" class="fixed inset-0 z-50 items-center justify-center bg-black bg-opacity-80 hidden-modal modal-transition">
+        <div class="bg-gray-800 border-2 border-green-500 p-6 rounded-2xl shadow-2xl text-center max-w-lg w-full mx-4 relative overflow-hidden max-h-[80vh] flex flex-col">
+            <div id="confetti-container-summary" class="absolute inset-0 pointer-events-none"></div>
+            
+            <h2 class="text-3xl font-jua text-green-400 mb-4">🎉 최종 결과 🎉</h2>
+            
+            <div class="overflow-y-auto custom-scrollbar flex-1 mb-4 pr-2">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-gray-400 border-b border-gray-600">
+                            <th class="p-2">참가자</th>
+                            <th class="p-2 text-right">결과</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summary-list">
+                        <!-- Dynamic Content -->
+                    </tbody>
+                </table>
+            </div>
+
+            <button onclick="closeModal('summary-modal')" class="w-full py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-lg transition">
+                닫기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let playerCount = 4;
+        let players = [];
+        let results = [];
+        let ladderData = []; 
+        let colors = [
+            '#FF5733', '#33FF57', '#3357FF', '#FF33A1', 
+            '#33FFF5', '#F5FF33', '#A133FF', '#FF8C33',
+            '#33FF8C', '#8C33FF'
+        ];
+        
+        // Canvas & Game Control
+        const canvas = document.getElementById('ladderCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationId = null;
+        let activePaths = []; // Currently animating paths
+        let completedPaths = new Set();
+        let speedMultiplier = 1;
+        let isRevealingAll = false;
+
+        // --- Init & Setup Logic ---
+
+        function initSetup() {
+            renderInputs();
+        }
+
+        function adjustCount(delta) {
+            playerCount = Math.max(2, Math.min(20, playerCount + delta));
+            document.getElementById('player-count-display').innerText = playerCount;
+            renderInputs();
+        }
+
+        function renderInputs() {
+            const pContainer = document.getElementById('player-inputs');
+            const rContainer = document.getElementById('result-inputs');
+            
+            // Get current values
+            const currentPlayers = Array.from(pContainer.querySelectorAll('input')).map(i => i.value);
+            const currentResults = Array.from(rContainer.querySelectorAll('input')).map(i => i.value);
+
+            pContainer.innerHTML = '';
+            rContainer.innerHTML = '';
+
+            for (let i = 0; i < playerCount; i++) {
+                // Player Input
+                const pInput = document.createElement('input');
+                pInput.type = 'text';
+                pInput.className = 'w-full p-2 rounded text-sm custom-input';
+                pInput.placeholder = `참가자 ${i + 1}`;
+                pInput.value = currentPlayers[i] || '';
+                pInput.dataset.index = i;
+                pContainer.appendChild(pInput);
+
+                // Result Input
+                const rInput = document.createElement('input');
+                rInput.type = 'text';
+                rInput.className = 'w-full p-2 rounded text-sm custom-input';
+                rInput.placeholder = `결과 ${i + 1}`;
+                rInput.value = currentResults[i] || '';
+                rInput.dataset.index = i;
+                rContainer.appendChild(rInput);
+            }
+        }
+
+        function fillPreset(type) {
+            const pInputs = document.querySelectorAll('#player-inputs input');
+            const rInputs = document.querySelectorAll('#result-inputs input');
+            
+            const names = ['김철수', '이영희', '박민수', '최지수', '정호동', '유재석', '박나래', '양세찬', '신동엽', '이경규', '강호동', '이수근'];
+            
+            pInputs.forEach((input, i) => {
+                input.value = names[i % names.length];
+            });
+
+            let outcomes = [];
+            
+            if (type === 'money') {
+                const moneyItems = ['10만원', '5만원', '3만원', '1만원', '5천원', '꽝', '꽝', '꽝'];
+                while (outcomes.length < playerCount) {
+                    if (outcomes.length < moneyItems.length) {
+                        outcomes.push(moneyItems[outcomes.length]);
+                    } else {
+                        outcomes.push('꽝');
+                    }
+                }
+            } else if (type === 'snack') {
+                 const snacks = ['커피쏘기', '아이스크림', '전원 쏘기', '면제', '면제', '50% 부담', '편의점 쏘기', '면제'];
+                 while (outcomes.length < playerCount) {
+                    outcomes.push(snacks[outcomes.length % snacks.length]);
+                }
+            } else if (type === 'chores') {
+                const chores = ['설거지', '청소기', '쓰레기버리기', '휴식', '휴식', '요리보조', '정리정돈', '휴식'];
+                while (outcomes.length < playerCount) {
+                    outcomes.push(chores[outcomes.length % chores.length]);
+                }
+            } else {
+                const randoms = ['꽝', '당첨', '노래부르기', '춤추기', '엉덩이로 이름쓰기', '딱밤 맞기', '면제', '만원 받기'];
+                while (outcomes.length < playerCount) {
+                    outcomes.push(randoms[outcomes.length % randoms.length]);
+                }
+            }
+
+            const shuffled = outcomes.sort(() => Math.random() - 0.5);
+
+            rInputs.forEach((input, i) => {
+                input.value = shuffled[i];
+            });
+        }
+
+        // --- Game Logic ---
+
+        function startGame() {
+            const pInputs = document.querySelectorAll('#player-inputs input');
+            const rInputs = document.querySelectorAll('#result-inputs input');
+            
+            players = Array.from(pInputs).map((input, i) => input.value.trim() || `참가자 ${i+1}`);
+            
+            // 입력받은 결과 항목을 게임 시작 시 랜덤으로 섞기 (Fisher-Yates Shuffle)
+            let tempResults = Array.from(rInputs).map((input, i) => input.value.trim() || `결과 ${i+1}`);
+            for (let i = tempResults.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tempResults[i], tempResults[j]] = [tempResults[j], tempResults[i]];
+            }
+            results = tempResults;
+
+            document.getElementById('setup-panel').classList.add('hidden');
+            document.getElementById('game-panel').classList.remove('hidden');
+            document.querySelector('header').classList.add('hidden'); 
+
+            generateLadder();
+            resizeCanvas();
+            drawLadder();
+            
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                drawLadder();
+                activePaths = [];
+                isRevealingAll = false;
+            });
+        }
+
+        function resetGame() {
+            document.getElementById('game-panel').classList.add('hidden');
+            document.getElementById('setup-panel').classList.remove('hidden');
+            document.querySelector('header').classList.remove('hidden');
+            
+            activePaths = [];
+            completedPaths = new Set();
+            isRevealingAll = false;
+            
+            // 애니메이션 상태를 완벽히 초기화하여 다음 게임이 멈추지 않도록 수정
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            closeModal('result-modal');
+            closeModal('summary-modal');
+        }
+
+        function generateLadder() {
+            const numRows = 12 + Math.floor(Math.random() * 5); 
+            ladderData = []; 
+
+            for (let r = 0; r < numRows; r++) {
+                let row = new Array(playerCount).fill(0);
+                for (let c = 0; c < playerCount - 1; c++) {
+                    if (Math.random() < 0.45) {
+                        if (c === 0 || row[c-1] !== 1) {
+                            row[c] = 1;      
+                            row[c+1] = -1;   
+                            c++; 
+                        }
+                    }
+                }
+                ladderData.push(row);
+            }
+        }
+
+        // --- Canvas Drawing ---
+
+        let colWidth, rowHeight, startY, endY, startX;
+
+        function resizeCanvas() {
+            const container = document.querySelector('.ladder-container');
+            canvas.width = container.clientWidth * window.devicePixelRatio;
+            canvas.height = Math.max(600, playerCount * 50) * window.devicePixelRatio;
+            canvas.style.width = container.clientWidth + 'px';
+            canvas.style.height = (canvas.height / window.devicePixelRatio) + 'px';
+            
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            
+            const w = container.clientWidth;
+            const h = canvas.height / window.devicePixelRatio;
+            
+            startX = 50;
+            const contentWidth = w - 100;
+            colWidth = contentWidth / (playerCount - 1);
+            
+            startY = 80;
+            endY = h - 80;
+            rowHeight = (endY - startY) / ladderData.length;
+        }
+
+        function drawLadder() {
+            const w = canvas.width / window.devicePixelRatio;
+            const h = canvas.height / window.devicePixelRatio;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // 1. Draw Text (Players & Results)
+            ctx.font = 'bold 16px "Noto Sans KR"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            for (let i = 0; i < playerCount; i++) {
+                const x = startX + i * colWidth;
+                
+                // Top Name
+                ctx.fillStyle = completedPaths.has(i) ? '#555' : colors[i % colors.length];
+                ctx.beginPath();
+                ctx.roundRect(x - 30, 20, 60, 30, 10);
+                ctx.fill();
+
+                ctx.fillStyle = '#fff';
+                ctx.fillText(players[i], x, 35);
+
+                // Bottom Result
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.roundRect(x - 30, endY + 20, 60, 30, 10);
+                ctx.fill();
+                
+                ctx.fillStyle = '#aaa';
+                ctx.fillText(results[i], x, endY + 35);
+            }
+
+            // 2. Draw Vertical Lines
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+
+            for (let i = 0; i < playerCount; i++) {
+                const x = startX + i * colWidth;
+                ctx.beginPath();
+                ctx.moveTo(x, startY);
+                ctx.lineTo(x, endY);
+                ctx.stroke();
+            }
+
+            // 3. Draw Horizontal Lines
+            for (let r = 0; r < ladderData.length; r++) {
+                const y = startY + (r * rowHeight) + (rowHeight / 2);
+                for (let c = 0; c < playerCount - 1; c++) {
+                    if (ladderData[r][c] === 1) { 
+                        const x1 = startX + c * colWidth;
+                        const x2 = startX + (c + 1) * colWidth;
+                        ctx.beginPath();
+                        ctx.moveTo(x1, y);
+                        ctx.lineTo(x2, y);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // 4. Draw Paths
+            activePaths.forEach(p => drawPathProgress(p));
+        }
+
+        function drawPathProgress(p) {
+            if (p.history.length < 2) return;
+
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = p.color;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = p.color;
+
+            ctx.beginPath();
+            ctx.moveTo(p.history[0].x, p.history[0].y);
+            
+            for (let i = 1; i < p.history.length; i++) {
+                ctx.lineTo(p.history[i].x, p.history[i].y);
+            }
+            ctx.lineTo(p.currentX, p.currentY);
+            ctx.stroke();
+
+            ctx.shadowBlur = 0; 
+
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(p.currentX, p.currentY, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // --- Path Calculation ---
+
+        function getFullPath(playerIndex) {
+            let path = [];
+            let col = playerIndex;
+            let x = startX + col * colWidth;
+            let y = startY;
+
+            path.push({x, y});
+
+            for (let r = 0; r < ladderData.length; r++) {
+                let nextY = startY + (r * rowHeight) + (rowHeight / 2);
+                y = nextY;
+                path.push({x, y});
+
+                if (ladderData[r][col] === 1) {
+                    col++;
+                    x = startX + col * colWidth;
+                    path.push({x, y});
+                } else if (ladderData[r][col] === -1) {
+                    col--;
+                    x = startX + col * colWidth;
+                    path.push({x, y});
+                }
+            }
+
+            y = endY;
+            path.push({x, y});
+
+            return {
+                points: path,
+                resultIndex: col 
+            };
+        }
+
+        // --- Animation Logic ---
+
+        function startPathAnimation(playerIndex) {
+            if (activePaths.find(p => p.playerIndex === playerIndex)) return; 
+            // Allow re-run if it was already completed? No, keep standard.
+            // But if user clicks again, maybe show result immediately?
+            if (completedPaths.has(playerIndex)) {
+                // If single click on completed, just show result
+                 const fullPathData = getFullPath(playerIndex);
+                 if(!isRevealingAll) {
+                    showResult(playerIndex, fullPathData.resultIndex);
+                 }
+                return;
+            }
+
+            const fullPathData = getFullPath(playerIndex);
+            
+            activePaths.push({
+                playerIndex: playerIndex,
+                color: colors[playerIndex % colors.length],
+                points: fullPathData.points,
+                segmentIndex: 0,
+                progress: 0,
+                history: [fullPathData.points[0]], 
+                currentX: fullPathData.points[0].x,
+                currentY: fullPathData.points[0].y,
+                finalResultIndex: fullPathData.resultIndex
+            });
+
+            if (!animationId) {
+                animate();
+            }
+        }
+
+        function toggleSpeed() {
+            speedMultiplier = (speedMultiplier === 1) ? 3 : 1; 
+            const btn = document.getElementById('speed-btn');
+            if (speedMultiplier > 1) {
+                btn.innerHTML = `<i class="fas fa-forward mr-1"></i> 정상속도`;
+                btn.classList.replace('bg-blue-600', 'bg-red-600');
+                btn.classList.replace('hover:bg-blue-500', 'hover:bg-red-500');
+            } else {
+                btn.innerHTML = `<i class="fas fa-bolt mr-1"></i> 2배속`;
+                btn.classList.replace('bg-red-600', 'bg-blue-600');
+                btn.classList.replace('hover:bg-red-500', 'hover:bg-blue-500');
+            }
+        }
+
+        function revealAll() {
+            if (isRevealingAll) return;
+            isRevealingAll = true;
+            
+            // If everyone is already done, show summary immediately
+            if (completedPaths.size === playerCount) {
+                showSummary();
+                isRevealingAll = false;
+                return;
+            }
+
+            // 타이머 버그 방지를 위해 지연 없이 모든 참가자 동시에 출발
+            for (let i = 0; i < playerCount; i++) {
+                if (!completedPaths.has(i)) {
+                    startPathAnimation(i);
+                }
+            }
+        }
+
+        function animate() {
+            if (activePaths.length === 0) {
+                animationId = null;
+                drawLadder();
+                
+                // --- Fix: Show summary when all animations finish in 'Reveal All' mode ---
+                if (isRevealingAll && completedPaths.size === playerCount) {
+                    showSummary();
+                    isRevealingAll = false; 
+                }
+                return;
+            }
+
+            const baseSpeed = 4 * window.devicePixelRatio; 
+            const speed = baseSpeed * speedMultiplier;
+
+            for (let i = activePaths.length - 1; i >= 0; i--) {
+                let p = activePaths[i];
+                const startPt = p.points[p.segmentIndex];
+                const endPt = p.points[p.segmentIndex + 1];
+
+                const dx = endPt.x - startPt.x;
+                const dy = endPt.y - startPt.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                p.progress += speed;
+
+                if (p.progress >= dist) {
+                    p.history.push(endPt);
+                    p.currentX = endPt.x;
+                    p.currentY = endPt.y;
+                    p.progress = 0;
+                    p.segmentIndex++;
+
+                    if (p.segmentIndex >= p.points.length - 1) {
+                        activePaths.splice(i, 1);
+                        completedPaths.add(p.playerIndex);
+                        
+                        if (!isRevealingAll) {
+                            showResult(p.playerIndex, p.finalResultIndex);
+                        }
+                    }
+                } else {
+                    const t = p.progress / dist;
+                    p.currentX = startPt.x + dx * t;
+                    p.currentY = startPt.y + dy * t;
+                }
+            }
+
+            drawLadder();
+            animationId = requestAnimationFrame(animate);
+        }
+
+        // --- Interaction ---
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            // Click Top (Players)
+            if (clickY < 80) { 
+                for (let i = 0; i < playerCount; i++) {
+                    const cx = startX + i * colWidth;
+                    if (Math.abs(clickX - cx) < 40) {
+                        startPathAnimation(i);
+                        break;
+                    }
+                }
+            }
+        });
+
+        // --- Result Modal ---
+
+        function showResult(pIdx, rIdx) {
+            const modal = document.getElementById('result-modal');
+            const mPlayer = document.getElementById('modal-player');
+            const mResult = document.getElementById('modal-result');
+
+            mPlayer.innerText = players[pIdx];
+            mResult.innerText = results[rIdx];
+
+            modal.classList.remove('hidden-modal');
+            modal.classList.add('visible-modal');
+
+            createConfetti('confetti-container');
+        }
+
+        function showSummary() {
+            const modal = document.getElementById('summary-modal');
+            const list = document.getElementById('summary-list');
+            list.innerHTML = '';
+
+            for (let i = 0; i < playerCount; i++) {
+                const finalIdx = getFullPath(i).resultIndex;
+                const pName = players[i];
+                const rName = results[finalIdx];
+                
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-gray-700';
+                tr.innerHTML = `
+                    <td class="p-3 text-lg font-bold text-cyan-400">${pName}</td>
+                    <td class="p-3 text-lg font-bold text-yellow-400 text-right">${rName}</td>
+                `;
+                list.appendChild(tr);
+            }
+
+            modal.classList.remove('hidden-modal');
+            modal.classList.add('visible-modal');
+            createConfetti('confetti-container-summary');
+        }
+
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.remove('visible-modal');
+            modal.classList.add('hidden-modal');
+            
+            // Clear confetti if needed, but keeping it is fine too
+        }
+
+        function createConfetti(containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            const colors = ['#ff0', '#f00', '#0f0', '#00f', '#f0f', '#0ff'];
+            
+            for(let i=0; i<40; i++) {
+                const conf = document.createElement('div');
+                conf.className = 'confetti';
+                conf.style.left = Math.random() * 100 + '%';
+                conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                conf.style.animationDuration = (Math.random() * 2 + 1) + 's';
+                conf.style.animationDelay = (Math.random() * 1) + 's';
+                container.appendChild(conf);
+            }
+        }
+
+        initSetup();
+
+    </script>
+</body>
+</html>

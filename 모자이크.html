@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>모자이크</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: #f4f5f7;
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        header {
+            background-color: #ffffff;
+            padding: 15px 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        .header-buttons button {
+            padding: 8px 16px;
+            margin-left: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .btn-open {
+            background-color: #ecf0f1;
+            color: #2c3e50;
+            border: 1px solid #bdc3c7;
+        }
+
+            .btn-open:hover {
+                background-color: #e2e6e8;
+            }
+
+        .btn-batch {
+            background-color: #3498db;
+            color: white;
+        }
+
+            .btn-batch:hover {
+                background-color: #2980b9;
+            }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 250px;
+            background-color: #fff;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-bottom: 1px solid #ddd;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            list-style: none;
+            padding: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            font-size: 13px;
+            border-radius: 4px;
+        }
+
+            .file-item:hover {
+                background-color: #f0f8ff;
+            }
+
+            .file-item.active {
+                background-color: #e0f0ff;
+                border-left: 3px solid #3498db;
+                font-weight: bold;
+            }
+
+            .file-item input[type="checkbox"] {
+                margin-right: 10px;
+                cursor: pointer;
+            }
+
+        .file-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            pointer-events: none;
+        }
+
+        .file-status {
+            font-size: 12px;
+            margin-left: 5px;
+        }
+
+        .viewer-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #e9ecef;
+        }
+
+        .toolbar {
+            padding: 10px 20px;
+            background-color: #fff;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            font-size: 14px;
+            flex-wrap: wrap;
+        }
+
+            .toolbar label {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                cursor: pointer;
+            }
+
+        .btn-tool {
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+            .btn-tool:hover {
+                background-color: #f0f0f0;
+            }
+
+        .btn-ai {
+            background-color: #9b59b6;
+            color: white;
+            border: none;
+        }
+
+            .btn-ai:hover {
+                background-color: #8e44ad;
+            }
+
+        .image-container {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+        }
+
+        .image-wrapper {
+            position: relative;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            background-color: #fff;
+            display: inline-block;
+            line-height: 0;
+        }
+
+        #main-image {
+            max-width: 100%;
+            max-height: calc(100vh - 150px);
+            display: block;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        #draw-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        /* 타원형 모자이크 영역 (기본 형태) */
+        .mosaic-box {
+            position: absolute;
+            border-radius: 50%;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+
+        /* [추가] 라디오 버튼 상태에 따른 실시간 미리보기 효과 */
+        #draw-overlay.type-blur .mosaic-box {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        #draw-overlay.type-pixel .mosaic-box {
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            background-image: linear-gradient(to right, rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.4) 1px, transparent 1px);
+            background-size: 15px 15px;
+            background-color: rgba(0,0,0,0.05);
+        }
+
+        /* 선택된 박스의 사각형 테두리 */
+        .selection-box {
+            position: absolute;
+            border: 2px dashed #3498db;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* 8방향 크기 조절 핸들 */
+        .handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: white;
+            border: 2px solid #3498db;
+            border-radius: 50%;
+            pointer-events: auto;
+            z-index: 11;
+            transform: translate(-50%, -50%);
+        }
+
+        .handle-nw {
+            top: 0;
+            left: 0;
+            cursor: nw-resize;
+        }
+
+        .handle-n {
+            top: 0;
+            left: 50%;
+            cursor: n-resize;
+        }
+
+        .handle-ne {
+            top: 0;
+            left: 100%;
+            cursor: ne-resize;
+        }
+
+        .handle-e {
+            top: 50%;
+            left: 100%;
+            cursor: e-resize;
+        }
+
+        .handle-se {
+            top: 100%;
+            left: 100%;
+            cursor: se-resize;
+        }
+
+        .handle-s {
+            top: 100%;
+            left: 50%;
+            cursor: s-resize;
+        }
+
+        .handle-sw {
+            top: 100%;
+            left: 0;
+            cursor: sw-resize;
+        }
+
+        .handle-w {
+            top: 50%;
+            left: 0;
+            cursor: w-resize;
+        }
+
+        #toast-container {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .toast {
+            background-color: rgba(44, 62, 80, 0.9);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            transform: translateY(20px);
+        }
+
+            .toast.show {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+        /* 로딩 스피너 */
+        #loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.8);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+        /* 선택 시 우측 상단에 나타나는 X (삭제) 버튼 */
+        .delete-btn {
+            position: absolute;
+            top: -35px; /* 크기 조절점을 가리지 않도록 위로 완전히 뺌 */
+            right: -35px; /* 크기 조절점을 가리지 않도록 우측으로 완전히 뺌 */
+            width: 26px;
+            height: 26px;
+            background: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 26px;
+            font-size: 14px;
+            cursor: pointer;
+            z-index: 12;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            pointer-events: auto;
+            transition: transform 0.1s;
+        }
+
+            .delete-btn:hover {
+                background: #c0392b;
+                transform: scale(1.1);
+            }
+
+        /* 크기 조절 (Resize) 핸들 */
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="title">모자이크</h1>
+        <div class="header-buttons">
+            <span id="save-path-display" style="font-size:13px; color:#7f8c8d; margin-right:15px;">저장 경로: 지정 안 됨</span>
+            <button class="btn-open" onclick="setSaveFolder()" id="btn-save-dir">저장 폴더 선택</button>
+            <button class="btn-batch" onclick="processBatch()">일괄 모자이크 처리 및 저장</button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div style="padding:15px 10px; background:#f8f9fa; border-bottom:1px solid #ddd; display:flex; gap:8px;">
+                <button style="flex:1; padding:8px 0; border-radius:6px; font-size:13px; font-weight:bold; background-color:#fff; border:1px solid #dcdde1; color:#2f3640; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.05); transition:all 0.2s;" onclick="addPhotos()" onmouseover="this.style.backgroundColor='#f1f2f6'; this.style.borderColor='#bdc3c7';" onmouseout="this.style.backgroundColor='#fff'; this.style.borderColor='#dcdde1';">📸 사진 추가</button>
+                <button style="flex:1; padding:8px 0; border-radius:6px; font-size:13px; font-weight:bold; background-color:#fff; border:1px solid #dcdde1; color:#2f3640; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.05); transition:all 0.2s;" onclick="openFolder()" onmouseover="this.style.backgroundColor='#f1f2f6'; this.style.borderColor='#bdc3c7';" onmouseout="this.style.backgroundColor='#fff'; this.style.borderColor='#dcdde1';">📁 폴더 추가</button>
+            </div>
+            <div class="sidebar-header">
+                <span>
+                    파일 목록
+                    <button onclick="clearFileList()" style="margin-left:8px; padding:2px 6px; font-size:11px; border:1px solid #ccc; background:#fff; border-radius:4px; cursor:pointer; color:#e74c3c; font-weight:bold;" onmouseover="this.style.background='#fdf2f0'" onmouseout="this.style.background='#fff'">🗑️ 비우기</button>
+                </span>
+                <span><input type="checkbox" id="check-all" checked title="전체 선택"> 전체</span>
+            </div>
+            <div id="file-stats" style="padding: 6px 10px; font-size: 12px; background: #eef2f5; color: #34495e; font-weight: bold; text-align: right; border-bottom: 1px solid #ddd;">
+                전체: 0장 / 작업: 0장
+            </div>
+            <ul class="file-list" id="file-list"></ul>
+        </div>
+
+        <div class="viewer-area">
+            <div class="toolbar">
+                <button class="btn-tool" onclick="prevImage()">◀ 이전</button>
+                <button class="btn-tool" onclick="nextImage()">다음 ▶</button>
+                <span style="border-left: 1px solid #ccc; height: 20px; margin: 0 10px;"></span>
+                <button class="btn-tool btn-ai" onclick="autoDetectFaces()">얼굴 자동 모자이크</button>
+                <span style="border-left: 1px solid #ccc; height: 20px; margin: 0 10px;"></span>
+                <strong>방식:</strong>
+                <label><input type="radio" name="mosaic-type" value="pixel" checked> 픽셀화(Pixelate)</label>
+                <label><input type="radio" name="mosaic-type" value="blur" > 블러(Blur)</label>
+                
+                <span style="border-left: 1px solid #ccc; height: 20px; margin: 0 10px;"></span>
+                <button class="btn-tool" onclick="clearAllBoxes()">🗑️ 화면 지우기</button>
+                <span style="border-left: 1px solid #ccc; height: 20px; margin: 0 10px;"></span>
+                <button class="btn-tool" style="background-color:#f1c40f; border:none;" onclick="previewCurrent()">미리보기</button>
+            </div>
+
+            <div class="image-container" id="img-scroll-container">
+                <div id="empty-placeholder" style="display: flex; flex-direction: column; align-items: center; color: #95a5a6; font-weight: bold;">
+                    <span style="font-size: 50px; margin-bottom: 15px;">🖼️</span>
+                    <p>좌측에서 [사진 추가] 또는 [폴더 추가]를 눌러주세요.</p>
+                </div>
+                <div class="image-wrapper" id="main-image-wrapper" style="display: none;">
+                    <img id="main-image" src="">
+                    <div id="draw-overlay" class="type-pixel"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+    <div id="preview-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10001; justify-content:center; align-items:center; flex-direction:column;" onclick="this.style.display='none'">
+        <div style="background:#fff; padding:10px; border-radius:8px; max-width:90%; max-height:90%; display:flex; flex-direction:column;" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="margin:0;">미리보기 (실제 출력 형태)</h3>
+                <div>
+                    <button onclick="copyPreviewImage()" style="cursor:pointer; border:none; background:#3498db; color:white; padding:5px 15px; border-radius:4px; font-weight:bold; margin-right:5px;">📋 복사</button>
+                    <button onclick="document.getElementById('preview-modal').style.display='none'" style="cursor:pointer; border:none; background:#e74c3c; color:white; padding:5px 15px; border-radius:4px; font-weight:bold;">닫기</button>
+                </div>
+            </div>
+            <img id="preview-img" style="max-width:100%; max-height:calc(90vh - 80px); object-fit:contain; background:#eee;">
+        </div>
+    </div>
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <span id="loading-text">처리 중...</span>
+    </div>
+
+    <script>
+        let currentFiles = [];
+        let activeIndex = -1;
+        let boxesData = {};
+        let isAiLoaded = false;
+        let saveDirectory = null;
+
+        const overlay = document.getElementById('draw-overlay');
+        const img = document.getElementById('main-image');
+
+        let actionType = null;
+        let startX = 0, startY = 0;
+        let currentBox = null;
+        let selectedIndex = -1;
+        let resizeHandleType = '';
+        let initialBoxState = null;
+
+        window.onload = async () => {
+            try {
+                showToast("AI 엔진을 준비 중입니다...", 2000);
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+                isAiLoaded = true;
+            } catch (e) {
+                showToast("AI 엔진을 불러오지 못했습니다.");
+            }
+        };
+
+        function showToast(message, duration = 3000) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => container.removeChild(toast), 300);
+            }, duration);
+        }
+
+        function showLoading(show, text = "처리 중...") {
+            const loader = document.getElementById('loading-overlay');
+            document.getElementById('loading-text').textContent = text;
+            loader.style.display = show ? 'flex' : 'none';
+        }
+        async function addPhotos() {
+            const api = window.pywebview?.api || window.parent?.pywebview?.api;
+            if (!api) return showToast("오프라인 모드입니다.");
+            const response = await api.mosaic_add_files();
+
+            if (response.status === "success") {
+                let addedCount = 0;
+                response.files.forEach(newFile => {
+                    if (!currentFiles.some(f => f.path === newFile.path)) {
+                        currentFiles.push(newFile);
+                        addedCount++;
+                    }
+                });
+                renderFileList();
+                if (addedCount > 0) {
+                    showToast(`${addedCount}개의 사진이 추가되었습니다.`);
+                    if (activeIndex === -1) loadImageToViewer(0);
+                } else {
+                    showToast("이미 목록에 있는 사진입니다.");
+                }
+            }
+        }
+
+        async function setSaveFolder() {
+            const api = window.pywebview?.api || window.parent?.pywebview?.api;
+            if (!api) return;
+
+            const response = await api.mosaic_select_save_folder();
+            if (response.status === "success") {
+                saveDirectory = response.path;
+                document.getElementById('save-path-display').textContent = `저장 경로: ${saveDirectory}`;
+                showToast("저장 폴더가 선택되었습니다.");
+            }
+        }
+        async function openFolder() {
+            const api = window.pywebview?.api || window.parent?.pywebview?.api;
+            if (!api) return showToast("오프라인 모드입니다.");
+            const response = await api.mosaic_open_folder();
+
+            if (response.status === "success") {
+                let addedCount = 0;
+                response.files.forEach(newFile => {
+                    if (!currentFiles.some(f => f.path === newFile.path)) {
+                        currentFiles.push(newFile);
+                        addedCount++;
+                    }
+                });
+                renderFileList();
+                if (addedCount > 0) {
+                    showToast(`폴더 내 ${addedCount}개의 사진이 추가되었습니다.`);
+                    if (activeIndex === -1) loadImageToViewer(0);
+                } else {
+                    showToast("이미 목록에 있는 사진들입니다.");
+                }
+            }
+        }
+
+        function clearFileList() {
+            currentFiles = [];
+            boxesData = {};
+            activeIndex = -1;
+            selectedIndex = -1;
+            document.getElementById('file-list').innerHTML = '';
+
+            // 이미지 숨기고 안내 문구 다시 띄우기
+            document.getElementById('main-image-wrapper').style.display = 'none';
+            document.getElementById('empty-placeholder').style.display = 'flex';
+            document.getElementById('main-image').src = '';
+            overlay.innerHTML = '';
+
+            updateStats();
+            showToast("파일 목록이 비워졌습니다.");
+        }
+
+        function renderFileList() {
+            const listElement = document.getElementById('file-list');
+            listElement.innerHTML = '';
+            currentFiles.forEach((file, index) => {
+                const li = document.createElement('li');
+                li.className = 'file-item';
+                li.id = `file-item-${index}`;
+                li.innerHTML = `
+                                        <input type="checkbox" checked class="file-checkbox" data-index="${index}">
+                                        <span class="file-name" title="${file.name}">${file.name}</span>
+                                        <span class="box-count" id="box-count-${index}" style="font-size:12px; color:#e74c3c; font-weight:bold; margin-right:5px;"></span>
+                                        <span class="file-status" id="status-${index}"></span>
+                                    `;
+                li.addEventListener('click', (e) => {
+                    if (e.target.type !== 'checkbox') loadImageToViewer(index);
+                });
+                listElement.appendChild(li);
+            });
+            updateStats();
+        }
+
+        function updateStats() {
+            if (currentFiles.length === 0) {
+                document.getElementById('file-stats').textContent = `전체: 0장 / 작업: 0장`;
+                return;
+            }
+            let workedCount = 0;
+            currentFiles.forEach((file, index) => {
+                const boxes = boxesData[file.path] || [];
+                const countSpan = document.getElementById(`box-count-${index}`);
+                if (countSpan) {
+                    if (boxes.length > 0) {
+                        countSpan.textContent = `[${boxes.length}개]`;
+                        workedCount++;
+                    } else {
+                        countSpan.textContent = '';
+                    }
+                }
+            });
+            document.getElementById('file-stats').textContent = `전체: ${currentFiles.length}장 / 작업: ${workedCount}장`;
+        }
+
+        function prevImage() {
+            if (currentFiles.length === 0) return showToast("사진이 없습니다.");
+            let newIndex = activeIndex === -1 ? 0 : activeIndex - 1;
+            if (newIndex < 0) newIndex = currentFiles.length - 1;
+            loadImageToViewer(newIndex);
+
+            const item = document.getElementById(`file-item-${newIndex}`);
+            if (item) item.scrollIntoView({ block: "nearest" });
+        }
+
+        function nextImage() {
+            if (currentFiles.length === 0) return showToast("사진이 없습니다.");
+            let newIndex = activeIndex === -1 ? 0 : activeIndex + 1;
+            if (newIndex >= currentFiles.length) newIndex = 0;
+            loadImageToViewer(newIndex);
+
+            const item = document.getElementById(`file-item-${newIndex}`);
+            if (item) item.scrollIntoView({ block: "nearest" });
+        }
+
+        async function loadImageToViewer(index) {
+            const api = window.pywebview?.api || window.parent?.pywebview?.api;
+            if (index < 0 || index >= currentFiles.length) return;
+            activeIndex = index;
+            const file = currentFiles[index];
+
+            document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`file-item-${index}`).classList.add('active');
+
+            if (file.isClipboard) {
+                // 클립보드 이미지는 파이썬 통신 없이 바로 브라우저 메모리에서 띄움
+                document.getElementById('empty-placeholder').style.display = 'none';
+                document.getElementById('main-image-wrapper').style.display = 'inline-block';
+                img.src = file.dataUri;
+                img.onload = () => renderBoxesForCurrentImg();
+            } else {
+                if (!api) return;
+                const response = await api.mosaic_load_image(file.path);
+                if (response.status === "success") {
+                    document.getElementById('empty-placeholder').style.display = 'none';
+                    document.getElementById('main-image-wrapper').style.display = 'inline-block';
+                    img.src = response.data_uri;
+                    img.onload = () => renderBoxesForCurrentImg();
+                }
+            }
+        }
+
+        // --- AI 얼굴 자동 인식 로직 ---
+        async function autoDetectFaces() {
+            if (!isAiLoaded) return showToast("AI 엔진이 아직 로드되지 않았습니다.");
+            if (activeIndex === -1 || !img.src) return showToast("먼저 사진을 선택해주세요.");
+
+            showLoading(true, "얼굴을 분석 중입니다...");
+
+            // AI 구동 전 자연 크기 기준 임시 이미지 생성 (정확도 향상)
+            const tempImg = new Image();
+            tempImg.src = img.src;
+
+            tempImg.onload = async () => {
+                const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.3 });
+                const detections = await faceapi.detectAllFaces(tempImg, options);
+
+                const filePath = currentFiles[activeIndex].path;
+                if (!boxesData[filePath]) boxesData[filePath] = [];
+
+                detections.forEach(det => {
+                    const box = det.box;
+                    // 좌우 여백은 조금, 위쪽(머리)은 많이, 아래쪽(턱)은 적당히 주어 타원형에 맞게 보정
+                    const paddingX = box.width * 0.15;
+                    const paddingTop = box.height * 0.35;    // 머리카락을 덮기 위해 위로 크게 확장
+                    const paddingBottom = box.height * 0.1;  // 턱선
+
+                    boxesData[filePath].push({
+                        x: Math.max(0, (box.x - paddingX) / tempImg.naturalWidth),
+                        y: Math.max(0, (box.y - paddingTop) / tempImg.naturalHeight),
+                        w: Math.min(1, (box.width + paddingX * 2) / tempImg.naturalWidth),
+                        h: Math.min(1, (box.height + paddingTop + paddingBottom) / tempImg.naturalHeight)
+                    });
+                });
+
+                renderBoxesForCurrentImg();
+                showLoading(false);
+                showToast(`${detections.length}명의 얼굴을 찾아 모자이크 영역을 지정했습니다.`);
+            };
+        }
+
+        // 맨땅(오버레이) 클릭 시 새로 그리기 및 선택 해제
+        overlay.addEventListener('mousedown', (e) => {
+            if (activeIndex === -1 || e.button !== 0) return;
+            if (actionType !== 'move' && actionType !== 'resize') {
+                selectedIndex = -1; // 빈 곳 누르면 선택 해제
+                renderBoxesForCurrentImg();
+
+                actionType = 'draw';
+                const rect = overlay.getBoundingClientRect();
+                startX = e.clientX - rect.left;
+                startY = e.clientY - rect.top;
+
+                currentBox = document.createElement('div');
+                currentBox.className = 'selection-box'; // 그릴 때는 사각형으로 보이게
+                currentBox.style.left = startX + 'px';
+                currentBox.style.top = startY + 'px';
+                overlay.appendChild(currentBox);
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!actionType || activeIndex === -1) return;
+            const rect = overlay.getBoundingClientRect();
+            const filePath = currentFiles[activeIndex].path;
+
+            // 1. 새로 그리기 중
+            if (actionType === 'draw' && currentBox) {
+                const currentX = e.clientX - rect.left;
+                const currentY = e.clientY - rect.top;
+                currentBox.style.width = Math.abs(currentX - startX) + 'px';
+                currentBox.style.height = Math.abs(currentY - startY) + 'px';
+                currentBox.style.left = Math.min(currentX, startX) + 'px';
+                currentBox.style.top = Math.min(currentY, startY) + 'px';
+            }
+            // 2. 타원 이동 중
+            else if (actionType === 'move' && selectedIndex !== -1) {
+                const dx = (e.clientX - startX) / overlay.clientWidth;
+                const dy = (e.clientY - startY) / overlay.clientHeight;
+                const box = boxesData[filePath][selectedIndex];
+                box.x = initialBoxState.x + dx;
+                box.y = initialBoxState.y + dy;
+
+                const boxEls = overlay.querySelectorAll('.mosaic-box');
+                const selEl = overlay.querySelector('.selection-box');
+                if (boxEls[selectedIndex]) {
+                    boxEls[selectedIndex].style.left = (box.x * overlay.clientWidth) + 'px';
+                    boxEls[selectedIndex].style.top = (box.y * overlay.clientHeight) + 'px';
+                }
+                if (selEl) {
+                    selEl.style.left = (box.x * overlay.clientWidth) + 'px';
+                    selEl.style.top = (box.y * overlay.clientHeight) + 'px';
+                }
+            }
+            // 3. 8방향 타원 크기 조절 중
+            else if (actionType === 'resize' && selectedIndex !== -1) {
+                const dx = (e.clientX - startX) / overlay.clientWidth;
+                const dy = (e.clientY - startY) / overlay.clientHeight;
+                const box = boxesData[filePath][selectedIndex];
+
+                let newX = initialBoxState.x;
+                let newY = initialBoxState.y;
+                let newW = initialBoxState.w;
+                let newH = initialBoxState.h;
+
+                if (resizeHandleType.includes('w')) { newX += dx; newW -= dx; }
+                if (resizeHandleType.includes('e')) { newW += dx; }
+                if (resizeHandleType.includes('n')) { newY += dy; newH -= dy; }
+                if (resizeHandleType.includes('s')) { newH += dy; }
+
+                if (newW > 0.01) { box.x = newX; box.w = newW; }
+                if (newH > 0.01) { box.y = newY; box.h = newH; }
+
+                const boxEls = overlay.querySelectorAll('.mosaic-box');
+                const selEl = overlay.querySelector('.selection-box');
+                if (boxEls[selectedIndex] && selEl) {
+                    boxEls[selectedIndex].style.left = selEl.style.left = (box.x * overlay.clientWidth) + 'px';
+                    boxEls[selectedIndex].style.top = selEl.style.top = (box.y * overlay.clientHeight) + 'px';
+                    boxEls[selectedIndex].style.width = selEl.style.width = (box.w * overlay.clientWidth) + 'px';
+                    boxEls[selectedIndex].style.height = selEl.style.height = (box.h * overlay.clientHeight) + 'px';
+                }
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (!actionType) return;
+            if (actionType === 'draw' && currentBox) {
+                const w = parseFloat(currentBox.style.width || 0);
+                const h = parseFloat(currentBox.style.height || 0);
+                if (w > 10 && h > 10) {
+                    const filePath = currentFiles[activeIndex].path;
+                    if (!boxesData[filePath]) boxesData[filePath] = [];
+                    boxesData[filePath].push({
+                        x: parseFloat(currentBox.style.left) / overlay.clientWidth,
+                        y: parseFloat(currentBox.style.top) / overlay.clientHeight,
+                        w: w / overlay.clientWidth,
+                        h: h / overlay.clientHeight
+                    });
+                    selectedIndex = boxesData[filePath].length - 1; // 방금 그린 것 자동 선택
+                }
+                currentBox.remove();
+                currentBox = null;
+            }
+            actionType = null;
+            renderBoxesForCurrentImg();
+        });
+
+        // 키보드 Del 키 입력 시 선택된 모자이크 삭제
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Delete' && selectedIndex !== -1 && activeIndex !== -1) {
+                const filePath = currentFiles[activeIndex].path;
+                boxesData[filePath].splice(selectedIndex, 1);
+                selectedIndex = -1; // 선택 해제
+                renderBoxesForCurrentImg();
+                showToast("삭제되었습니다.", 1000);
+            }
+        });
+
+        function renderBoxesForCurrentImg() {
+            if (actionType === 'move' || actionType === 'resize') return;
+            overlay.innerHTML = '';
+            if (activeIndex === -1) return;
+            const filePath = currentFiles[activeIndex].path;
+            const boxes = boxesData[filePath] || [];
+
+            // 1. 모든 타원형 그리기
+            boxes.forEach((box, idx) => {
+                const boxEl = document.createElement('div');
+                boxEl.className = 'mosaic-box';
+                boxEl.style.left = (box.x * overlay.clientWidth) + 'px';
+                boxEl.style.top = (box.y * overlay.clientHeight) + 'px';
+                boxEl.style.width = (box.w * overlay.clientWidth) + 'px';
+                boxEl.style.height = (box.h * overlay.clientHeight) + 'px';
+
+                // 타원을 클릭하면 선택됨 (또는 이동 시작)
+                boxEl.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    selectedIndex = idx;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    initialBoxState = { ...box };
+
+                    // [버그 수정] actionType을 설정하기 전에 그려야 현재 크기의 선택 박스가 따라붙습니다!
+                    renderBoxesForCurrentImg();
+                    actionType = 'move';
+                });
+                overlay.appendChild(boxEl);
+            });
+
+            // 2. 선택된 항목이 있다면 사각 껍데기 및 8개 핸들 그리기
+            if (selectedIndex !== -1 && boxes[selectedIndex]) {
+                const selBox = boxes[selectedIndex];
+                const selEl = document.createElement('div');
+                selEl.className = 'selection-box';
+                selEl.style.left = (selBox.x * overlay.clientWidth) + 'px';
+                selEl.style.top = (selBox.y * overlay.clientHeight) + 'px';
+                selEl.style.width = (selBox.w * overlay.clientWidth) + 'px';
+                selEl.style.height = (selBox.h * overlay.clientHeight) + 'px';
+
+                const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+                handles.forEach(h => {
+                    const handleEl = document.createElement('div');
+                    handleEl.className = `handle handle-${h}`;
+                    handleEl.addEventListener('mousedown', (e) => {
+                        e.stopPropagation();
+                        resizeHandleType = h;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        initialBoxState = { ...selBox };
+
+                        // 크기 조절 시에도 동일하게 적용
+                        renderBoxesForCurrentImg();
+                        actionType = 'resize';
+                    });
+                    selEl.appendChild(handleEl);
+                });
+
+                // 선택된 박스 우측 상단에 ❌ (삭제) 버튼 추가
+                const delBtn = document.createElement('div');
+                delBtn.className = 'delete-btn';
+                delBtn.innerHTML = '✖';
+                delBtn.title = "삭제 (Del 키)";
+                delBtn.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    boxesData[filePath].splice(selectedIndex, 1);
+                    selectedIndex = -1; // 선택 해제
+                    renderBoxesForCurrentImg();
+                    showToast("삭제되었습니다.", 1000);
+                });
+                selEl.appendChild(delBtn);
+
+                overlay.appendChild(selEl);
+            }
+
+            updateStats();
+        }
+
+        function clearAllBoxes() {
+            if (activeIndex !== -1) {
+                boxesData[currentFiles[activeIndex].path] = [];
+                renderBoxesForCurrentImg();
+            }
+        }
+
+        document.getElementById('check-all').addEventListener('change', function (e) {
+            document.querySelectorAll('.file-checkbox').forEach(cb => cb.checked = e.target.checked);
+        });
+        window.addEventListener('resize', () => { if (activeIndex !== -1) renderBoxesForCurrentImg(); });
+
+        // 출력 형태(블러/픽셀화) 라디오 버튼을 누를 때마다 화면 표시 실시간 업데이트
+        document.querySelectorAll('input[name="mosaic-type"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const drawOverlay = document.getElementById('draw-overlay');
+                if (e.target.value === 'pixel') {
+                    drawOverlay.classList.add('type-pixel');
+                    drawOverlay.classList.remove('type-blur');
+                } else {
+                    drawOverlay.classList.add('type-blur');
+                    drawOverlay.classList.remove('type-pixel');
+                }
+            });
+        });
+
+        // --- 최종 캔버스 렌더링 및 파이썬 일괄 저장 ---
+        async function processBatch() {
+            // 1. 추가된 사진이 있는지 제일 먼저 검사
+            if (currentFiles.length === 0) {
+                return showToast("작업할 사진을 먼저 추가해주세요.");
+            }
+
+            const checkboxes = document.querySelectorAll('.file-checkbox:checked');
+            if (checkboxes.length === 0) {
+                return showToast("목록에서 선택된 사진이 없습니다.");
+            }
+
+            let totalToProcess = 0;
+            let excludedCount = 0;
+
+            // 2. 모자이크 처리 영역 검사 및 분류
+            checkboxes.forEach(cb => {
+                const path = currentFiles[cb.getAttribute('data-index')].path;
+                if (boxesData[path] && boxesData[path].length > 0) {
+                    totalToProcess++;
+                } else {
+                    excludedCount++;
+                }
+            });
+
+            if (totalToProcess === 0) {
+                return showToast("모자이크가 지정된 사진이 한 장도 없습니다. 영역을 먼저 그려주세요.");
+            }
+
+            // 3. 모자이크 처리가 안 된 사진 제외 알림
+            if (excludedCount > 0) {
+                showToast(`모자이크 영역이 없는 ${excludedCount}장의 사진은 처리에서 제외됩니다.`, 4000);
+            }
+
+            // 4. 저장 폴더를 마지막에 검사
+            if (!saveDirectory) {
+                showToast("결과물을 저장할 폴더를 선택해주세요.");
+                await setSaveFolder();
+                // 사용자가 폴더 선택 창에서 취소를 누르면 작업 중단
+                if (!saveDirectory) return showToast("저장 폴더 선택이 취소되었습니다.");
+            }
+
+            const mosaicType = document.querySelector('input[name="mosaic-type"]:checked').value;
+            let successCount = 0;
+
+            showLoading(true, "일괄 처리를 시작합니다...");
+
+            for (let cb of checkboxes) {
+                const index = cb.getAttribute('data-index');
+                const file = currentFiles[index];
+                const boxes = boxesData[file.path] || [];
+                const statusSpan = document.getElementById(`status-${index}`);
+
+                if (boxes.length === 0) continue;
+
+                try {
+                    statusSpan.textContent = "⏳";
+                    const api = window.pywebview?.api || window.parent?.pywebview?.api;
+
+                    // 1. 원본 이미지 불러오기 (클립보드 vs 로컬 파일)
+                    let baseDataUri = "";
+                    if (file.isClipboard) {
+                        baseDataUri = file.dataUri;
+                    } else {
+                        const res = await api.mosaic_load_image(file.path);
+                        if (res.status !== "success") throw new Error("Load failed");
+                        baseDataUri = res.data_uri;
+                    }
+
+                    // 2. 캔버스에 그리기
+                    const finalDataUri = await renderMosaicOnCanvas(baseDataUri, boxes, mosaicType);
+
+                    // 3. 파이썬에 저장 요청
+                    const saveRes = await api.mosaic_save_image({
+                        file_path: file.path,
+                        b64_data: finalDataUri,
+                        save_dir: saveDirectory
+                    });
+
+                    if (saveRes.status === "success") {
+                        successCount++;
+                        statusSpan.textContent = "✅";
+                    } else {
+                        throw new Error("Save failed");
+                    }
+                } catch (e) {
+                    statusSpan.textContent = "❌";
+                }
+            }
+
+            showLoading(false);
+            showToast(`작업 완료! ${successCount}개의 이미지가 '모자이크_완료' 폴더에 저장되었습니다.`, 5000);
+        }
+
+        // 캔버스 픽셀 조작 함수
+        function renderMosaicOnCanvas(dataUri, boxes, type) {
+            return new Promise((resolve) => {
+                const tImg = new Image();
+                tImg.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = tImg.naturalWidth;
+                    canvas.height = tImg.naturalHeight;
+                    const ctx = canvas.getContext('2d');
+
+                    // 원본 그리기
+                    ctx.drawImage(tImg, 0, 0);
+
+                    
+                    // 각 박스마다 모자이크 효과 덮어씌우기
+                    boxes.forEach(box => {
+                        const x = Math.floor(box.x * canvas.width);
+                        const y = Math.floor(box.y * canvas.height);
+                        const w = Math.floor(box.w * canvas.width);
+                        const h = Math.floor(box.h * canvas.height);
+
+                        // 타원형 중심점과 반지름 계산
+                        const cx = x + w / 2;
+                        const cy = y + h / 2;
+                        const rx = w / 2;
+                        const ry = h / 2;
+
+                        ctx.save(); // 현재 캔버스 상태 저장
+                        ctx.beginPath();
+                        ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+                        ctx.clip(); // 지정한 타원형 밖으로는 그림이 안 그려지게 가위질
+
+                        if (type === 'blur') {
+                            ctx.filter = `blur(${Math.max(10, Math.floor(w * 0.1))}px)`;
+                            ctx.drawImage(canvas, x, y, w, h, x, y, w, h);
+                            ctx.filter = 'none';
+                        } else {
+                            // 픽셀화 (작게 줄였다가 다시 키우는 꼼수 사용)
+                            const pixelSize = 0.05; // 5% 크기로 축소
+                            const tempC = document.createElement('canvas');
+                            tempC.width = Math.max(1, w * pixelSize);
+                            tempC.height = Math.max(1, h * pixelSize);
+                            const tCtx = tempC.getContext('2d');
+                            tCtx.drawImage(canvas, x, y, w, h, 0, 0, tempC.width, tempC.height);
+
+                            ctx.imageSmoothingEnabled = false; // 안티앨리어싱 끄기 (픽셀 살리기)
+                            ctx.drawImage(tempC, 0, 0, tempC.width, tempC.height, x, y, w, h);
+                            ctx.imageSmoothingEnabled = true;
+                        }
+                        ctx.restore(); // 가위질(clip) 해제 (다음 얼굴을 위해)
+                    });
+
+
+                    // 원본 파일 확장자 유지 및 압축률 1.0(원본 품질 100% 보존)으로 내보내기
+                    const ext = dataUri.substring(dataUri.indexOf('/') + 1, dataUri.indexOf(';'));
+                    const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+                    resolve(canvas.toDataURL(mimeType, 1.0));
+                };
+                tImg.src = dataUri;
+            });
+        }
+
+        // --- 현재 사진 미리보기 (실제 렌더링 결과 확인) ---
+        async function previewCurrent() {
+            if (activeIndex === -1) return showToast("사진을 먼저 선택해주세요.");
+
+            showLoading(true, "미리보기 생성 중...");
+            const file = currentFiles[activeIndex];
+            const boxes = boxesData[file.path] || [];
+            const mosaicType = document.querySelector('input[name="mosaic-type"]:checked').value;
+
+            try {
+                let baseDataUri = "";
+                if (file.isClipboard) {
+                    baseDataUri = file.dataUri;
+                } else {
+                    const api = window.pywebview?.api || window.parent?.pywebview?.api;
+                    const res = await api.mosaic_load_image(file.path);
+                    baseDataUri = res.data_uri;
+                }
+
+                // 실제 처리와 동일한 로직으로 캔버스 생성
+                const previewDataUri = await renderMosaicOnCanvas(baseDataUri, boxes, mosaicType);
+
+                document.getElementById('preview-img').src = previewDataUri;
+                document.getElementById('preview-modal').style.display = 'flex';
+            } catch (e) {
+                showToast("미리보기 생성 실패");
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // --- [추가] 드래그 앤 드롭 및 클립보드 붙여넣기 기능 ---
+
+        // 1. 브라우저 자체 드래그 앤 드롭(HTML5) 처리로 변경 (iframe 위에서도 완벽 동작)
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (e.dataTransfer && e.dataTransfer.files) {
+                let addedCount = 0;
+                const files = Array.from(e.dataTransfer.files);
+
+                files.forEach(file => {
+                    if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            const dataUri = event.target.result;
+                            const timestamp = new Date().getTime();
+                            const fakeName = `드래그_${timestamp}_${file.name}`;
+
+                            // 중복 추가 방지
+                            if (!currentFiles.some(f => f.name === file.name)) {
+                                currentFiles.push({
+                                    name: file.name,
+                                    path: fakeName,
+                                    isClipboard: true, // 로컬 파일을 브라우저에서 직접 읽었으므로 동일하게 취급
+                                    dataUri: dataUri
+                                });
+                                addedCount++;
+
+                                // 마지막 파일 로드 완료 후 화면 갱신
+                                renderFileList();
+                                loadImageToViewer(currentFiles.length - 1);
+                                showToast(`드래그로 ${addedCount}장의 사진이 추가되었습니다.`);
+                            }
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }
+        });
+
+        // 3. 클립보드(Ctrl+V) 이미지 붙여넣기 감지
+        window.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            let hasImage = false;
+
+            for (let index in items) {
+                const item = items[index];
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    hasImage = true;
+                    const blob = item.getAsFile();
+                    const reader = new FileReader();
+
+                    reader.onload = (event) => {
+                        const dataUri = event.target.result;
+                        let ext = item.type.split('/')[1] || 'png';
+                        if (ext === 'jpeg') ext = 'jpg';
+
+                        // 파이썬이 저장할 때 쓸 가상의 파일명 생성
+                        const timestamp = new Date().getTime();
+                        const fakeName = `클립보드_${timestamp}.${ext}`;
+
+                        currentFiles.push({
+                            name: fakeName,
+                            path: fakeName,       // 저장 시 파이썬이 이 이름을 추출해서 실제 파일로 만들어줌
+                            isClipboard: true,    // 클립보드 이미지 식별자
+                            dataUri: dataUri      // 브라우저에 임시로 들고 있는 이미지 데이터
+                        });
+
+                        renderFileList();
+                        showToast("클립보드 이미지가 추가되었습니다.");
+                        loadImageToViewer(currentFiles.length - 1);
+                    };
+                    reader.readAsDataURL(blob);
+                }
+            }
+            // 텍스트를 붙여넣는 등 이미지가 없을 경우 무시
+        });
+        // --- 미리보기 모자이크 이미지를 클립보드에 복사 ---
+        async function copyPreviewImage() {
+            const imgEl = document.getElementById('preview-img');
+            if (!imgEl.src) return;
+
+            try {
+                // Base64 이미지를 Blob 데이터로 변환 (클립보드 API 요구사항)
+                const res = await fetch(imgEl.src);
+                const blob = await res.blob();
+
+                // 클립보드에 쓰기 (Edge/Chrome WebView2 완벽 지원)
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        [blob.type]: blob
+                    })
+                ]);
+                showToast("모자이크된 이미지가 클립보드에 복사되었습니다!", 3000);
+            } catch (err) {
+                console.error(err);
+                showToast("복사에 실패했습니다. 권한을 확인해주세요.");
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>다중 문서 PDF 취합</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            user-select: none;
+            background-color: white;
+        }
+
+        .drag-handle {
+            cursor: grab;
+        }
+
+            .drag-handle:active {
+                cursor: grabbing;
+            }
+
+        .ghost {
+            opacity: 0.5;
+            background: #e2e8f0;
+            border: 1px dashed #3b82f6;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+    </style>
+</head>
+<body class="h-full flex flex-col overflow-hidden relative">
+
+    <main class="flex-1 min-h-0 flex flex-col p-4 gap-3 relative z-10">
+
+        <!-- [1] 제목 영역 -->
+        <div class="shrink-0 px-1 border-b border-gray-100 pb-2">
+            <h2 class="text-2xl font-bold text-gray-800 tracking-tight flex items-center gap-2">
+                <span class="text-red-500">📑</span> 다중 문서 PDF 취합
+            </h2>
+            <p class="text-sm text-gray-500 mt-1 pl-1">한글(HWP), PDF, 이미지 파일들을 한 번에 모아 하나의 PDF로 병합합니다.</p>
+        </div>
+
+        <!-- [2] 컨트롤 툴바 -->
+        <div class="bg-white p-2 rounded-lg border border-gray-200 shadow-sm flex flex-wrap gap-2 justify-between items-center shrink-0">
+            <div class="flex gap-2 items-center">
+                <button onclick="addFiles()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded shadow-sm flex items-center gap-1 transition font-bold text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    파일 추가
+                </button>
+
+                <div class="h-6 w-px bg-gray-300 mx-1"></div>
+
+                <div class="flex border border-gray-300 rounded overflow-hidden">
+                    <button onclick="sortFiles('asc')" class="bg-white hover:bg-gray-50 text-gray-700 px-2 py-1.5 text-xs border-r border-gray-300 flex items-center gap-1" title="이름 오름차순">이름 ▲</button>
+                    <button onclick="sortFiles('desc')" class="bg-white hover:bg-gray-50 text-gray-700 px-2 py-1.5 text-xs flex items-center gap-1" title="이름 내림차순">이름 ▼</button>
+                </div>
+
+                <button onclick="clearList()" class="bg-gray-400 hover:bg-gray-500 text-white px-2 py-1.5 rounded shadow-sm text-xs transition">초기화</button>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="text-xs text-gray-500 text-right hidden sm:block">
+                    <div class="font-bold text-red-600"><span id="fileCount">0</span>개</div>
+                    <div class="text-[10px] text-gray-400">파일 선택됨</div>
+                </div>
+
+                <button onclick="openHelpModal()" class="bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-2 rounded-lg border border-gray-300 shadow-sm transition flex items-center gap-1.5 font-bold text-sm">
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    도움말
+                </button>
+
+                <button onclick="initiateMerge()" id="mergeBtn" class="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg shadow-md transform active:scale-95 transition flex items-center gap-2 font-bold text-sm">
+                    <span>PDF로 병합하기</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- [3] 파일 리스트 영역 -->
+        <div class="bg-white flex-1 min-h-0 rounded-lg border border-gray-200 shadow-sm flex flex-col relative overflow-hidden">
+            <div class="bg-gray-100 p-2 border-b border-gray-200 grid grid-cols-12 text-xs font-bold text-gray-500 uppercase tracking-wide shrink-0 z-10">
+                <div class="col-span-1 text-center">No.</div>
+                <div class="col-span-10 pl-2">파일 정보 (유형 / 파일명)</div>
+                <div class="col-span-1 text-center">삭제</div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-1 flex flex-col relative" id="listContainer">
+                <ul id="fileList" class="space-y-1 w-full hidden"></ul>
+
+                <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-white z-0">
+                    <div class="w-16 h-16 mb-3 rounded-full bg-gray-50 flex items-center justify-center border-2 border-dashed border-gray-200">
+                        <svg class="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    </div>
+                    <p class="text-sm font-bold text-gray-500">파일 추가 버튼을 눌러 문서를 추가해주세요</p>
+                    <p class="text-xs text-gray-400 mt-1">지원 형식: HWP, HWPX, PDF, JPG, PNG 등</p>
+                </div>
+            </div>
+        </div>
+    </main>
+    <div id="dragOverlay" class="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm bg-red-500 bg-opacity-10 border-4 border-dashed border-red-500 m-4 rounded-2xl pointer-events-none hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-xl text-center">
+            <div class="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">여기에 파일들을 놓으세요</h2>
+            <p class="text-gray-500">HWP, PDF, 이미지 파일을 한 번에 추가할 수 있습니다.</p>
+        </div>
+    </div>
+    <!-- 커스텀 모달 (알림창 대체, 기본 confirm/alert 사용 안 함) -->
+    <div id="customModal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-40 transition-opacity" onclick="closeModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="bg-white rounded-lg shadow-xl w-80 transform transition-all pointer-events-auto p-5 text-center">
+                <div id="modalIcon" class="mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-blue-100 mb-3"></div>
+                <h3 id="modalTitle" class="text-base leading-6 font-bold text-gray-900 mb-1">알림</h3>
+                <div class="mt-1"><p id="modalMessage" class="text-sm text-gray-500 break-words whitespace-pre-wrap">내용</p></div>
+                <div class="mt-4">
+                    <button onclick="closeModal()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none transition">확인</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 도움말 모달 -->
+    <div id="helpModal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-40 transition-opacity" onclick="closeHelpModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-full flex flex-col transform transition-all pointer-events-auto overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        다중 문서 PDF 병합 안내
+                    </h3>
+                    <button onclick="closeHelpModal()" class="text-gray-400 hover:text-gray-600 hover:bg-gray-200 p-1 rounded-full focus:outline-none transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="p-5 overflow-y-auto text-sm text-gray-600 space-y-4">
+                    <div>
+                        <h4 class="font-bold text-gray-800 mb-1 flex items-center gap-1.5"><span class="bg-gray-200 text-gray-700 w-5 h-5 rounded-full inline-flex items-center justify-center text-xs">1</span> 다양한 파일 혼합</h4>
+                        <p class="pl-6 leading-relaxed">한글 문서(HWP/HWPX), 기존 PDF 파일, 스캔 및 사진 이미지(JPG/PNG)를 자유롭게 섞어서 추가할 수 있습니다.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-800 mb-1 flex items-center gap-1.5"><span class="bg-gray-200 text-gray-700 w-5 h-5 rounded-full inline-flex items-center justify-center text-xs">2</span> 순서 정렬</h4>
+                        <p class="pl-6 leading-relaxed">목록에서 마우스를 클릭해 <strong>위아래로 드래그</strong>하면 취합될 PDF의 페이지 순서를 정할 수 있습니다.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-800 mb-1 flex items-center gap-1.5"><span class="bg-gray-200 text-gray-700 w-5 h-5 rounded-full inline-flex items-center justify-center text-xs">3</span> 최종 병합</h4>
+                        <p class="pl-6 leading-relaxed"><span class="bg-red-600 text-white px-1.5 py-0.5 rounded font-semibold text-xs">PDF로 병합하기</span> 버튼을 누르고 저장 위치를 지정하면 자동으로 하나의 문서가 생성됩니다.</p>
+                    </div>
+
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-blue-800 text-xs mt-2 shadow-sm">
+                        <strong class="flex items-center gap-1.5 mb-2 text-blue-900 text-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            참고사항
+                        </strong>
+                        <ul class="list-disc pl-5 space-y-1">
+                            <li>한글 파일(HWP)이 포함된 경우, 백그라운드에서 한글 프로그램이 실행되며 약간의 변환 시간이 소요될 수 있습니다.</li>
+                            <li>보안 경고창(접근 허용)이 나타나면 반드시 <strong>모두 허용(N)</strong>을 클릭해 주세요.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 shrink-0">
+                    <button onclick="closeHelpModal()" class="w-full justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-bold text-gray-700 hover:bg-gray-50 focus:outline-none transition active:scale-[0.98]">확인 및 닫기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로딩바 -->
+    <div id="loading" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm mx-4">
+            <div class="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-t-red-500 mx-auto mb-4"></div>
+            <h2 class="text-lg font-bold text-gray-800 mb-1">문서 변환 및 병합 중...</h2>
+            <p class="text-xs text-gray-500 mb-4">파일 용량에 따라 다소 시간이 걸릴 수 있습니다.</p>
+
+            <div class="bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-left shadow-sm">
+                <p class="text-xs text-yellow-800 font-bold mb-1 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    필수 확인 사항
+                </p>
+                <p class="text-[11px] text-yellow-700 leading-relaxed">
+                    작업 중 화면에 한글 프로그램의 <strong>'접근 허용'</strong> 경고창이 나타날 수 있습니다.<br>
+                    반드시 <strong class="bg-white border border-gray-300 px-1 py-0.5 rounded shadow-sm text-gray-800 mx-0.5">모두 허용(N)</strong> 버튼을 눌러주셔야 병합이 정상적으로 진행됩니다.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="browserFileInput" multiple class="hidden" accept=".hwp,.hwpx,.pdf,.jpg,.jpeg,.png,.gif">
+
+    <script>
+        function getApi() {
+            if (window.pywebview) return window.pywebview;
+            if (window.parent && window.parent.pywebview) return window.parent.pywebview;
+            return null;
+        }
+
+        const fileListEl = document.getElementById('fileList');
+        const emptyState = document.getElementById('empty-state');
+        const fileCountEl = document.getElementById('fileCount');
+        const mergeBtn = document.getElementById('mergeBtn');
+        const loadingEl = document.getElementById('loading');
+        const browserFileInput = document.getElementById('browserFileInput');
+
+        const customModal = document.getElementById('customModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        const modalIcon = document.getElementById('modalIcon');
+
+        let files = [];
+
+        new Sortable(fileListEl, {
+            animation: 150,
+            ghostClass: 'ghost',
+            handle: '.drag-handle',
+            onEnd: function () { updateFileArrayFromDOM(); renderList(); }
+        });
+
+        function getFileName(path) { return path.split(/[\\/]/).pop(); }
+        function getDirName(path) {
+            const name = getFileName(path);
+            let dir = path.slice(0, -name.length);
+            if (dir.endsWith('\\') || dir.endsWith('/')) dir = dir.slice(0, -1);
+            return dir;
+        }
+
+        // 확장자에 따른 직관적인 아이콘 분류
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            if (['hwp', 'hwpx'].includes(ext)) {
+                return '<span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded w-12 text-center inline-block">HWP</span>';
+            } else if (ext === 'pdf') {
+                return '<span class="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded w-12 text-center inline-block">PDF</span>';
+            } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+                return '<span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded w-12 text-center inline-block">IMG</span>';
+            } else {
+                return '<span class="bg-gray-100 text-gray-700 text-[10px] font-bold px-2 py-1 rounded w-12 text-center inline-block">FILE</span>';
+            }
+        }
+
+        function updateUI() {
+            if (files.length === 0) {
+                emptyState.classList.remove('hidden');
+                fileListEl.classList.add('hidden');
+                mergeBtn.disabled = true;
+            } else {
+                emptyState.classList.add('hidden');
+                fileListEl.classList.remove('hidden');
+                mergeBtn.disabled = false;
+            }
+            fileCountEl.innerText = files.length;
+        }
+
+        function renderList() {
+            fileListEl.innerHTML = '';
+            files.forEach((path, index) => {
+                const fileName = getFileName(path);
+                const dirName = getDirName(path);
+                const li = document.createElement('li');
+                li.className = 'bg-white border border-gray-200 rounded p-1.5 flex items-center hover:shadow-sm transition group select-none text-sm z-10 relative';
+                li.dataset.path = path;
+                li.innerHTML = `
+                                    <div class="w-8 text-center cursor-grab drag-handle text-gray-400 font-mono text-xs flex-shrink-0 h-full flex items-center justify-center">${index + 1}</div>
+                                    <div class="flex-1 flex items-center overflow-hidden px-2 cursor-grab drag-handle h-full gap-2">
+                                        ${getFileIcon(fileName)}
+                                        <div class="font-bold text-gray-700 truncate max-w-[50%]" title="${fileName}">${fileName}</div>
+                                        <div class="text-[10px] text-gray-400 truncate flex-1" title="${dirName}">(${dirName})</div>
+                                    </div>
+                                    <button onclick="removeFile(${index})" class="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition flex-shrink-0" title="삭제">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>`;
+                fileListEl.appendChild(li);
+            });
+            updateUI();
+        }
+
+        function sortFiles(order) {
+            files.sort((a, b) => {
+                const nameA = getFileName(a).toLowerCase();
+                const nameB = getFileName(b).toLowerCase();
+                if (nameA < nameB) return order === 'asc' ? -1 : 1;
+                if (nameA > nameB) return order === 'asc' ? 1 : -1;
+                return 0;
+            });
+            renderList();
+        }
+
+        async function addFiles() {
+            const pyApi = getApi();
+            if (pyApi) {
+                try {
+                    // Python에 작성된 신규 함수 (다양한 확장자 허용) 호출
+                    const selectedFiles = await pyApi.api.select_mixed_files();
+                    if (selectedFiles && selectedFiles.length > 0) {
+                        files = [...files, ...selectedFiles];
+                        renderList();
+                    }
+                } catch (e) { showModal("오류", "파일 선택 기능을 실행할 수 없습니다.", true); }
+            } else { browserFileInput.click(); }
+        }
+
+        browserFileInput.addEventListener('change', function (e) {
+            const selected = Array.from(e.target.files).map(f => f.name);
+            if (selected.length > 0) {
+                const mockPathPrefix = "C:\\Users\\Mock\\Documents\\";
+                files = [...files, ...selected.map(n => mockPathPrefix + n)];
+                renderList();
+            }
+            this.value = '';
+        });
+
+        function removeFile(index) { files.splice(index, 1); renderList(); }
+        function clearList() { files = []; renderList(); }
+        function updateFileArrayFromDOM() {
+            const newOrder = [];
+            fileListEl.querySelectorAll('li').forEach(item => { if (item.dataset.path) newOrder.push(item.dataset.path); });
+            files = newOrder;
+        }
+
+        function showModal(title, message, isError = false) {
+            modalTitle.innerText = title;
+            modalMessage.innerText = message;
+
+            if (isError) {
+                modalIcon.className = "mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-red-100 mb-3";
+                modalIcon.innerHTML = `<svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+            } else {
+                modalIcon.className = "mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-blue-100 mb-3";
+                modalIcon.innerHTML = `<svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+            }
+            customModal.classList.remove('hidden');
+        }
+
+        function closeModal() { customModal.classList.add('hidden'); }
+
+        async function initiateMerge() {
+            if (files.length < 1) {
+                showModal("알림", "최소 1개 이상의 파일이 필요합니다.", true);
+                return;
+            }
+            const pyApi = getApi();
+            if (pyApi) {
+                try {
+                    loadingEl.classList.remove('hidden');
+                    setTimeout(async () => {
+                        try {
+                            // Python에 작성된 다중 파일 PDF 변환 함수 호출
+                            const result = await pyApi.api.merge_to_pdf(files);
+                            loadingEl.classList.add('hidden');
+                            if (result.success) {
+                                showModal("완료", result.message);
+                            } else {
+                                showModal("실패", result.message, true);
+                            }
+                        } catch (innerErr) {
+                            loadingEl.classList.add('hidden');
+                            showModal("실패", "작업 중 오류 발생: " + innerErr, true);
+                        }
+                    }, 100);
+                } catch (error) {
+                    loadingEl.classList.add('hidden');
+                    showModal("시스템 오류", "알 수 없는 오류 발생", true);
+                }
+            } else {
+                loadingEl.classList.remove('hidden');
+                setTimeout(() => {
+                    loadingEl.classList.add('hidden');
+                    showModal("테스트 알림", "[주의] 실제 앱(Python) 환경에서 실행해야 정상 변환됩니다.");
+                }, 1000);
+            }
+        }
+
+        function openHelpModal() { document.getElementById('helpModal').classList.remove('hidden'); }
+        function closeHelpModal() { document.getElementById('helpModal').classList.add('hidden'); }
+
+        updateUI();
+
+
+        // ==========================================
+        // [추가] 드래그 앤 드롭 프론트엔드 제어
+        // ==========================================
+        const dragOverlay = document.getElementById('dragOverlay');
+
+        document.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            // 부모 창(index.html)의 투명 방패 강제 활성화
+            if (window.parent && window.parent.document) {
+                const shield = window.parent.document.getElementById('global-drop-zone');
+                if (shield) shield.classList.add('active');
+            }
+            if (dragOverlay) dragOverlay.classList.remove('hidden');
+        });
+
+        document.addEventListener('dragover', (e) => e.preventDefault());
+
+        document.addEventListener('dragleave', (e) => {
+            if (dragOverlay) dragOverlay.classList.add('hidden');
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (dragOverlay) dragOverlay.classList.add('hidden');
+        });
+
+        // 파이썬 전역 D&D 이벤트가 감지한 경로들을 이 함수로 찔러줍니다.
+        window.addDroppedFiles = function (paths) {
+            let addedCount = 0;
+            // PDF 병합에서 지원하는 확장자 목록
+            const allowedExts = ['.hwp', '.hwpx', '.pdf', '.jpg', '.jpeg', '.png', '.gif'];
+
+            paths.forEach(path => {
+                const lowerPath = path.toLowerCase();
+                const isValidExt = allowedExts.some(ext => lowerPath.endsWith(ext));
+
+                if (isValidExt) {
+                    if (!files.includes(path)) {
+                        files.push(path);
+                        addedCount++;
+                    }
+                }
+            });
+
+            if (addedCount > 0) {
+                renderList(); // 목록 새로고침
+            } else {
+                showModal("알림", "추가할 수 있는 형식의 파일이 없거나 이미 목록에 있습니다.", true);
+            }
+        };
+    </script>
+</body>
+</html>

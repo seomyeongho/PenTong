@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스마트 필터</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- JSpreadsheet & JSuites -->
+    <script src="https://jsuites.net/v4/jsuites.js"></script>
+    <link rel="stylesheet" href="https://jsuites.net/v4/jsuites.css" type="text/css" />
+    <script src="https://bossanova.uk/jspreadsheet/v4/jspreadsheet.js"></script>
+    <link rel="stylesheet" href="https://bossanova.uk/jspreadsheet/v4/jspreadsheet.css" type="text/css" />
+
+    <!-- Google Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        :root {
+            --primary-color: #4F46E5;
+            --header-bg: #F3F4F6;
+            --border-color: #E2E8F0;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #F9FAFB;
+            overflow: hidden;
+        }
+
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+        /* JSpreadsheet 오버라이드 */
+        .jexcel_container { 
+            border: none !important; 
+            box-shadow: none !important; 
+            width: 100% !important;
+            height: 100% !important;
+        }
+        
+        .jexcel_content {
+            width: 100% !important;
+            height: 100% !important;
+            max-height: none !important;
+            overflow: auto !important; 
+            padding-bottom: 0 !important;
+        }
+
+        .jexcel > thead > tr > td {
+            background-color: #F8FAFC !important; color: #475569 !important;
+            font-weight: 700 !important; border-bottom: 2px solid #CBD5E1 !important;
+            font-size: 13px !important; padding: 8px 4px !important;
+            position: sticky; top: 0; z-index: 10;
+        }
+        .jexcel > tbody > tr > td {
+            font-size: 13px !important; color: #1E293B;
+            padding: 6px 6px !important; border-bottom: 1px solid #E2E8F0 !important;
+        }
+
+        /* 필터 바 스타일 */
+        .smart-filter-bar {
+            display: flex; background: white; border-bottom: 1px solid var(--border-color);
+            padding-left: 50px; padding-top: 4px; padding-bottom: 4px;
+            position: sticky; top: 0; z-index: 50;
+            overflow: visible !important; 
+            width: max-content; 
+            min-width: 100%;
+        }
+        .filter-cell { padding: 0 4px; box-sizing: border-box; flex-shrink: 0; position: relative; }
+        
+        .filter-control-group {
+            display: flex; width: 100%; border: 1px solid #CBD5E1; border-radius: 4px;
+            background-color: #fff; transition: all 0.2s; height: 28px;
+        }
+        .filter-control-group:focus-within { border-color: var(--primary-color); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1); }
+        .filter-control-group.active { background-color: #EEF2FF; border-color: #818CF8; }
+        .filter-control-group.active .filter-input { background-color: #EEF2FF; color: #312E81; font-weight: 600; }
+
+        .filter-input {
+            flex-grow: 1; width: 100%; min-width: 0; padding: 4px 8px; font-size: 12px;
+            border: none; outline: none; color: #1E293B; height: 100%; border-radius: 4px 0 0 4px;
+        }
+
+        .filter-list-btn {
+            display: flex; align-items: center; justify-content: center; width: 24px; height: 100%;
+            background-color: #F8FAFC; border-left: 1px solid #CBD5E1; cursor: pointer; color: #64748B;
+            border-radius: 0 4px 4px 0;
+        }
+        .filter-list-btn:hover { background-color: #E2E8F0; color: #334155; }
+
+        /* 드롭다운 */
+        .multi-select-dropdown {
+            position: absolute; top: 100%; left: 0; width: 220px; max-height: 320px; overflow-y: auto;
+            background: white; border: 1px solid #94A3B8; border-radius: 6px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            z-index: 9999; display: none; margin-top: 4px; padding: 4px;
+        }
+        .multi-select-dropdown.show { display: block; animation: fadeIn 0.1s ease-out; }
+        .dropdown-item {
+            display: flex; align-items: center; padding: 6px 8px; font-size: 12px; color: #334155;
+            cursor: pointer; border-radius: 4px; transition: background 0.1s;
+        }
+        .dropdown-item:hover { background-color: #F1F5F9; }
+        .dropdown-item input[type="checkbox"] { margin-right: 8px; accent-color: var(--primary-color); }
+        .dropdown-divider { height: 1px; background-color: #E2E8F0; margin: 4px 0; }
+
+        /* 통계 푸터 */
+        .summary-bar {
+            display: flex; background: #F8FAFC; border-top: 2px solid #94A3B8;
+            padding-left: 50px; position: sticky; bottom: 0; z-index: 30;
+            font-size: 12px; color: #475569; user-select: text; 
+            overflow: visible; width: max-content; min-width: 100%;
+        }
+        .summary-cell {
+            padding: 0 4px; box-sizing: border-box; flex-shrink: 0; display: flex; flex-direction: column;
+            border-right: 1px solid #E2E8F0; background: #fff;
+        }
+        .summary-row {
+            height: 24px; display: flex; align-items: center; border-bottom: 1px solid #F1F5F9; padding: 0 4px;
+        }
+        .summary-row.header { background-color: #F8FAFC; font-weight: 600; color: #64748B; justify-content: flex-start; }
+        .summary-val { width: 100%; text-align: right; font-weight: 600; font-family: 'Courier New', monospace; letter-spacing: -0.5px; }
+
+        /* 가이드 패널 */
+        #guideContent {
+            transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+            max-height: 600px; opacity: 1; overflow: hidden;
+        }
+        #guideContent.collapsed { max-height: 0; opacity: 0; }
+        
+        .guide-box { border: 1px solid #E5E7EB; border-radius: 6px; background: #FAFAFA; padding: 0; overflow: hidden; }
+        .guide-header {
+            background: #F3F4F6; padding: 6px 12px; font-weight: 700; color: #374151; font-size: 12px;
+            border-bottom: 1px solid #E5E7EB; display: flex; justify-content: space-between; align-items: center;
+        }
+        .guide-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+        .guide-table td { padding: 4px 8px; border-bottom: 1px solid #F3F4F6; color: #4B5563; }
+        .guide-table tr:last-child td { border-bottom: none; }
+        .op-tag {
+            display: inline-block; width: 20px; text-align: center; font-weight: 700; border-radius: 4px;
+            background: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE; margin-right: 4px;
+        }
+        .ex-text { font-family: monospace; color: #6B7280; font-size: 11px; margin-left: auto; display: block; text-align: right; }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
+            display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        .modal-overlay.show { opacity: 1; pointer-events: auto; }
+        .modal-container {
+            background: white; width: 600px; max-width: 90%; max-height: 85vh; border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); overflow-y: auto; transform: scale(0.95); transition: transform 0.2s;
+        }
+        .modal-overlay.show .modal-container { transform: scale(1); }
+
+        .badge { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; display: inline-block; text-align: center; width: 70px; }
+        .status-wait { background-color: #F3F4F6; color: #4B5563; }
+        .status-progress { background-color: #DBEAFE; color: #1E40AF; }
+        .status-done { background-color: #DCFCE7; color: #166534; }
+        .status-reject { background-color: #FEE2E2; color: #991B1B; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        #pasteTarget:focus {
+            background-color: #F0FDF4; border-color: #22C55E; outline: none; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col bg-gray-50 text-sm">
+
+    <!-- 상단 툴바 -->
+    <header class="bg-white border-b border-gray-200 px-4 py-2 flex justify-between items-center shadow-sm z-30 relative shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2 rounded shadow-sm">
+                <i class="ph ph-table text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-gray-800 tracking-tight leading-none">스마트 필터</h1>
+                <div class="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                    <span id="totalCount">데이터 준비중</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-1.5">
+            <button onclick="clearData()" class="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-orange-50 text-gray-700 hover:text-orange-600 rounded border border-gray-300 transition-all font-medium">
+                <i class="ph ph-trash text-orange-500"></i> 지우기
+            </button>
+            <button onclick="copyResults()" class="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 rounded border border-gray-300 transition-all font-medium">
+                <i class="ph ph-copy text-blue-600"></i> 복사
+            </button>
+            <button onclick="resetAllFilters()" class="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 rounded border border-gray-300 transition-all font-medium">
+                <i class="ph ph-funnel-x"></i> 초기화
+            </button>
+        </div>
+    </header>
+
+    <!-- 수식 입력줄 -->
+    <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center gap-3 z-20 shrink-0">
+        <div class="text-gray-400 font-bold italic w-6 text-center select-none" title="필터 편집">Fx</div>
+        <div class="flex-1 relative">
+            <input type="text" id="syncFilterInput" class="w-full border border-gray-300 rounded shadow-sm px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 transition-all placeholder-gray-400" placeholder="하단 그리드의 필터를 클릭하면 이곳에서 넓게 편집할 수 있습니다.">
+            <div id="syncFilterLabel" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-indigo-500 font-medium pointer-events-none opacity-0 transition-opacity">
+                선택된 컬럼 없음
+            </div>
+        </div>
+    </div>
+
+    <!-- 가이드 패널 -->
+    <div id="guidePanel" class="bg-white border-b border-gray-200 z-20 shrink-0 shadow-sm">
+        <div class="px-4 py-2 bg-gray-50 border-b border-gray-200 flex justify-between items-center cursor-pointer select-none h-9" onclick="toggleGuide()">
+            <h3 class="font-bold text-gray-700 flex items-center gap-2 text-xs">
+                <i class="ph ph-info text-indigo-500"></i>
+                스마트 필터 연산자 가이드
+                <span class="font-normal text-gray-400"> (클릭하여 접기/펼치기)</span>
+            </h3>
+            <i id="guideToggleIcon" class="ph ph-caret-up text-gray-500"></i>
+        </div>
+        
+        <div id="guideContent" class="bg-white">
+            <div class="p-3 grid grid-cols-3 gap-3">
+                <div class="guide-box">
+                    <div class="guide-header"><span class="text-indigo-600">① 논리/결합</span></div>
+                    <table class="guide-table">
+                        <tr><td><span class="op-tag">+</span>OR (또는)</td><td><span class="ex-text">서울 + 부산</span></td></tr>
+                        <tr><td><span class="op-tag">@</span>AND (그리고)</td><td><span class="ex-text">서울 @ 초등</span></td></tr>
+                        <tr><td><span class="op-tag">-</span>NOT (제외)</td><td><span class="ex-text">-반려</span></td></tr>
+                        <tr><td colspan="2" class="text-[10px] text-gray-400 pl-1">※ 혼합예시: 서울 + 부산 @ -초등</td></tr>
+                    </table>
+                </div>
+                <div class="guide-box">
+                    <div class="guide-header"><span class="text-emerald-600">② 패턴/와일드카드</span></div>
+                    <table class="guide-table">
+                        <tr><td><span class="op-tag">=</span>정확히 일치</td><td><span class="ex-text">=서울</span></td></tr>
+                        <tr><td><span class="op-tag">?</span>한 글자</td><td><span class="ex-text">김?? (3자)</span></td></tr>
+                        <tr><td><span class="op-tag">*</span>모든 문자</td><td><span class="ex-text">김* (김 시작)</span></td></tr>
+                        <tr><td><span class="op-tag">!</span>같지 않음</td><td><span class="ex-text">!=대기</span></td></tr>
+                    </table>
+                </div>
+                <div class="guide-box">
+                    <div class="guide-header"><span class="text-amber-600">③ 숫자/범위 비교</span></div>
+                    <table class="guide-table">
+                        <tr><td><span class="op-tag">~</span>범위 지정</td><td><span class="ex-text">100~200</span></td></tr>
+                        <tr><td><span class="op-tag">&gt;</span>초과 / 미만</td><td><span class="ex-text">&gt;1000, &lt;500</span></td></tr>
+                        <tr><td><span class="op-tag">&ge;</span>이상 / 이하</td><td><span class="ex-text">&gt;=100, &lt;=50</span></td></tr>
+                         <tr><td colspan="2" class="text-[10px] text-gray-400 pl-1">※ 문자도 사전순 비교 가능 (>=가)</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 스마트 필터 영역 -->
+    <div class="bg-white border-b border-gray-200 shadow-sm z-20 shrink-0 relative w-full overflow-visible">
+        <div id="smartFilterBar" class="smart-filter-bar">
+            <!-- JS 동적 생성 -->
+        </div>
+    </div>
+
+    <!-- 데이터 그리드 영역 -->
+    <div class="flex-1 relative overflow-hidden bg-white flex flex-col min-h-0">
+        <div class="flex-1 relative w-full overflow-hidden bg-gray-50">
+            <div id="spreadsheet" class="w-full h-full"></div>
+            
+            <!-- 빈 상태 -->
+            <div id="emptyState" class="absolute inset-0 flex items-center justify-center z-10 p-6">
+                <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-200 w-full max-w-2xl transform transition-all">
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="flex items-center gap-2">
+                            <div class="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                                <i class="ph ph-table text-xl"></i>
+                            </div>
+                            <h2 class="text-xl font-bold text-gray-800">데이터 입력</h2>
+                        </div>
+                        <button onclick="loadSampleData()" class="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors">
+                            <i class="ph ph-flask"></i> 샘플 데이터
+                        </button>
+                    </div>
+                    <div id="pasteTarget" tabindex="0" class="group border-2 border-dashed border-green-400 bg-green-50 hover:bg-green-100 rounded-xl h-48 flex flex-col items-center justify-center cursor-pointer transition-all outline-none">
+                        <div class="p-4 bg-white rounded-full shadow-sm mb-3 group-hover:scale-110 transition-transform">
+                            <i class="ph ph-clipboard-text text-3xl text-green-600"></i>
+                        </div>
+                        <p class="text-xl text-gray-600 font-medium">여기를 클릭하고</p>
+                        <p class="text-lg text-green-700 font-bold mt-1">엑셀 데이터를 붙여넣기(Ctrl+V) 하세요</p>
+                    </div>
+                    <p class="text-center text-xs text-gray-400 mt-4"><i class="ph ph-info"></i> 엑셀 표를 복사하여 붙여넣으세요. (표 형식 자동 감지)</p>
+                </div>
+            </div>
+        </div>
+        <!-- 통계 푸터 -->
+        <div class="border-t border-gray-200 bg-gray-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0 w-full overflow-hidden">
+            <div id="summaryFooter" class="summary-bar">
+                <!-- JS 동적 생성 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 데이터 붙여넣기 모달 -->
+    <div id="pasteModal" class="modal-overlay">
+        <div class="modal-container">
+            <div class="bg-indigo-600 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2"><i class="ph ph-clipboard-text"></i> 데이터 붙여넣기</h3>
+                <button onclick="togglePasteModal(false)" class="text-white hover:bg-indigo-700 rounded p-1"><i class="ph ph-x text-xl"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600">보안 정책으로 인해 클립보드 직접 접근이 제한되었습니다.<br>아래 영역에 엑셀 데이터를 <strong>직접 붙여넣기(Ctrl+V)</strong> 후 확인을 눌러주세요.</p>
+                <textarea id="pasteArea" class="w-full h-64 border border-gray-300 rounded-lg p-3 text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="데이터를 여기에 붙여넣으세요..."></textarea>
+                <div class="flex justify-end gap-2">
+                    <button onclick="togglePasteModal(false)" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors text-sm">취소</button>
+                    <button onclick="processPastedData()" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm">데이터 불러오기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-8 right-8 transform translate-y-20 opacity-0 transition-all duration-300 z-50 pointer-events-none">
+        <div class="bg-gray-800 text-white px-5 py-4 rounded-lg shadow-xl flex items-center gap-3">
+            <i class="ph ph-check-circle text-green-400 text-2xl"></i>
+            <span id="toastMsg" class="text-base font-medium">메시지</span>
+        </div>
+    </div>
+
+    <script>
+        let CONFIG = { columns: [] };
+        let gridInstance = null;
+        let activeFilters = {}; 
+        let currentData = [];
+        let activeFilterInput = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initGrid();
+            updateStatusDisplay(0, 0);
+            toggleEmptyState(true);
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.filter-cell')) closeAllDropdowns();
+            });
+            document.addEventListener('keydown', (e) => {
+                if(e.key === 'Escape') togglePasteModal(false);
+            });
+
+            const syncInput = document.getElementById('syncFilterInput');
+            syncInput.addEventListener('input', (e) => {
+                if (activeFilterInput) {
+                    activeFilterInput.value = e.target.value;
+                    const colIndex = activeFilterInput.dataset.colIndex;
+                    const group = document.getElementById(`filter-group-${colIndex}`);
+                    handleFilterInput(colIndex, e.target.value, group);
+                }
+            });
+
+            const pasteTarget = document.getElementById('pasteTarget');
+            pasteTarget.addEventListener('paste', handlePaste);
+            pasteTarget.addEventListener('click', () => pasteTarget.focus());
+        });
+
+        function initGrid() { createGrid(CONFIG.columns, []); }
+        
+        function createGrid(columns, data) {
+            const el = document.getElementById('spreadsheet');
+            el.innerHTML = ''; 
+            gridInstance = jspreadsheet(el, {
+                data: data,
+                columns: columns,
+                tableOverflow: true,  
+                tableWidth: '100%',   
+                minDimensions: [columns.length || 9, 15], 
+                allowInsertColumn: false, allowManualInsertColumn: false, allowDeleteColumn: false,
+                search: false, pagination: false,
+                // 데이터 변경 이벤트 리스너 추가
+                onchange: updateSystem,
+                oninsertrow: updateSystem,
+                ondeleterow: updateSystem,
+                updateTable: function(instance, cell, col, row, val, label, cellName) {
+                    if (columns[col] && columns[col].title === '처리상태') cell.innerHTML = getStatusBadgeHTML(val);
+                },
+                onload: function() {
+                    const content = el.querySelector('.jexcel_content');
+                    if(content) {
+                        content.addEventListener('scroll', (e) => {
+                            const left = e.target.scrollLeft;
+                            document.getElementById('smartFilterBar').style.transform = `translateX(-${left}px)`;
+                            document.getElementById('summaryFooter').style.transform = `translateX(-${left}px)`;
+                        });
+                    }
+                }
+            });
+        }
+
+        // 데이터 변경 시 호출될 핵심 함수
+        function updateSystem() {
+            // 1. 최신 데이터 동기화
+            currentData = gridInstance.getData();
+            
+            // 2. 컬럼 및 필터 옵션 재분석
+            analyzeColumns(currentData);
+            
+            // 3. 필터 바 재렌더링 (입력값/상태 보존)
+            renderSmartFilterBar();
+            
+            // 4. 필터 및 통계 재적용
+            if (Object.keys(activeFilters).length > 0) {
+                applyFilters();
+            } else {
+                updateStatusDisplay(currentData.length, currentData.length);
+                calculateSummary(currentData);
+            }
+        }
+
+        function getStatusBadgeHTML(status) {
+            let cls = 'status-wait';
+            if(status === '진행중') cls = 'status-progress';
+            if(status === '완료') cls = 'status-done';
+            if(status === '반려') cls = 'status-reject';
+            return `<span class="badge ${cls}">${status}</span>`;
+        }
+        // 샘플 데이터 로드 함수
+        function loadSampleData() {
+            const sampleCols = [
+                { type: 'text', title: '사번', width: 100, align: 'center', filterType: 'auto' },
+                { type: 'text', title: '이름', width: 100, align: 'center', filterType: 'auto' },
+                { type: 'text', title: '부서', width: 130, align: 'center', filterType: 'auto' },
+                { type: 'text', title: '직급', width: 100, align: 'center', filterType: 'auto' },
+                { type: 'text', title: '처리상태', width: 100, align: 'center', filterType: 'auto' },
+                { type: 'numeric', title: '출장비', width: 120, align: 'right', mask: '#,##0', filterType: 'range' },
+                { type: 'text', title: '신청일자', width: 120, align: 'center', filterType: 'auto' }
+            ];
+
+            const sampleRows = [
+                ['2023001', '김철수', '교무기획부', '부장교사', '완료', 50000, '2026-04-10'],
+                ['2023002', '이영희', '학생생활부', '교사', '진행중', 30000, '2026-04-11'],
+                ['2023003', '박민수', '행정실', '주무관', '대기', 0, '2026-04-12'],
+                ['2023004', '정지원', '교육연구부', '수석교사', '완료', 45000, '2026-04-09'],
+                ['2023005', '최동훈', '행정실', '실장', '반려', 0, '2026-04-13'],
+                ['2023006', '강하늘', '방과후학교부', '교사', '완료', 25000, '2026-04-10'],
+                ['2023007', '송지효', '행정실', '실무사', '진행중', 15000, '2026-04-12']
+            ];
+
+            CONFIG.columns = sampleCols;
+            currentData = JSON.parse(JSON.stringify(sampleRows));
+
+            // 데이터 분석 및 그리드 재생성
+            analyzeColumns(currentData);
+            createGrid(CONFIG.columns, currentData);
+
+            // UI 업데이트
+            renderSmartFilterBar();
+            renderSummaryFooter();
+            toggleEmptyState(false);
+            resetAllFilters();
+
+            // alert 대신 내부 토스트 팝업 사용
+            showToast('샘플 데이터가 로드되었습니다.');
+        }
+        function handlePaste(e) {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            if (!text) return;
+            if (!text.includes('\t') && !text.includes('\n')) {
+                showToast('표 형식이 아닙니다. 엑셀 데이터를 복사해주세요.');
+                return;
+            }
+            processRawData(text);
+        }
+
+        function processRawData(text) {
+            const rawRows = text.trim().split('\n').map(row => row.split('\t'));
+            if (rawRows.length === 0) return;
+
+            const firstRow = rawRows[0];
+            let isHeader = false;
+            const nonNumericCount = firstRow.filter(cell => {
+                const val = cell.trim().replace(/,/g, '');
+                return val !== '' && isNaN(Number(val));
+            }).length;
+
+            if (nonNumericCount > 0) isHeader = true;
+
+            let newColumns = [];
+            let dataRows = [];
+            const colCount = rawRows.reduce((max, row) => Math.max(max, row.length), 0);
+
+            if (isHeader) {
+                firstRow.forEach((title, idx) => {
+                    newColumns.push({ type: 'text', title: title.trim(), width: 150, align: 'center', filterType: 'auto' });
+                });
+                dataRows = rawRows.slice(1);
+            } else {
+                for (let i = 0; i < colCount; i++) {
+                    const title = String.fromCharCode(65 + (i % 26)); 
+                    newColumns.push({ type: 'text', title: title, width: 150, align: 'center', filterType: 'auto' });
+                }
+                dataRows = rawRows;
+            }
+
+            while(newColumns.length < colCount) {
+                newColumns.push({ type:'text', title:'', width:150, filterType:'auto' });
+            }
+
+            currentData = JSON.parse(JSON.stringify(dataRows));
+            CONFIG.columns = newColumns; 
+            analyzeColumns(currentData);
+            createGrid(CONFIG.columns, currentData);
+            
+            renderSmartFilterBar(); renderSummaryFooter(); toggleEmptyState(false); resetAllFilters();
+            
+            const msg = isHeader ? `제목 포함 ${dataRows.length}건 데이터 로드 완료` : `${dataRows.length}건 데이터 로드 완료 (제목 자동 생성)`;
+            showToast(msg);
+        }
+
+        function renderSmartFilterBar() {
+            const container = document.getElementById('smartFilterBar');
+            container.innerHTML = '';
+
+            CONFIG.columns.forEach((col, index) => {
+                const cell = document.createElement('div');
+                cell.className = 'filter-cell';
+                cell.style.width = `${col.width}px`;
+
+                const group = document.createElement('div');
+                group.className = 'filter-control-group';
+                group.id = `filter-group-${index}`;
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'filter-input';
+                
+                if (col.filterType === 'range') input.placeholder = '>100, 10~20';
+                else if (col.filterOptions) input.placeholder = '선택/입력';
+                else input.placeholder = '검색';
+                
+                input.dataset.colIndex = index;
+                
+                // [상태 복원] 기존에 입력된 필터 값이 있으면 복원
+                if (activeFilters[index]) {
+                    input.value = activeFilters[index].raw;
+                    group.classList.add('active');
+                }
+
+                input.addEventListener('focus', () => {
+                    activeFilterInput = input;
+                    const syncInput = document.getElementById('syncFilterInput');
+                    const syncLabel = document.getElementById('syncFilterLabel');
+                    syncInput.value = input.value;
+                    syncLabel.textContent = `[${col.title}] 필터 편집 중`;
+                    syncLabel.style.opacity = '1';
+                    document.querySelectorAll('.filter-control-group').forEach(g => g.classList.remove('ring-2', 'ring-indigo-300'));
+                    group.classList.add('ring-2', 'ring-indigo-300');
+                });
+
+                input.addEventListener('blur', () => {
+                    group.classList.remove('ring-2', 'ring-indigo-300');
+                });
+
+                input.oninput = (e) => {
+                    if(activeFilterInput === input) document.getElementById('syncFilterInput').value = e.target.value;
+                    handleFilterInput(index, e.target.value, group);
+                };
+                group.appendChild(input);
+
+                if (col.filterOptions && col.filterOptions.length > 0) {
+                    const btn = document.createElement('div');
+                    btn.className = 'filter-list-btn';
+                    btn.innerHTML = '<i class="ph ph-caret-down"></i>';
+                    
+                    const dropdown = document.createElement('div');
+                    dropdown.className = 'multi-select-dropdown';
+                    dropdown.id = `dropdown-${index}`;
+
+                    const allItem = createCheckboxItem('전체 선택', false, (checked) => {
+                        dropdown.querySelectorAll('.opt-checkbox').forEach(cb => cb.checked = checked);
+                        syncDropdownToInput(index, col.filterOptions, input, group);
+                    });
+                    dropdown.appendChild(allItem);
+                    dropdown.appendChild(document.createElement('div')).className = 'dropdown-divider';
+
+                    col.filterOptions.forEach(optVal => {
+                        const item = createCheckboxItem(optVal, false, () => {
+                            syncDropdownToInput(index, col.filterOptions, input, group);
+                        });
+                        item.querySelector('input').classList.add('opt-checkbox');
+                        item.querySelector('input').value = optVal;
+                        dropdown.appendChild(item);
+                    });
+
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        input.focus();
+                        const isVisible = dropdown.classList.contains('show');
+                        closeAllDropdowns();
+                        if (!isVisible) {
+                            syncInputToDropdown(index, input, dropdown);
+                            dropdown.classList.add('show');
+                        }
+                    };
+                    group.appendChild(btn);
+                    cell.appendChild(dropdown);
+                }
+                cell.appendChild(group);
+                container.appendChild(cell);
+            });
+        }
+
+        function syncInputToDropdown(colIndex, inputEl, dropdown) {
+            const rawVal = inputEl.value.trim();
+            const checkboxes = dropdown.querySelectorAll('.opt-checkbox');
+            const allCheckbox = dropdown.querySelector('input[type="checkbox"]:not(.opt-checkbox)');
+
+            if (!rawVal) {
+                checkboxes.forEach(cb => cb.checked = true);
+                if(allCheckbox) allCheckbox.checked = true;
+                return;
+            }
+
+            if (rawVal === '-*') {
+                checkboxes.forEach(cb => cb.checked = false);
+                if(allCheckbox) allCheckbox.checked = false;
+                return;
+            }
+
+            const terms = rawVal.split('+').map(t => t.trim().toLowerCase());
+            let checkedCount = 0;
+
+            checkboxes.forEach(cb => {
+                const val = cb.value.toString().toLowerCase();
+                if (terms.some(t => val.includes(t) || t === val)) {
+                    cb.checked = true;
+                    checkedCount++;
+                } else {
+                    cb.checked = false;
+                }
+            });
+
+            if(allCheckbox) allCheckbox.checked = (checkedCount === checkboxes.length);
+        }
+
+        function syncDropdownToInput(colIndex, allOptions, inputEl, groupEl) {
+            const dropdown = document.getElementById(`dropdown-${colIndex}`);
+            const checkboxes = dropdown.querySelectorAll('.opt-checkbox');
+            const selected = [];
+            checkboxes.forEach(cb => { if (cb.checked) selected.push(cb.value); });
+
+            if (selected.length === 0) inputEl.value = '-*';
+            else if (selected.length === allOptions.length) inputEl.value = '';
+            else inputEl.value = selected.join(' + ');
+            
+            if (activeFilterInput === inputEl) document.getElementById('syncFilterInput').value = inputEl.value;
+            handleFilterInput(colIndex, inputEl.value, groupEl);
+        }
+
+        function handleFilterInput(colIndex, value, groupEl) {
+            const val = value.trim();
+            if (val) {
+                activeFilters[colIndex] = { raw: val };
+                groupEl.classList.add('active');
+            } else {
+                delete activeFilters[colIndex];
+                groupEl.classList.remove('active');
+            }
+            applyFilters();
+        }
+
+        function createCheckboxItem(label, checked, onChange) {
+            const div = document.createElement('div');
+            div.className = 'dropdown-item';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.checked = checked;
+            const span = document.createElement('span');
+            span.textContent = label;
+            div.appendChild(cb); div.appendChild(span);
+            div.onclick = (e) => {
+                if (e.target !== cb) { cb.checked = !cb.checked; onChange(cb.checked); } 
+                else { onChange(cb.checked); }
+            };
+            return div;
+        }
+
+        function closeAllDropdowns() {
+            document.querySelectorAll('.multi-select-dropdown').forEach(el => el.classList.remove('show'));
+        }
+
+        function renderSummaryFooter() {
+            const footer = document.getElementById('summaryFooter');
+            footer.innerHTML = '';
+            CONFIG.columns.forEach((col, index) => {
+                const cell = document.createElement('div');
+                cell.className = 'summary-cell';
+                cell.style.width = `${col.width}px`;
+                cell.id = `summary-${index}`;
+                if (index === 0) {
+                    cell.innerHTML = `
+                        <div class="summary-row header">합계</div>
+                        <div class="summary-row header">평균</div>
+                        <div class="summary-row header">최대값</div>
+                        <div class="summary-row header">최소값</div>
+                    `;
+                    cell.style.backgroundColor = '#F8FAFC';
+                } else {
+                    cell.innerHTML = `
+                        <div class="summary-row justify-end"><span class="summary-val text-blue-600"></span></div>
+                        <div class="summary-row justify-end"><span class="summary-val text-gray-600"></span></div>
+                        <div class="summary-row justify-end"><span class="summary-val text-gray-700"></span></div>
+                        <div class="summary-row justify-end"><span class="summary-val text-gray-500"></span></div>
+                    `;
+                }
+                footer.appendChild(cell);
+            });
+        }
+
+        function applyFilters() {
+            let visibleCount = 0;
+            let visibleRowsData = [];
+            currentData.forEach((row, rowIndex) => {
+                let showRow = true;
+                for (const [colIdx, filter] of Object.entries(activeFilters)) {
+                    const cellValue = String(row[colIdx]);
+                    const colType = CONFIG.columns[colIdx].type;
+                    const orGroups = filter.raw.split('+');
+                    const isGroupMatch = orGroups.some(group => {
+                        const andTerms = group.split('@').map(s => s.trim()).filter(s => s);
+                        return andTerms.every(term => checkFilterCondition(cellValue, term, colType));
+                    });
+                    if (!isGroupMatch) { showRow = false; break; }
+                }
+                if (showRow) {
+                    gridInstance.showRow(rowIndex);
+                    visibleCount++;
+                    visibleRowsData.push(row);
+                } else {
+                    gridInstance.hideRow(rowIndex);
+                }
+            });
+            updateStatusDisplay(visibleCount, currentData.length);
+            calculateSummary(visibleRowsData);
+        }
+
+        function checkFilterCondition(cellValue, term, colType) {
+            let valStr = String(cellValue);
+            let valNum = parseFloat(valStr.replace(/,/g, ''));
+            const isNum = !isNaN(valNum) && valStr.trim() !== '';
+
+            if (term.startsWith('-')) {
+                const subTerm = term.substring(1).trim();
+                if(!subTerm) return true;
+                return !checkFilterCondition(cellValue, subTerm, colType);
+            }
+            if (term.startsWith('!=')) return valStr !== term.substring(2).trim();
+            if (term.startsWith('!')) return valStr !== term.substring(1).trim();
+            if (term.startsWith('=')) return valStr === term.substring(1).trim();
+
+            if (term.includes('~')) {
+                const parts = term.split('~');
+                const min = parseFloat(parts[0]);
+                const max = parseFloat(parts[1]);
+                if (isNum && !isNaN(min) && !isNaN(max)) return valNum >= min && valNum <= max;
+                return false; 
+            }
+
+            const ops = ['>=', '<=', '>', '<'];
+            for (const op of ops) {
+                if (term.startsWith(op)) {
+                    const criteria = term.substring(op.length).trim();
+                    const critNum = parseFloat(criteria);
+                    if (isNum && !isNaN(critNum)) {
+                        if (op === '>=') return valNum >= critNum;
+                        if (op === '<=') return valNum <= critNum;
+                        if (op === '>') return valNum > critNum;
+                        if (op === '<') return valNum < critNum;
+                    }
+                    if (op === '>=') return valStr >= criteria;
+                    if (op === '<=') return valStr <= criteria;
+                    if (op === '>') return valStr > criteria;
+                    if (op === '<') return valStr < criteria;
+                    return false;
+                }
+            }
+
+            if (term.includes('?') || term.includes('*')) {
+                const escaped = term.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+                const pattern = '^' + escaped.replace(/\?/g, '.').replace(/\*/g, '.*') + '$';
+                try {
+                    const regex = new RegExp(pattern, 'i');
+                    return regex.test(valStr);
+                } catch(e) { return false; }
+            }
+            return valStr.toLowerCase().includes(term.toLowerCase());
+        }
+
+        function calculateSummary(rows) {
+            CONFIG.columns.forEach((col, idx) => {
+                if (idx === 0) return;
+                const cell = document.getElementById(`summary-${idx}`);
+                const valSpans = cell.querySelectorAll('.summary-val');
+                valSpans.forEach(span => span.textContent = '');
+                if (rows.length === 0) return;
+
+                let values = [];
+                for(let row of rows) {
+                    let val = row[idx];
+                    if (typeof val === 'string') val = val.replace(/,/g, '');
+                    if (val === '' || val === null || val === undefined) continue;
+                    const num = Number(val);
+                    if (!isNaN(num)) values.push(num);
+                }
+                
+                if (values.length > 0) {
+                    const sum = values.reduce((a, b) => a + b, 0);
+                    const avg = sum / values.length;
+                    const max = Math.max(...values);
+                    const min = Math.min(...values);
+                    const fmt = (n) => Math.round(n).toLocaleString();
+                    valSpans[0].textContent = fmt(sum);
+                    valSpans[1].textContent = fmt(avg);
+                    valSpans[2].textContent = fmt(max);
+                    valSpans[3].textContent = fmt(min);
+                }
+            });
+        }
+
+        function clearData() {
+            gridInstance.setData([]); currentData = [];
+            resetAllFilters(); updateStatusDisplay(0, 0); toggleEmptyState(true);
+            showToast('모든 데이터가 삭제되었습니다.');
+        }
+
+        // --- 수정된 analyzeColumns: 숫자형도 옵션 목록 생성 ---
+        function analyzeColumns(data) {
+            if (!data || data.length === 0) return;
+            CONFIG.columns.forEach((col, idx) => {
+                const isNumeric = data.every(row => {
+                    const val = String(row[idx]).replace(/,/g, '').trim();
+                    return val === '' || !isNaN(Number(val));
+                });
+                
+                if (isNumeric) {
+                    col.type = 'numeric'; col.align = 'right'; col.mask = '#,##0'; col.filterType = 'range';
+                } else {
+                    col.type = 'text'; col.align = 'center'; col.filterType = 'auto';
+                }
+
+                // 모든 타입에 대해 유니크 값 100개 이하면 드롭다운 생성
+                const uniqueValues = new Set();
+                data.forEach(row => uniqueValues.add(row[idx]));
+                if (uniqueValues.size > 0 && uniqueValues.size <= 100) {
+                    col.filterOptions = Array.from(uniqueValues).sort();
+                    // 숫자형이면 숫자 정렬
+                    if(col.type === 'numeric') {
+                        col.filterOptions.sort((a,b) => parseFloat(String(a).replace(/,/g,'')) - parseFloat(String(b).replace(/,/g,'')));
+                    }
+                } else { 
+                    col.filterOptions = null; 
+                }
+            });
+        }
+
+        function resetAllFilters() {
+            activeFilters = {};
+            document.querySelectorAll('.filter-input').forEach(el => el.value = '');
+            document.querySelectorAll('.filter-control-group').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+            if(currentData.length > 0) applyFilters();
+        }
+
+        function copyResults() {
+            const rows = document.querySelectorAll('#spreadsheet tbody tr');
+            const headers = CONFIG.columns.map(c => c.title);
+            let copyText = headers.join('\t') + '\n';
+            let count = 0;
+            
+            rows.forEach((tr, idx) => {
+                if (tr.style.display !== 'none') {
+                    if(currentData[idx]) {
+                        copyText += currentData[idx].join('\t') + '\n';
+                        count++;
+                    }
+                }
+            });
+
+            copyText += '\n[요약 통계]\n';
+            const footerCells = document.querySelectorAll('#summaryFooter .summary-cell');
+            const labels = ['합계', '평균', '최대값', '최소값'];
+            
+            labels.forEach((label, rIdx) => {
+                copyText += label + '\t';
+                footerCells.forEach((cell, cIdx) => { 
+                    if(cIdx>0) copyText += (cell.querySelectorAll('.summary-val')[rIdx]?.textContent || '-') + '\t'; 
+                });
+                copyText += '\n';
+            });
+
+            if (count === 0 && currentData.length > 0) { showToast('복사할 데이터가 없습니다.'); return; } 
+            else if (currentData.length === 0) { showToast('데이터가 없습니다.'); return; }
+
+            navigator.clipboard.writeText(copyText).then(() => { showToast(`${count}건 및 요약 통계 복사 완료`); });
+        }
+
+        function updateStatusDisplay(visible, total) {
+            const el = document.getElementById('totalCount');
+            if (total === 0) el.innerText = '데이터 없음';
+            else if (visible === total) el.innerText = `총 ${total}건`;
+            else el.innerHTML = `<span class="text-indigo-600 font-bold">${visible}</span> / ${total}건`;
+        }
+
+        function toggleEmptyState(isEmpty) {
+            const emptyEl = document.getElementById('emptyState');
+            if (isEmpty) {
+                emptyEl.classList.remove('hidden'); document.getElementById('spreadsheet').classList.add('opacity-0');
+            } else {
+                emptyEl.classList.add('hidden'); document.getElementById('spreadsheet').classList.remove('opacity-0');
+            }
+        }
+
+        function toggleGuide() {
+            const content = document.getElementById('guideContent');
+            const icon = document.getElementById('guideToggleIcon');
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed'); icon.classList.remove('ph-caret-down'); icon.classList.add('ph-caret-up');
+            } else {
+                content.classList.add('collapsed'); icon.classList.remove('ph-caret-up'); icon.classList.add('ph-caret-down');
+            }
+        }
+
+        let toastTimeout;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => { toast.classList.add('translate-y-20', 'opacity-0'); }, 2000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>대규모 언어 모델(LLM) 원리 학습</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; background-color: #f3f4f6; }
+        
+        .token-box { transition: all 0.3s ease; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; opacity: 0; transform: scale(0.8); }
+        .token-box:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes popIn {
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        /* 탭 활성화 스타일 */
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #1d4ed8; font-weight: 700; }
+        .tab-inactive { color: #6b7280; font-weight: 500; }
+        .tab-inactive:hover { color: #374151; border-bottom: 2px solid #d1d5db; }
+
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-gray-800">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm z-10">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-blue-100 rounded-lg text-blue-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                </div>
+                <h1 class="text-xl font-bold text-gray-900">대규모 언어 모델(LLM) 원리 학습</h1>
+            </div>
+            <p class="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">인공지능의 문장 생성 원리</p>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-8 border-b border-gray-200 mt-2">
+            <button onclick="switchTab('tab-token', this)" class="tab-btn pb-3 pt-2 px-1 tab-active transition-colors">1. 토큰화 (단어 쪼개기)</button>
+            <button onclick="switchTab('tab-predict', this)" class="tab-btn pb-3 pt-2 px-1 tab-inactive transition-colors">2. 다음 단어 예측 (확률)</button>
+            <button onclick="switchTab('tab-generate', this)" class="tab-btn pb-3 pt-2 px-1 tab-inactive transition-colors">3. 문장 자동 생성 (온도)</button>
+            <button onclick="switchTab('tab-attention', this)" class="tab-btn pb-3 pt-2 px-1 tab-inactive transition-colors">4. 문맥 이해 (어텐션)</button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto p-6 max-w-6xl mx-auto w-full">
+        
+        <!-- Tab 1: Tokenization -->
+        <div id="tab-token" class="tab-content space-y-6 fade-in">
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-5 rounded-r-lg shadow-sm">
+                <h3 class="font-bold text-blue-800 text-lg mb-2 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    토큰화(Tokenization)란?
+                </h3>
+                <p class="text-blue-900 leading-relaxed">AI는 문장을 통째로 이해하지 않고, 자신이 소화할 수 있는 가장 작은 단위인 <strong>'토큰(Token)'</strong>으로 쪼개서 분석합니다. 한글의 경우 형태소, 단어, 혹은 글자 단위로 쪼개질 수 있으며 이 조각들이 모여 AI의 언어 사전이 됩니다.</p>
+            </div>
+
+            <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                <label for="token-input" class="block text-base font-semibold text-gray-800 mb-3">분석할 문장을 입력해 보세요:</label>
+                <div class="flex gap-3 mb-6">
+                    <input type="text" id="token-input" class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg shadow-inner" value="학교 행정실에서 교직원들을 위해 공문을 작성합니다." onkeypress="if(event.key === 'Enter') runTokenization()">
+                    <button onclick="runTokenization()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-md flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.12M12 12L5 5m14 14V5"></path></svg>
+                        토큰으로 분리
+                    </button>
+                </div>
+                
+                <div class="mt-8 border-t border-gray-100 pt-6">
+                    <h4 class="text-base font-semibold text-gray-800 mb-4">🤖 AI가 인식하는 토큰 (가상 분리 결과):</h4>
+                    <div id="token-result" class="flex flex-wrap gap-2 min-h-[80px] p-6 bg-gray-50 rounded-xl border border-gray-200 shadow-inner items-center justify-center">
+                        <p class="text-gray-400 text-sm">위의 버튼을 눌러 문장을 토큰으로 쪼개보세요.</p>
+                    </div>
+                    <div class="mt-4 text-right text-gray-600">
+                        총 분리된 토큰 수: <span id="token-count" class="font-extrabold text-blue-600 text-xl">0</span> 개
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Prediction -->
+        <div id="tab-predict" class="tab-content hidden space-y-6 fade-in">
+            <div class="bg-green-50 border-l-4 border-green-500 p-5 rounded-r-lg shadow-sm">
+                <h3 class="font-bold text-green-800 text-lg mb-2 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                    다음 단어 예측 (Next Token Prediction)
+                </h3>
+                <p class="text-green-900 leading-relaxed">ChatGPT와 같은 LLM은 본질적으로 <strong>"지금까지 작성된 문맥을 바탕으로 가장 확률이 높은 다음 단어를 맞추는 확률 게임"</strong>을 합니다. 방대한 데이터를 학습하여 어떤 단어가 뒤따라올지 예측합니다.</p>
+            </div>
+
+            <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                <div class="mb-6">
+                    <h4 class="text-base font-semibold text-gray-800 mb-3 flex justify-between items-end">
+                        <span>현재 작성중인 문장:</span>
+                        <button onclick="resetPrediction()" class="text-sm text-gray-500 hover:text-red-500 flex items-center gap-1 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            초기화
+                        </button>
+                    </h4>
+                    <div id="current-sentence" class="p-5 bg-blue-50 rounded-xl border border-blue-100 text-xl font-medium text-blue-900 min-h-[80px] flex items-center flex-wrap gap-2 shadow-inner">
+                        <!-- 현재 문장 -->
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8 border-t border-gray-100 pt-8">
+                    <div>
+                        <h4 class="text-base font-semibold text-gray-800 mb-4 bg-gray-100 py-2 px-4 rounded-md inline-block">🎲 AI의 다음 단어 예측 후보</h4>
+                        <div id="prob-list" class="space-y-3">
+                            <!-- 확률 리스트 -->
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-6 rounded-xl border border-gray-200 flex flex-col justify-center items-center text-center shadow-inner">
+                        <svg class="w-16 h-16 text-green-400 mb-4 drop-shadow-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+                        <h5 class="font-bold text-gray-800 mb-2">직접 선택해 보세요</h5>
+                        <p class="text-sm text-gray-600 leading-relaxed">왼쪽의 후보 단어들 중 하나를 클릭하여<br>AI가 어떻게 문장을 이어가는지 확인하세요.<br><br>확률이 높은 단어를 선택할수록 자연스럽고,<br>낮은 단어를 선택할수록 엉뚱해집니다.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: Generation -->
+        <div id="tab-generate" class="tab-content hidden space-y-6 fade-in">
+            <div class="bg-purple-50 border-l-4 border-purple-500 p-5 rounded-r-lg shadow-sm">
+                <h3 class="font-bold text-purple-800 text-lg mb-2 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    Temperature (생성 온도)와 창의성
+                </h3>
+                <p class="text-purple-900 leading-relaxed">AI는 항상 확률 1위인 단어만 고르지 않습니다. 모델의 주요 파라미터인 <strong>'Temperature (생성 온도)'</strong> 값을 조절하여 무작위성을 부여하면 더 다양한 답변이 나옵니다.<br>이 값이 낮으면(0에 가까움) 일관되고 뻔한 답변을, 높으면(1에 가까움) 예상 밖의 창의적인 답변을 생성합니다.</p>
+            </div>
+
+            <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                
+                <div class="mb-8 bg-purple-50 p-6 rounded-xl border border-purple-100 shadow-sm">
+                    <div class="flex justify-between items-center mb-4">
+                        <label for="temperature" class="text-base font-bold text-gray-800">🌡️ Temperature 파라미터 설정: <span id="temp-val" class="text-purple-600 text-xl ml-2">0.5</span></label>
+                        <span class="text-sm font-medium px-3 py-1 bg-white rounded-full text-purple-600 border border-purple-200" id="temp-desc">적절한 균형</span>
+                    </div>
+                    <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.5" class="w-full h-3 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-purple-600" oninput="updateTemp(this.value)">
+                    <div class="flex justify-between text-sm font-semibold text-gray-500 mt-2">
+                        <span>0.0 (정확/일관됨)</span>
+                        <span>0.5 (표준)</span>
+                        <span>1.0 (창의/무작위)</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-4 mb-6">
+                    <div class="flex-1">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">시작 단어 선택:</label>
+                        <select id="start-word" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-lg bg-gray-50 cursor-pointer shadow-sm">
+                            <option value="학교">학교</option>
+                            <option value="교육청">교육청</option>
+                            <option value="선생님이">선생님이</option>
+                            <option value="학생들이">학생들이</option>
+                            <option value="장학사님이">장학사님이</option>
+                            <option value="주무관님이">주무관님이</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="autoGenerate()" id="btn-generate" class="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 shadow-md">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            AI 문장 자동 생성 시작
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-8 border-t border-gray-100 pt-6">
+                    <h4 class="text-base font-semibold text-gray-800 mb-4">✨ AI 생성 결과:</h4>
+                    <div id="auto-result" class="p-6 bg-gray-50 rounded-xl border border-gray-200 text-lg font-medium text-gray-800 min-h-[120px] shadow-inner leading-relaxed">
+                        <p class="text-gray-400 text-sm italic mt-2">버튼을 누르면 모델이 단어를 하나씩 예측하여 문장을 완성합니다.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 4: Attention Mechanism -->
+        <div id="tab-attention" class="tab-content hidden space-y-6 fade-in">
+            <div class="bg-amber-50 border-l-4 border-amber-500 p-5 rounded-r-lg shadow-sm">
+                <h3 class="font-bold text-amber-800 text-lg mb-2 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                    어텐션(Attention) 메커니즘 (3D 시각화)
+                </h3>
+                <p class="text-amber-900 leading-relaxed">현대 대규모 언어 모델(트랜스포머 모델)의 가장 핵심적인 기술입니다. AI는 문장을 읽을 때 단순히 순서대로 읽는 것이 아니라, <strong>현재 단어의 정확한 의미를 파악하기 위해 문장 내의 다른 어떤 단어들에 '집중(Attention)'해야 하는지</strong>를 수학적으로 계산합니다. 3차원 신경망 모델을 통해 이를 확인해보세요.</p>
+            </div>
+
+            <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                <div class="mb-6 text-center">
+                    <h4 class="text-lg font-bold text-gray-800 mb-2">마우스를 단어 위에 올려보세요! 🖱️</h4>
+                    <p class="text-sm text-gray-500">선택한 단어가 의미 파악을 위해 다른 단어들과 얼마나 강하게 연결되어 있는지 3D 네트워크의 <strong>선의 밝기와 노드의 크기</strong>로 나타납니다.</p>
+                </div>
+
+                <!-- 2D Hoverable Words -->
+                <div class="p-6 bg-gray-50 rounded-xl border border-gray-200 shadow-inner flex flex-wrap justify-center items-center gap-4 mb-6" id="attention-container">
+                    <!-- JavaScript로 렌더링됨 -->
+                </div>
+                
+                <!-- 3D Visualization Canvas -->
+                <div class="relative w-full h-[400px] bg-gray-900 rounded-xl overflow-hidden shadow-inner border border-gray-800" id="attention-3d-wrapper">
+                    <div id="attention-3d-container" class="absolute inset-0"></div>
+                    <div id="attention-labels" class="absolute inset-0 pointer-events-none"></div>
+                    
+                    <div class="absolute bottom-4 right-4 text-xs text-gray-400 bg-gray-800 bg-opacity-70 px-3 py-1 rounded-full pointer-events-none backdrop-blur-sm border border-gray-700">
+                        ✨ AI 신경망 내부 구조 시각화
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 커스텀 팝업 모달 -->
+    <div id="custom-popup" class="fixed inset-0 flex items-center justify-center z-50 hidden bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity opacity-0">
+        <div class="bg-white rounded-xl p-6 shadow-2xl max-w-sm w-full transform scale-95 transition-transform duration-300" id="popup-content">
+            <div class="flex items-center gap-3 mb-4 text-blue-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <h3 id="popup-title" class="text-lg font-bold text-gray-900">알림</h3>
+            </div>
+            <p id="popup-message" class="text-gray-700 mb-6 leading-relaxed text-sm">메시지 내용</p>
+            <div class="flex justify-end">
+                <button onclick="closePopup()" class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-5 py-2 rounded-lg font-semibold transition-colors focus:ring-2 focus:ring-gray-300">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 유틸리티 및 팝업 ---
+        function showPopup(message, title = "알림") {
+            document.getElementById('popup-title').innerText = title;
+            document.getElementById('popup-message').innerText = message;
+            const popup = document.getElementById('custom-popup');
+            const content = document.getElementById('popup-content');
+            
+            popup.classList.remove('hidden');
+            // setTimeout for CSS transitions to apply after display:block
+            setTimeout(() => {
+                popup.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closePopup() {
+            const popup = document.getElementById('custom-popup');
+            const content = document.getElementById('popup-content');
+            
+            popup.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            
+            setTimeout(() => {
+                popup.classList.add('hidden');
+            }, 300);
+        }
+
+        function switchTab(tabId, btnElement) {
+            // 모든 탭 컨텐츠 숨기기
+            document.querySelectorAll('.tab-content').forEach(el => {
+                el.classList.add('hidden');
+                el.classList.remove('fade-in');
+            });
+            // 선택된 탭 보이기
+            const selectedTab = document.getElementById(tabId);
+            selectedTab.classList.remove('hidden');
+            // 리플로우 강제 트리거 후 애니메이션 클래스 추가
+            void selectedTab.offsetWidth; 
+            selectedTab.classList.add('fade-in');
+
+            // 버튼 스타일 업데이트
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = "tab-btn pb-3 pt-2 px-1 tab-inactive transition-colors";
+            });
+            btnElement.className = "tab-btn pb-3 pt-2 px-1 tab-active transition-colors";
+            
+            if(tabId === 'tab-predict' && currentSentence.length === 0) {
+                resetPrediction();
+            }
+            
+            // 3D 탭 활성화 시 렌더링 시작/크기조절
+            if(tabId === 'tab-attention') {
+                if(!is3DInitialized) {
+                    setTimeout(init3DAttention, 100);
+                } else {
+                    resize3D();
+                }
+            }
+        }
+
+        // --- 탭 1: 토큰화 로직 ---
+        function runTokenization() {
+            const input = document.getElementById('token-input').value.trim();
+            if (!input) {
+                showPopup("분석할 문장을 입력해주세요.");
+                return;
+            }
+
+            const resultDiv = document.getElementById('token-result');
+            resultDiv.innerHTML = ''; // 초기화
+
+            // 가상의 한국어 토크나이저 로직 (단어 및 조사/어미 분리)
+            let tokens = [];
+            const words = input.split(/\s+/);
+            
+            words.forEach(word => {
+                // 매우 단순화된 조사/어미 분리 정규식 (교육용 시뮬레이션)
+                const match = word.match(/^(.*?)(은|는|이|가|을|를|에서|에|로|으로|합니다|입니다|이다|다|\.|,)$/);
+                if (match && match[1]) {
+                    tokens.push(match[1]);
+                    tokens.push(match[2]);
+                } else {
+                    tokens.push(word);
+                }
+            });
+
+            // 빈 토큰 제거
+            tokens = tokens.filter(t => t.length > 0);
+            
+            const colors = ['bg-red-100 text-red-800 border-red-200', 'bg-blue-100 text-blue-800 border-blue-200', 'bg-green-100 text-green-800 border-green-200', 'bg-yellow-100 text-yellow-800 border-yellow-200', 'bg-purple-100 text-purple-800 border-purple-200'];
+
+            tokens.forEach((token, index) => {
+                const colorClass = colors[index % colors.length];
+                const span = document.createElement('span');
+                span.className = `token-box px-3 py-1.5 rounded-md border font-medium text-sm ${colorClass}`;
+                span.innerText = token;
+                span.style.animationDelay = `${index * 0.05}s`;
+                resultDiv.appendChild(span);
+            });
+
+            // 통계 업데이트 카운트업 효과
+            animateValue("token-count", 0, tokens.length, 500);
+        }
+
+        function animateValue(id, start, end, duration) {
+            if (start === end) return;
+            const obj = document.getElementById(id);
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                obj.innerHTML = Math.floor(progress * (end - start) + start);
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
+
+        // --- 탭 2 & 3 공통: 언어 모델 확률 사전 (Markov Chain 방식) ---
+        // 교육청/학교 환경에 맞는 가상 확률 데이터
+        const vocabGraph = {
+            "학교": [ {w: "행정실에서", p: 0.4}, {w: "도서관에서", p: 0.2}, {w: "운동장에서", p: 0.2}, {w: "교무실에서", p: 0.2} ],
+            "교육청": [ {w: "장학사님이", p: 0.4}, {w: "주무관님이", p: 0.4}, {w: "공문을", p: 0.2} ],
+            "장학사님이": [ {w: "학교를", p: 0.5}, {w: "선생님을", p: 0.3}, {w: "공문을", p: 0.2} ],
+            "주무관님이": [ {w: "예산을", p: 0.4}, {w: "시설을", p: 0.3}, {w: "급여를", p: 0.3} ],
+            "행정실에서": [ {w: "공문을", p: 0.5}, {w: "예산을", p: 0.3}, {w: "전화를", p: 0.2} ],
+            "도서관에서": [ {w: "책을", p: 0.6}, {w: "공부를", p: 0.3}, {w: "학생들이", p: 0.1} ],
+            "운동장에서": [ {w: "체육을", p: 0.5}, {w: "축구를", p: 0.3}, {w: "학생들이", p: 0.2} ],
+            "공문을": [ {w: "작성합니다.", p: 0.4}, {w: "기안합니다.", p: 0.3}, {w: "접수합니다.", p: 0.2}, {w: "발송합니다.", p: 0.1} ],
+            "예산을": [ {w: "편성합니다.", p: 0.5}, {w: "집행합니다.", p: 0.4}, {w: "검토합니다.", p: 0.1} ],
+            "시설을": [ {w: "점검합니다.", p: 0.6}, {w: "보수합니다.", p: 0.4} ],
+            "급여를": [ {w: "계산합니다.", p: 0.7}, {w: "지급합니다.", p: 0.3} ],
+            "전화를": [ {w: "받습니다.", p: 0.7}, {w: "겁니다.", p: 0.3} ],
+            "선생님이": [ {w: "교실에서", p: 0.4}, {w: "교무실에서", p: 0.3}, {w: "학생들을", p: 0.2}, {w: "연수를", p: 0.1} ],
+            "교실에서": [ {w: "수업을", p: 0.6}, {w: "종례를", p: 0.3}, {w: "조회를", p: 0.1} ],
+            "교무실에서": [ {w: "업무를", p: 0.5}, {w: "회의를", p: 0.3}, {w: "휴식을", p: 0.2} ],
+            "학생들을": [ {w: "가르칩니다.", p: 0.5}, {w: "지도합니다.", p: 0.4}, {w: "상담합니다.", p: 0.1} ],
+            "수업을": [ {w: "진행합니다.", p: 0.7}, {w: "준비합니다.", p: 0.3} ],
+            "종례를": [ {w: "마칩니다.", p: 0.8}, {w: "합니다.", p: 0.2} ],
+            "조회를": [ {w: "시작합니다.", p: 0.9}, {w: "합니다.", p: 0.1} ],
+            "학생들이": [ {w: "급식을", p: 0.4}, {w: "교실에서", p: 0.3}, {w: "운동장에서", p: 0.2}, {w: "질문을", p: 0.1} ],
+            "학생이": [ {w: "질문을", p: 0.4}, {w: "숙제를", p: 0.4}, {w: "친구와", p: 0.2} ],
+            "급식을": [ {w: "먹습니다.", p: 0.7}, {w: "기다립니다.", p: 0.3} ],
+            "책을": [ {w: "읽습니다.", p: 0.6}, {w: "빌립니다.", p: 0.3}, {w: "반납합니다.", p: 0.1} ],
+            "체육을": [ {w: "합니다.", p: 0.9}, {w: "배웁니다.", p: 0.1} ],
+            "축구를": [ {w: "합니다.", p: 0.8}, {w: "구경합니다.", p: 0.2} ],
+            "업무를": [ {w: "처리합니다.", p: 0.7}, {w: "봅니다.", p: 0.3} ],
+            "회의를": [ {w: "진행합니다.", p: 0.6}, {w: "마칩니다.", p: 0.3}, {w: "준비합니다.", p: 0.1} ],
+            "학교를": [ {w: "방문합니다.", p: 0.7}, {w: "지원합니다.", p: 0.3} ],
+            "선생님을": [ {w: "만납니다.", p: 0.6}, {w: "도와줍니다.", p: 0.4} ],
+            "연수를": [ {w: "받습니다.", p: 0.6}, {w: "기획합니다.", p: 0.3}, {w: "진행합니다.", p: 0.1} ],
+            "질문을": [ {w: "합니다.", p: 0.8}, {w: "받습니다.", p: 0.2} ],
+            "숙제를": [ {w: "제출합니다.", p: 0.5}, {w: "합니다.", p: 0.4}, {w: "까먹습니다.", p: 0.1} ],
+            "친구와": [ {w: "대화합니다.", p: 0.5}, {w: "놉니다.", p: 0.4}, {w: "다툽니다.", p: 0.1} ],
+            "휴식을": [ {w: "취합니다.", p: 1.0} ]
+        };
+
+        // --- 탭 2: 다음 단어 예측 로직 ---
+        let currentSentence = [];
+        let currentWord = "학교"; // 시작 단어 기본값
+
+        const startWords = ["학교", "교육청", "선생님이", "학생들이", "장학사님이", "주무관님이", "학생이"];
+
+        function resetPrediction() {
+            // 초기화 시 다양한 시작 단어 중 하나를 무작위로 선택
+            const randomWord = startWords[Math.floor(Math.random() * startWords.length)];
+            currentSentence = [randomWord];
+            currentWord = randomWord;
+            updateSentenceUI();
+            renderPredictionOptions(currentWord);
+        }
+
+        function updateSentenceUI() {
+            const container = document.getElementById('current-sentence');
+            container.innerHTML = '';
+            currentSentence.forEach(word => {
+                const span = document.createElement('span');
+                span.className = 'px-2 py-1 bg-white rounded shadow-sm border border-blue-100 fade-in';
+                span.innerText = word;
+                container.appendChild(span);
+            });
+        }
+
+        function selectNextWord(word) {
+            currentSentence.push(word);
+            currentWord = word;
+            updateSentenceUI();
+            renderPredictionOptions(currentWord);
+        }
+
+        function renderPredictionOptions(word) {
+            const listContainer = document.getElementById('prob-list');
+            listContainer.innerHTML = '';
+
+            const options = vocabGraph[word];
+            
+            if (!options) {
+                listContainer.innerHTML = '<div class="p-4 bg-gray-50 text-gray-500 rounded border text-center text-sm font-medium">문장이 완성되었습니다. (더 이상 예측 후보가 없습니다)</div>';
+                return;
+            }
+
+            options.forEach((opt, index) => {
+                const percentage = Math.round(opt.p * 100);
+                // 막대 그래프 너비 계산
+                const barWidth = `${percentage}%`;
+                
+                // 확률에 따른 색상 변화
+                let colorClass = "bg-green-500";
+                if (index === 1) colorClass = "bg-green-400";
+                if (index >= 2) colorClass = "bg-green-300";
+
+                const html = `
+                    <div onclick="selectNextWord('${opt.w}')" class="group cursor-pointer bg-white p-3 rounded-lg border border-gray-200 hover:border-green-500 hover:shadow-md transition-all relative overflow-hidden">
+                        <div class="absolute left-0 top-0 bottom-0 ${colorClass} opacity-10 transition-all group-hover:opacity-20" style="width: ${barWidth}"></div>
+                        <div class="flex justify-between items-center relative z-10">
+                            <span class="font-bold text-gray-800 group-hover:text-green-700 transition-colors">${opt.w}</span>
+                            <div class="flex items-center gap-3">
+                                <span class="text-sm font-semibold ${index === 0 ? 'text-green-600' : 'text-gray-500'}">${percentage}%</span>
+                                <svg class="w-4 h-4 text-gray-300 group-hover:text-green-500 transform group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                listContainer.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        // --- 탭 3: 온도와 자동 생성 로직 ---
+        function updateTemp(val) {
+            document.getElementById('temp-val').innerText = parseFloat(val).toFixed(1);
+            const desc = document.getElementById('temp-desc');
+            
+            if (val == 0.0) {
+                desc.innerText = "로봇처럼 일관됨";
+                desc.className = "text-sm font-medium px-3 py-1 bg-white rounded-full text-blue-600 border border-blue-200";
+            } else if (val <= 0.3) {
+                desc.innerText = "조금 일관됨";
+                desc.className = "text-sm font-medium px-3 py-1 bg-white rounded-full text-indigo-600 border border-indigo-200";
+            } else if (val <= 0.7) {
+                desc.innerText = "적절한 균형";
+                desc.className = "text-sm font-medium px-3 py-1 bg-white rounded-full text-purple-600 border border-purple-200";
+            } else {
+                desc.innerText = "창의적 (예상 밖)";
+                desc.className = "text-sm font-medium px-3 py-1 bg-white rounded-full text-pink-600 border border-pink-200";
+            }
+        }
+
+        // 온도 적용하여 확률 변형 (소프트맥스 응용 시뮬레이션)
+        function applyTemperature(probs, temp) {
+            if (temp == 0) {
+                // 온도가 0이면 무조건 가장 확률이 높은 것 선택 (Greedy)
+                let maxIdx = 0;
+                for(let i=1; i<probs.length; i++) {
+                    if(probs[i].p > probs[maxIdx].p) maxIdx = i;
+                }
+                return probs.map((item, idx) => ({ w: item.w, p: idx === maxIdx ? 1.0 : 0.0 }));
+            }
+            
+            // 온도 적용 공식: p^(1/T) 후 정규화
+            // (실제 LLM의 Logits / T 공식의 확률 버전 시뮬레이션)
+            let weights = probs.map(item => Math.pow(item.p, 1 / temp));
+            let sum = weights.reduce((a, b) => a + b, 0);
+            
+            return probs.map((item, idx) => ({
+                w: item.w,
+                p: weights[idx] / sum
+            }));
+        }
+
+        // 가중치에 따른 랜덤 뽑기
+        function weightedRandomChoice(probs) {
+            const rand = Math.random();
+            let cumulative = 0;
+            for (let i = 0; i < probs.length; i++) {
+                cumulative += probs[i].p;
+                if (rand <= cumulative) {
+                    return probs[i].w;
+                }
+            }
+            return probs[probs.length - 1].w; // Fallback
+        }
+
+        async function autoGenerate() {
+            const btn = document.getElementById('btn-generate');
+            btn.disabled = true;
+            btn.classList.add('opacity-70', 'cursor-not-allowed');
+            btn.innerHTML = `<svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 생성 중...`;
+
+            const startWord = document.getElementById('start-word').value;
+            const temp = parseFloat(document.getElementById('temperature').value);
+            const container = document.getElementById('auto-result');
+            
+            container.innerHTML = `<span class="px-2 py-1 bg-white rounded shadow-sm border border-purple-100 fade-in inline-block m-1">${startWord}</span>`;
+            
+            let current = startWord;
+            let sentenceLength = 1;
+            const maxLength = 10; // 너무 길어지지 않게 제한
+
+            // 타이머를 이용해 단어가 하나씩 나타나는 시각적 효과
+            const generateStep = async () => {
+                const options = vocabGraph[current];
+                if (!options || sentenceLength >= maxLength) {
+                    // 생성 완료
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-70', 'cursor-not-allowed');
+                    btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg> AI 문장 자동 생성 시작`;
+                    return;
+                }
+
+                // 1. 온도 적용된 확률 계산
+                const tempAdjustedProbs = applyTemperature(options, temp);
+                
+                // 2. 단어 선택
+                const nextWord = weightedRandomChoice(tempAdjustedProbs);
+                
+                // 3. UI 업데이트
+                const span = document.createElement('span');
+                span.className = 'px-2 py-1 bg-white rounded shadow-sm border border-purple-100 fade-in inline-block m-1';
+                span.innerText = nextWord;
+                container.appendChild(span);
+                
+                current = nextWord;
+                sentenceLength++;
+
+                // 다음 단어 생성 전 약간의 지연 시간 (AI가 고민하는 듯한 효과)
+                setTimeout(generateStep, 600);
+            };
+
+            setTimeout(generateStep, 600);
+        }
+
+        // 초기화
+        window.onload = () => {
+            // 강제로 첫번째 탭 버튼에 active 클래스가 있도록 초기화
+            // (HTML 상에는 이미 설정되어 있지만 안전하게 보장)
+            const tokenInput = document.getElementById('token-input');
+            tokenInput.focus();
+            
+            // 어텐션 데이터 렌더링
+            renderAttention();
+        };
+
+        // --- 탭 4: 어텐션(Attention) 시뮬레이션 로직 ---
+        const attentionData = {
+            // 행정실 상황에 맞는 예문
+            tokens: ["행정실", "김주무관은", "내일", "교장선생님께", "결재받을", "예산", "기안문을", "긴급히", "수정했다."],
+            // 각 단어(인덱스)가 의미 파악을 위해 다른 단어들에게 가지는 가상의 어텐션 가중치 (0.0 ~ 1.0)
+            weights: [
+                [1.0, 0.8, 0.1, 0.2, 0.1, 0.4, 0.2, 0.1, 0.3], // 0: 행정실
+                [0.7, 1.0, 0.2, 0.3, 0.4, 0.2, 0.5, 0.6, 0.9], // 1: 김주무관은 (누가 수정했나?)
+                [0.1, 0.2, 1.0, 0.5, 0.8, 0.1, 0.2, 0.6, 0.4], // 2: 내일 (언제 결재받나?)
+                [0.1, 0.2, 0.6, 1.0, 0.9, 0.2, 0.5, 0.1, 0.2], // 3: 교장선생님께 (누구에게 결재?)
+                [0.1, 0.3, 0.8, 0.9, 1.0, 0.5, 0.8, 0.2, 0.4], // 4: 결재받을 (무엇을? 누구에게?)
+                [0.4, 0.2, 0.1, 0.2, 0.4, 1.0, 0.9, 0.1, 0.3], // 5: 예산 (어떤 기안문?)
+                [0.2, 0.6, 0.2, 0.4, 0.8, 0.9, 1.0, 0.4, 0.8], // 6: 기안문을 (무엇을 수정? 무엇을 결재?)
+                [0.1, 0.5, 0.4, 0.1, 0.2, 0.1, 0.3, 1.0, 0.8], // 7: 긴급히 (어떻게 수정?)
+                [0.2, 0.9, 0.3, 0.2, 0.4, 0.2, 0.8, 0.8, 1.0]  // 8: 수정했다. (누가? 무엇을? 어떻게?)
+            ]
+        };
+
+        function renderAttention() {
+            const container = document.getElementById('attention-container');
+            container.innerHTML = '';
+            
+            attentionData.tokens.forEach((token, index) => {
+                const span = document.createElement('span');
+                span.className = 'attention-token text-xl font-bold px-4 py-2 rounded-xl cursor-pointer transition-all duration-300 text-gray-700 bg-white border-2 border-gray-200 shadow-sm relative z-10';
+                span.innerText = token;
+                span.dataset.index = index;
+                
+                // 마우스 오버 이벤트 (어텐션 가중치 시각화)
+                span.addEventListener('mouseenter', () => highlightAttention(index));
+                // 마우스 아웃 이벤트 (초기화)
+                span.addEventListener('mouseleave', resetAttention);
+                
+                container.appendChild(span);
+            });
+        }
+
+        // --- 3D 시각화 글로벌 변수 ---
+        let scene, camera, renderer, sceneGroup;
+        let nodes3D = [];
+        let lines3D = [];
+        let labels3D = [];
+        let is3DInitialized = false;
+
+        function init3DAttention() {
+            const container = document.getElementById('attention-3d-container');
+            if (!container || !window.THREE) return;
+            container.innerHTML = '';
+            
+            scene = new THREE.Scene();
+            // 배경색을 투명하게 하여 부모 div의 bg-gray-900이 보이게 함
+            
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(0, 8, 14);
+            camera.lookAt(0, 0, 0);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            sceneGroup = new THREE.Group();
+            scene.add(sceneGroup);
+
+            // 조명 추가
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(5, 10, 5);
+            scene.add(dirLight);
+
+            const numNodes = attentionData.tokens.length;
+            const radius = 4.5;
+            const labelContainer = document.getElementById('attention-labels');
+            labelContainer.innerHTML = '';
+
+            // 노드(단어 구) 생성
+            for (let i = 0; i < numNodes; i++) {
+                const geo = new THREE.SphereGeometry(0.4, 32, 32);
+                const mat = new THREE.MeshPhongMaterial({ color: 0x3b82f6, shininess: 80 }); // 블루
+                const sphere = new THREE.Mesh(geo, mat);
+                
+                // 원형 배치
+                const angle = (i / numNodes) * Math.PI * 2;
+                sphere.position.x = Math.cos(angle) * radius;
+                sphere.position.z = Math.sin(angle) * radius;
+                sphere.position.y = Math.sin(angle * 3) * 0.5; // 약간의 위아래 굴곡
+                
+                sphere.userData = { index: i, baseScale: 1, targetColor: new THREE.Color(0x3b82f6) };
+                sceneGroup.add(sphere);
+                nodes3D.push(sphere);
+
+                // HTML 텍스트 라벨 생성
+                const label = document.createElement('div');
+                label.className = 'absolute text-xs font-bold text-gray-200 bg-gray-800 bg-opacity-80 px-2 py-1 rounded shadow border border-gray-600 transform -translate-x-1/2 -translate-y-1/2 transition-opacity duration-300';
+                label.innerText = attentionData.tokens[i];
+                labelContainer.appendChild(label);
+                labels3D.push({ el: label, mesh: sphere });
+
+                lines3D[i] = [];
+            }
+
+            // 노드 간 연결 선 생성
+            for (let i = 0; i < numNodes; i++) {
+                for (let j = 0; j < numNodes; j++) {
+                    if (i === j) { lines3D[i].push(null); continue; }
+                    
+                    const lineGeo = new THREE.BufferGeometry().setFromPoints([nodes3D[i].position, nodes3D[j].position]);
+                    const lineMat = new THREE.LineBasicMaterial({ 
+                        color: 0xffffff, 
+                        transparent: true, 
+                        opacity: 0.03, // 기본 상태는 매우 흐릿하게
+                        linewidth: 1
+                    });
+                    const line = new THREE.Line(lineGeo, lineMat);
+                    line.userData = { targetOpacity: 0.03, targetColor: new THREE.Color(0xffffff) };
+                    sceneGroup.add(line);
+                    lines3D[i].push(line);
+                }
+            }
+
+            window.addEventListener('resize', resize3D);
+            is3DInitialized = true;
+            animate3D();
+        }
+
+        function resize3D() {
+            const container = document.getElementById('attention-3d-wrapper');
+            if(!container || !camera || !renderer) return;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+            if(document.getElementById('tab-attention').classList.contains('hidden')) return;
+
+            // 전체 씬 천천히 회전
+            sceneGroup.rotation.y += 0.001;
+            
+            const time = Date.now() * 0.002;
+            
+            // 부드러운 애니메이션 (Lerp)
+            nodes3D.forEach((node, i) => {
+                // 크기 보간
+                node.scale.lerp(new THREE.Vector3(node.userData.baseScale, node.userData.baseScale, node.userData.baseScale), 0.1);
+                // 색상 보간
+                node.material.color.lerp(node.userData.targetColor, 0.1);
+                // 떠다니는 효과
+                node.position.y += Math.sin(time + i) * 0.005;
+            });
+
+            // 선 위치 업데이트 및 투명도/색상 보간
+            for (let i = 0; i < nodes3D.length; i++) {
+                for (let j = 0; j < nodes3D.length; j++) {
+                    if (i === j || !lines3D[i][j]) continue;
+                    const line = lines3D[i][j];
+                    line.geometry.setFromPoints([nodes3D[i].position, nodes3D[j].position]);
+                    line.material.opacity += (line.userData.targetOpacity - line.material.opacity) * 0.1;
+                    line.material.color.lerp(line.userData.targetColor, 0.1);
+                }
+            }
+
+            // HTML 라벨 2D 위치 업데이트
+            const container = document.getElementById('attention-3d-wrapper');
+            const halfWidth = container.clientWidth / 2;
+            const halfHeight = container.clientHeight / 2;
+
+            labels3D.forEach(l => {
+                const pos = l.mesh.getWorldPosition(new THREE.Vector3());
+                pos.project(camera);
+
+                const x = (pos.x * halfWidth) + halfWidth;
+                const y = -(pos.y * halfHeight) + halfHeight;
+
+                l.el.style.left = `${x}px`;
+                l.el.style.top = `${y - 25}px`;
+                // 카메라 뒤로 가면 숨기기
+                l.el.style.opacity = pos.z > 1 ? '0' : '1';
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        function highlightAttention(hoverIndex) {
+            // 1. 기존 2D 버튼 스타일링
+            const tokens = document.querySelectorAll('.attention-token');
+            const weights = attentionData.weights[hoverIndex];
+            
+            tokens.forEach((tokenEl, idx) => {
+                const weight = weights[idx];
+                
+                if (idx === hoverIndex) {
+                    tokenEl.style.backgroundColor = '#f59e0b'; // amber-500
+                    tokenEl.style.color = 'white';
+                    tokenEl.style.transform = 'scale(1.1) translateY(-4px)';
+                    tokenEl.style.borderColor = '#d97706';
+                } else {
+                    const bgOpacity = Math.max(0, weight - 0.1);
+                    tokenEl.style.backgroundColor = `rgba(245, 158, 11, ${bgOpacity})`;
+                    tokenEl.style.color = weight > 0.6 ? 'white' : '#374151';
+                    tokenEl.style.transform = 'scale(1) translateY(0)';
+                    tokenEl.style.borderColor = `rgba(245, 158, 11, ${Math.max(0.2, weight)})`;
+                }
+            });
+
+            // 2. 3D 씬 업데이트 (목표값 설정)
+            if(!is3DInitialized) return;
+            
+            nodes3D.forEach((node, idx) => {
+                const weight = weights[idx];
+                
+                if (idx === hoverIndex) {
+                    // 마우스를 올린 메인 노드
+                    node.userData.baseScale = 1.8;
+                    node.userData.targetColor.setHex(0xf59e0b); // Amber
+                } else {
+                    // 연관된 타겟 노드들 (가중치에 따라 크기와 밝기 결정)
+                    node.userData.baseScale = 0.8 + (weight * 1.5);
+                    // 연관성이 높을수록 주황색에 가깝게, 낮으면 파란색 유지
+                    const colorLerp = new THREE.Color(0x3b82f6).lerp(new THREE.Color(0xf59e0b), weight);
+                    node.userData.targetColor.copy(colorLerp);
+                }
+
+                // 선 상태 업데이트
+                if (idx !== hoverIndex && lines3D[hoverIndex][idx]) {
+                    const line = lines3D[hoverIndex][idx];
+                    line.userData.targetOpacity = weight > 0.1 ? weight * 0.9 : 0.03; // 가중치에 비례한 선명도
+                    line.userData.targetColor.copy(node.userData.targetColor); // 노드 색상과 맞춤
+                }
+                
+                // 메인 노드에서 출발하지 않는 선들은 숨김
+                for(let j=0; j<nodes3D.length; j++) {
+                    if(idx !== hoverIndex && idx !== j && lines3D[idx][j]) {
+                        lines3D[idx][j].userData.targetOpacity = 0.01;
+                    }
+                }
+            });
+        }
+
+        function resetAttention() {
+            // 1. 기존 2D 버튼 리셋
+            const tokens = document.querySelectorAll('.attention-token');
+            tokens.forEach(tokenEl => {
+                tokenEl.style.backgroundColor = 'white';
+                tokenEl.style.color = '#374151';
+                tokenEl.style.transform = 'scale(1) translateY(0)';
+                tokenEl.style.borderColor = '#e5e7eb';
+            });
+
+            // 2. 3D 씬 리셋
+            if(!is3DInitialized) return;
+
+            nodes3D.forEach((node, idx) => {
+                node.userData.baseScale = 1.0;
+                node.userData.targetColor.setHex(0x3b82f6); // 기본 파란색
+                
+                for(let j=0; j<nodes3D.length; j++) {
+                    if(idx !== j && lines3D[idx][j]) {
+                        lines3D[idx][j].userData.targetOpacity = 0.03;
+                        lines3D[idx][j].userData.targetColor.setHex(0xffffff);
+                    }
+                }
+            });
+        }
+
+    </script>
+</body>
+</html>

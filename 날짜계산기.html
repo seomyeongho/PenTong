@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>날짜 및 기간 계산기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f8fafc;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+            }
+
+        .tab-content {
+            display: none;
+        }
+
+            .tab-content.active {
+                display: block;
+                animation: fadeIn 0.3s ease-in-out;
+            }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            opacity: 0.6;
+            transition: 0.2s;
+        }
+
+            input[type="date"]::-webkit-calendar-picker-indicator:hover {
+                opacity: 1;
+            }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <header class="bg-white shadow-sm border-b border-slate-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <h1 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            날짜 및 기간 계산기
+        </h1>
+        <button onclick="setTodayAll()" class="text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors font-medium">
+            모든 기준일 '오늘'로 설정
+        </button>
+    </header>
+
+    <main class="flex-1 overflow-auto p-6">
+        <div class="max-w-4xl mx-auto space-y-6">
+
+            <div class="flex space-x-1 bg-slate-200/50 p-1 rounded-xl">
+                <button onclick="switchTab('period')" id="tab-period" class="flex-1 py-2.5 text-sm font-semibold rounded-lg bg-white text-indigo-700 shadow-sm transition-all">두 날짜 사이 기간</button>
+                <button onclick="switchTab('target')" id="tab-target" class="flex-1 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-800 hover:bg-white/50 transition-all">기준일 전/후 날짜</button>
+                <button onclick="switchTab('dday')" id="tab-dday" class="flex-1 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-800 hover:bg-white/50 transition-all">D-Day 계산</button>
+            </div>
+
+            <div id="content-period" class="tab-content active bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="w-1.5 h-5 bg-indigo-500 rounded-full"></span>
+                    두 날짜 사이의 기간을 계산합니다
+                </h2>
+
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">시작일</label>
+                        <div class="relative flex items-center">
+                            <input type="text" id="p-start-date"
+                                   onfocus="onFocusDate(this)"
+                                   oninput="onInputDate(this, calcPeriod)"
+                                   onblur="onBlurDate(this, calcPeriod)"
+                                   onkeydown="onKeyDownDate(event, this)"
+                                   placeholder="예: 20260629, 2026.1.1"
+                                   class="w-full border border-slate-300 rounded-lg pl-4 pr-10 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm sm:text-base">
+                            <span class="absolute right-3 text-slate-400 pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            </span>
+                            <input type="date" onchange="syncFromPicker(this, 'p-start-date', calcPeriod)" class="absolute right-3 w-5 h-5 opacity-0 cursor-pointer">
+                        </div>
+                        <div class="flex justify-between items-start mt-1.5 px-1 min-h-[16px]">
+                            <p id="err-p-start-date" class="text-xs text-rose-500 font-medium hidden"></p>
+                            <p id="day-p-start-date" class="text-xs text-indigo-600 font-semibold ml-auto hidden"></p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">종료일</label>
+                        <div class="relative flex items-center">
+                            <input type="text" id="p-end-date"
+                                   onfocus="onFocusDate(this)"
+                                   oninput="onInputDate(this, calcPeriod)"
+                                   onblur="onBlurDate(this, calcPeriod)"
+                                   onkeydown="onKeyDownDate(event, this)"
+                                   placeholder="예: 20260629, 2026.1.1"
+                                   class="w-full border border-slate-300 rounded-lg pl-4 pr-10 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm sm:text-base">
+                            <span class="absolute right-3 text-slate-400 pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            </span>
+                            <input type="date" onchange="syncFromPicker(this, 'p-end-date', calcPeriod)" class="absolute right-3 w-5 h-5 opacity-0 cursor-pointer">
+                        </div>
+                        <div class="flex justify-between items-start mt-1.5 px-1 min-h-[16px]">
+                            <p id="err-p-end-date" class="text-xs text-rose-500 font-medium hidden"></p>
+                            <p id="day-p-end-date" class="text-xs text-indigo-600 font-semibold ml-auto hidden"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <input type="checkbox" id="p-inclusive" onchange="calcPeriod()" class="w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" checked>
+                    <label for="p-inclusive" class="text-sm font-medium text-slate-700 cursor-pointer select-none">시작일 포함 (초일산입 - 행정업무 기준)</label>
+                </div>
+
+                <div id="p-result" class="mt-6 hidden bg-indigo-50 border border-indigo-100 rounded-xl p-5">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-indigo-50">
+                            <p class="text-xs text-slate-500 font-semibold mb-1">총 일수</p>
+                            <p class="text-xl font-bold text-indigo-700" id="p-res-days">-</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-indigo-50">
+                            <p class="text-xs text-slate-500 font-semibold mb-1">총 주(Weeks)</p>
+                            <p class="text-xl font-bold text-indigo-700" id="p-res-weeks">-</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-indigo-50">
+                            <p class="text-xs text-slate-500 font-semibold mb-1">평일 (월~금)</p>
+                            <p class="text-xl font-bold text-teal-600" id="p-res-weekdays">-</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-indigo-50">
+                            <p class="text-xs text-slate-500 font-semibold mb-1">주말 (토,일)</p>
+                            <p class="text-xl font-bold text-rose-500" id="p-res-weekends">-</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-white p-4 rounded-lg shadow-sm border border-indigo-50 text-center">
+                        <p class="text-xs text-slate-500 font-semibold mb-1">연/월/일 변환 (민법상 역에 의한 계산)</p>
+                        <p class="text-lg font-bold text-slate-800" id="p-res-ymd">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="content-target" class="tab-content bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="w-1.5 h-5 bg-teal-500 rounded-full"></span>
+                    특정 기간이 지난 후/전의 날짜를 계산합니다
+                    <span class="text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded-md ml-2 font-medium">민법 제160조 적용</span>
+                </h2>
+
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">기준일 (시작일)</label>
+                    <div class="relative flex items-center w-full md:w-1/2">
+                        <input type="text" id="t-base-date"
+                               onfocus="onFocusDate(this)"
+                               oninput="onInputDate(this, calcTargetDate)"
+                               onblur="onBlurDate(this, calcTargetDate)"
+                               onkeydown="onKeyDownDate(event, this)"
+                               placeholder="예: 20260629, 2026.1.1"
+                               class="w-full border border-slate-300 rounded-lg pl-4 pr-10 py-2.5 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all">
+                        <span class="absolute right-3 text-slate-400 pointer-events-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        </span>
+                        <input type="date" onchange="syncFromPicker(this, 't-base-date', calcTargetDate)" class="absolute right-3 w-5 h-5 opacity-0 cursor-pointer">
+                    </div>
+                    <div class="w-full md:w-1/2 flex justify-between items-start mt-1.5 px-1 min-h-[16px]">
+                        <p id="err-t-base-date" class="text-xs text-rose-500 font-medium hidden"></p>
+                        <p id="day-t-base-date" class="text-xs text-teal-600 font-semibold ml-auto hidden"></p>
+                    </div>
+                </div>
+
+                <div class="flex flex-col md:flex-row gap-4 mb-6 items-start md:items-end">
+                    <div class="flex-1 w-full">
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">더하거나 뺄 기간</label>
+                        <div class="flex gap-2">
+                            <div class="flex-1 flex items-center border border-slate-300 rounded-lg px-3 focus-within:ring-2 focus-within:ring-teal-500 bg-white">
+                                <input type="number" id="t-add-year" oninput="calcTargetDate()" placeholder="0" min="0" class="w-full py-2.5 outline-none bg-transparent text-right font-semibold text-lg">
+                                <span class="text-slate-500 ml-2 font-medium w-6">년</span>
+                            </div>
+                            <div class="flex-1 flex items-center border border-slate-300 rounded-lg px-3 focus-within:ring-2 focus-within:ring-teal-500 bg-white">
+                                <input type="number" id="t-add-month" oninput="calcTargetDate()" placeholder="0" min="0" class="w-full py-2.5 outline-none bg-transparent text-right font-semibold text-lg">
+                                <span class="text-slate-500 ml-2 font-medium w-6">개월</span>
+                            </div>
+                            <div class="flex-1 flex items-center border border-slate-300 rounded-lg px-3 focus-within:ring-2 focus-within:ring-teal-500 bg-white">
+                                <input type="number" id="t-add-day" oninput="calcTargetDate()" placeholder="0" min="0" class="w-full py-2.5 outline-none bg-transparent text-right font-semibold text-lg">
+                                <span class="text-slate-500 ml-2 font-medium w-6">일</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex bg-slate-100 rounded-lg p-1 w-full md:w-auto self-end h-[46px]">
+                        <label class="flex-1 md:w-20 cursor-pointer relative">
+                            <input type="radio" name="t-direction" value="after" onchange="calcTargetDate()" class="peer sr-only" checked>
+                            <div class="w-full h-full flex items-center justify-center rounded-md font-medium text-slate-500 peer-checked:bg-white peer-checked:text-teal-700 peer-checked:shadow-sm transition-all">이후 (+)</div>
+                        </label>
+                        <label class="flex-1 md:w-20 cursor-pointer relative">
+                            <input type="radio" name="t-direction" value="before" onchange="calcTargetDate()" class="peer sr-only">
+                            <div class="w-full h-full flex items-center justify-center rounded-md font-medium text-slate-500 peer-checked:bg-white peer-checked:text-teal-700 peer-checked:shadow-sm transition-all">이전 (-)</div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <input type="checkbox" id="t-inclusive" onchange="calcTargetDate()" class="w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500 cursor-pointer" checked>
+                    <label for="t-inclusive" class="text-sm font-medium text-slate-700 cursor-pointer select-none">기준일을 1일째로 포함하여 계산 (예: 100일째 되는 날)</label>
+                </div>
+
+                <div id="t-result" class="mt-6 hidden bg-teal-50 border border-teal-100 rounded-xl p-6 text-center">
+                    <p class="text-sm text-slate-600 font-semibold mb-2">계산된 날짜</p>
+                    <p class="text-3xl font-extrabold text-teal-800 tracking-tight" id="t-res-date">-</p>
+                    <p class="text-sm text-teal-600 mt-2 font-medium" id="t-res-desc">-</p>
+                </div>
+            </div>
+
+            <div id="content-dday" class="tab-content bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="w-1.5 h-5 bg-rose-500 rounded-full"></span>
+                    오늘을 기준으로 D-Day를 계산합니다
+                </h2>
+
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">목표일 (행사일, 마감일 등)</label>
+                    <div class="relative flex items-center w-full md:w-1/2">
+                        <input type="text" id="d-target-date"
+                               onfocus="onFocusDate(this)"
+                               oninput="onInputDate(this, calcDday)"
+                               onblur="onBlurDate(this, calcDday)"
+                               onkeydown="onKeyDownDate(event, this)"
+                               placeholder="예: 20260629, 2026.1.1"
+                               class="w-full border border-slate-300 rounded-lg pl-4 pr-10 py-2.5 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all">
+                        <span class="absolute right-3 text-slate-400 pointer-events-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        </span>
+                        <input type="date" onchange="syncFromPicker(this, 'd-target-date', calcDday)" class="absolute right-3 w-5 h-5 opacity-0 cursor-pointer">
+                    </div>
+                    <div class="w-full md:w-1/2 flex justify-between items-start mt-1.5 px-1 min-h-[16px]">
+                        <p id="err-d-target-date" class="text-xs text-rose-500 font-medium hidden"></p>
+                        <p id="day-d-target-date" class="text-xs text-rose-600 font-semibold ml-auto hidden"></p>
+                    </div>
+                </div>
+
+                <div id="d-result" class="mt-6 hidden bg-rose-50 border border-rose-100 rounded-xl p-8 text-center relative overflow-hidden">
+                    <div class="absolute -right-4 -top-4 text-rose-100 opacity-50">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-32 w-32" fill="currentColor" viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 002 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z" /></svg>
+                    </div>
+                    <div class="relative z-10">
+                        <p class="text-lg text-slate-700 font-semibold mb-2" id="d-res-title">목표일까지</p>
+                        <p class="text-5xl font-extrabold text-rose-600 tracking-tighter" id="d-res-dday">-</p>
+                        <p class="text-md text-rose-700 mt-4 font-medium" id="d-res-date">-</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <div id="custom-alert" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden transform scale-95 transition-transform duration-200" id="custom-alert-box">
+            <div class="p-6 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-amber-100 mb-4">
+                    <svg class="h-6 w-6 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <h3 class="text-lg leading-6 font-bold text-slate-900" id="custom-alert-title">알림</h3>
+                <div class="mt-2">
+                    <p class="text-sm text-slate-500 font-medium" id="custom-alert-msg"></p>
+                </div>
+            </div>
+            <div class="bg-slate-50 px-4 py-3 sm:px-6 flex justify-center">
+                <button type="button" onclick="closeAlert()" class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm transition-colors">
+                    확인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-popup" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-800/95 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-xl z-50 opacity-0 translate-y-2 pointer-events-none transition-all duration-300">
+    </div>
+
+    <script>
+        // 1. 하단 토스트 알림 함수
+        function showToast(message) {
+            const toast = document.getElementById('toast-popup');
+            toast.innerText = message;
+
+            // 애니메이션 적용하여 표시
+            toast.classList.remove('opacity-0', 'translate-y-2', 'pointer-events-none');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            if (window.toastTimeout) clearTimeout(window.toastTimeout);
+
+            // 2.5초 후 자동으로 사라짐
+            window.toastTimeout = setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-2', 'pointer-events-none');
+            }, 2500);
+        }
+
+        // 2. 우측 달력 피커로 날짜 선택 시 텍스트 필드에 동기화
+        function syncFromPicker(picker, textInputId, calcFunc) {
+            if (picker.value) {
+                document.getElementById(textInputId).value = picker.value;
+                clearDateError(textInputId);
+
+                let res = parseSmartDate(picker.value);
+                if (res.valid) {
+                    showDayOfWeek(textInputId, res.dayOfWeek);
+                }
+                calcFunc();
+            }
+        }
+
+        // --- UI Functions ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.flex-1.py-2\\.5').forEach(btn => {
+                btn.className = "flex-1 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-800 hover:bg-white/50 transition-all";
+            });
+            const activeBtn = document.getElementById(`tab-${tabId}`);
+            let bgColor = tabId === 'period' ? 'text-indigo-700' : (tabId === 'target' ? 'text-teal-700' : 'text-rose-700');
+            activeBtn.className = `flex-1 py-2.5 text-sm font-bold rounded-lg bg-white ${bgColor} shadow-sm transition-all`;
+
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`content-${tabId}`).classList.add('active');
+        }
+
+        // Custom Alert
+        function showAlert(message, title = "알림") {
+            document.getElementById('custom-alert-msg').innerText = message;
+            document.getElementById('custom-alert-title').innerText = title;
+            const alertEl = document.getElementById('custom-alert');
+            const alertBox = document.getElementById('custom-alert-box');
+
+            alertEl.classList.remove('hidden');
+            void alertEl.offsetWidth;
+
+            alertEl.classList.remove('opacity-0');
+            alertBox.classList.remove('scale-95');
+            alertBox.classList.add('scale-100');
+        }
+
+        function closeAlert() {
+            const alertEl = document.getElementById('custom-alert');
+            const alertBox = document.getElementById('custom-alert-box');
+
+            alertEl.classList.add('opacity-0');
+            alertBox.classList.remove('scale-100');
+            alertBox.classList.add('scale-95');
+
+            setTimeout(() => {
+                alertEl.classList.add('hidden');
+            }, 200);
+        }
+
+        function getTodayStr() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        window.onload = () => {
+            setTodayAll();
+        };
+
+        // --- Calculation Logic ---
+        function getCivilAddedDate(baseStr, addY, addM, addD, direction, isInclusive) {
+            let baseDate = parseDateString(baseStr);
+
+            let y = baseDate.getFullYear();
+            let m = baseDate.getMonth();
+            let d = baseDate.getDate();
+
+            let targetY = y + (addY * direction);
+            let targetM = m + (addM * direction);
+
+            let tempDate = new Date(targetY, targetM, 1);
+            targetY = tempDate.getFullYear();
+            targetM = tempDate.getMonth();
+
+            let lastDayOfMonth = new Date(targetY, targetM + 1, 0).getDate();
+            let resultDate;
+
+            if (addY > 0 || addM > 0) {
+                if (d > lastDayOfMonth) {
+                    resultDate = new Date(targetY, targetM, lastDayOfMonth);
+                } else {
+                    resultDate = new Date(targetY, targetM, d);
+                    if (direction === 1) {
+                        if (isInclusive) resultDate.setDate(resultDate.getDate() - 1);
+                    } else {
+                        if (isInclusive) resultDate.setDate(resultDate.getDate() + 1);
+                    }
+                }
+            } else {
+                resultDate = new Date(y, m, d);
+            }
+
+            if (addD > 0) {
+                if (addY === 0 && addM === 0) {
+                    if (direction === 1) {
+                        resultDate.setDate(resultDate.getDate() + (isInclusive ? addD - 1 : addD));
+                    } else {
+                        resultDate.setDate(resultDate.getDate() - (isInclusive ? addD - 1 : addD));
+                    }
+                } else {
+                    resultDate.setDate(resultDate.getDate() + (addD * direction));
+                }
+            }
+
+            return resultDate;
+        }
+
+        function calcCivilPeriodDiff(startStr, endStr, isInclusive) {
+            let start = parseDateString(startStr);
+            let end = parseDateString(endStr);
+
+            if (start > end) return { years: 0, months: 0, days: 0 };
+
+            let years = 0, months = 0, days = 0;
+
+            function getTestDate(y, m, d) {
+                return getCivilAddedDate(startStr, y, m, d, 1, isInclusive);
+            }
+
+            while (true) {
+                let test = getTestDate(years + 1, 0, 0);
+                if (test <= end) years++;
+                else break;
+            }
+
+            while (true) {
+                let test = getTestDate(years, months + 1, 0);
+                if (test <= end) months++;
+                else break;
+            }
+
+            if (years === 0 && months === 0) {
+                let diffTime = end.getTime() - start.getTime();
+                days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                if (isInclusive) days++;
+            } else {
+                let lastFullPeriodEnd = getTestDate(years, months, 0);
+                let diffTime = end.getTime() - lastFullPeriodEnd.getTime();
+                days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            }
+
+            return { years, months, days };
+        }
+
+        function parseDateString(dateStr) {
+            const parts = dateStr.split('-');
+            return new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+        }
+
+        function formatDateObj(dateObj) {
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            const weekDay = ['일', '월', '화', '수', '목', '금', '토'][dateObj.getDay()];
+            return `${year}년 ${month}월 ${day}일 (${weekDay})`;
+        }
+
+        function calcPeriod() {
+            const startStr = document.getElementById('p-start-date').value;
+            const endStr = document.getElementById('p-end-date').value;
+            const isInclusive = document.getElementById('p-inclusive').checked;
+
+            if (!startStr || !endStr) {
+                document.getElementById('p-result').classList.add('hidden');
+                return;
+            }
+
+            const startDate = parseDateString(startStr);
+            const endDate = parseDateString(endStr);
+
+            if (startDate > endDate) {
+                document.getElementById('p-result').classList.add('hidden');
+                return;
+            }
+
+            const diffTime = endDate.getTime() - startDate.getTime();
+            let diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+            if (isInclusive) diffDays += 1;
+
+            let weekdays = 0, weekends = 0;
+            let tempDate = new Date(startDate.getTime());
+
+            for (let i = 0; i < diffDays; i++) {
+                const dayOfWeek = tempDate.getDay();
+                if (dayOfWeek === 0 || dayOfWeek === 6) weekends++;
+                else weekdays++;
+                tempDate.setDate(tempDate.getDate() + 1);
+            }
+
+            const civilDiff = calcCivilPeriodDiff(startStr, endStr, isInclusive);
+            let ymdStr = "";
+            if (civilDiff.years > 0) ymdStr += `${civilDiff.years}년 `;
+            if (civilDiff.months > 0) ymdStr += `${civilDiff.months}개월 `;
+            ymdStr += `${civilDiff.days}일`;
+
+            document.getElementById('p-res-days').innerText = `${diffDays}일`;
+            document.getElementById('p-res-weeks').innerText = `${Math.floor(diffDays / 7)}주 ${diffDays % 7}일`;
+            document.getElementById('p-res-weekdays').innerText = `${weekdays}일`;
+            document.getElementById('p-res-weekends').innerText = `${weekends}일`;
+            document.getElementById('p-res-ymd').innerText = ymdStr || "0일";
+
+            document.getElementById('p-result').classList.remove('hidden');
+        }
+
+        function calcTargetDate() {
+            const baseStr = document.getElementById('t-base-date').value;
+            const addYear = parseInt(document.getElementById('t-add-year').value) || 0;
+            const addMonth = parseInt(document.getElementById('t-add-month').value) || 0;
+            let addDay = parseInt(document.getElementById('t-add-day').value) || 0;
+            const direction = document.querySelector('input[name="t-direction"]:checked').value;
+            const isInclusive = document.getElementById('t-inclusive').checked;
+
+            if (!baseStr) {
+                document.getElementById('t-result').classList.add('hidden');
+                return;
+            }
+
+            const multiplier = direction === 'after' ? 1 : -1;
+            const resultDate = getCivilAddedDate(baseStr, addYear, addMonth, addDay, multiplier, isInclusive);
+            const formattedDate = formatDateObj(resultDate);
+
+            let desc = `기준일(${baseStr})로부터 `;
+            let periodArr = [];
+            if (addYear > 0) periodArr.push(`${addYear}년`);
+            if (addMonth > 0) periodArr.push(`${addMonth}개월`);
+            if (addDay > 0) periodArr.push(`${addDay}일`);
+
+            desc += periodArr.join(" ") + (direction === 'after' ? ' 후' : ' 전') + (isInclusive ? ' (초일산입)' : ' (초일불산입)');
+
+            document.getElementById('t-res-date').innerText = formattedDate;
+            document.getElementById('t-res-desc').innerText = desc;
+            document.getElementById('t-result').classList.remove('hidden');
+        }
+
+        function calcDday() {
+            const targetStr = document.getElementById('d-target-date').value;
+            if (!targetStr) {
+                document.getElementById('d-result').classList.add('hidden');
+                return;
+            }
+
+            const today = parseDateString(getTodayStr());
+            const targetDate = parseDateString(targetStr);
+            const diffTime = targetDate.getTime() - today.getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+            let ddayText = "", titleText = "";
+
+            if (diffDays === 0) {
+                ddayText = "D-Day";
+                titleText = "오늘이 바로 그 날입니다!";
+                document.getElementById('d-res-dday').className = "text-5xl font-extrabold text-rose-600 tracking-tighter";
+            } else if (diffDays > 0) {
+                ddayText = `D - ${diffDays}`;
+                titleText = "목표일까지 남은 기간";
+                document.getElementById('d-res-dday').className = "text-5xl font-extrabold text-indigo-600 tracking-tighter";
+            } else {
+                ddayText = `D + ${Math.abs(diffDays)}`;
+                titleText = "목표일로부터 지난 기간";
+                document.getElementById('d-res-dday').className = "text-5xl font-extrabold text-slate-500 tracking-tighter";
+            }
+
+            document.getElementById('d-res-title').innerText = titleText;
+            document.getElementById('d-res-dday').innerText = ddayText;
+            document.getElementById('d-res-date').innerText = `목표일: ${formatDateObj(targetDate)}`;
+            document.getElementById('d-result').classList.remove('hidden');
+        }
+
+        // --- 날짜 파싱 및 검증 엔진 ---
+        function parseSmartDate(val) {
+            val = val.trim();
+            if (!val) return { valid: false, error: "", empty: true };
+
+            let cleanVal = val.replace(/[^0-9]+$/, '');
+            let parts = cleanVal.split(/[^0-9]+/);
+            let year, month, day;
+
+            if (parts.length === 3) {
+                year = parts[0]; month = parts[1]; day = parts[2];
+            } else {
+                let nums = val.replace(/[^0-9]/g, '');
+                if (nums.length === 8) {
+                    year = nums.substring(0, 4); month = nums.substring(4, 6); day = nums.substring(6, 8);
+                } else if (nums.length === 6) {
+                    year = "20" + nums.substring(0, 2); month = nums.substring(2, 4); day = nums.substring(4, 6);
+                } else {
+                    return { valid: false, error: "날짜 형식(예: 20260629, 2026.6.29)을 맞춰주세요.", empty: false };
+                }
+            }
+
+            if (year.length === 2) year = parseInt(year) > 50 ? "19" + year : "20" + year;
+
+            let y = parseInt(year, 10);
+            let m = parseInt(month, 10);
+            let d = parseInt(day, 10);
+
+            if (m < 1 || m > 12) return { valid: false, error: "월(Month)은 1월에서 12월 사이여야 합니다.", empty: false };
+
+            let testDate = new Date(y, m - 1, d);
+            if (testDate.getFullYear() !== y || testDate.getMonth() + 1 !== m || testDate.getDate() !== d) {
+                return { valid: false, error: "해당 월에 존재하지 않는 일자입니다.", empty: false };
+            }
+
+            const weekDays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+            let dayOfWeek = weekDays[testDate.getDay()];
+
+            return {
+                valid: true,
+                formatted: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+                dayOfWeek: dayOfWeek
+            };
+        }
+
+        // --- 요일 표시/숨김 제어 함수 ---
+        function showDayOfWeek(inputId, dayStr) {
+            const dayEl = document.getElementById('day-' + inputId);
+            if (dayEl) {
+                dayEl.innerText = dayStr;
+                dayEl.classList.remove('hidden');
+            }
+        }
+
+        function hideDayOfWeek(inputId) {
+            const dayEl = document.getElementById('day-' + inputId);
+            if (dayEl) {
+                dayEl.innerText = "";
+                dayEl.classList.add('hidden');
+            }
+        }
+
+        // --- UI 제어 및 에러 함수 보완 ---
+        function setDateError(inputId, msg) {
+            const errEl = document.getElementById('err-' + inputId);
+            if (errEl) {
+                errEl.innerText = msg;
+                errEl.classList.remove('hidden');
+            }
+            if (inputId.startsWith('p-')) document.getElementById('p-result').classList.add('hidden');
+            if (inputId.startsWith('t-')) document.getElementById('t-result').classList.add('hidden');
+            if (inputId.startsWith('d-')) document.getElementById('d-result').classList.add('hidden');
+        }
+
+        function clearDateError(inputId) {
+            const errEl = document.getElementById('err-' + inputId);
+            if (errEl) {
+                errEl.innerText = "";
+                errEl.classList.add('hidden');
+            }
+        }
+
+        // --- 입력 이벤트 핸들러 보완 ---
+        function onFocusDate(input) {
+            input.value = input.value.replace(/-/g, '');
+            clearDateError(input.id);
+            hideDayOfWeek(input.id);
+        }
+
+        function onInputDate(input, calcFunc) {
+            input.value = input.value.replace(/[^0-9\.\-\/]/g, '');
+            clearDateError(input.id);
+            hideDayOfWeek(input.id);
+
+            let nums = input.value.replace(/[^0-9]/g, '');
+            if (nums.length === 8 && !input.value.includes('.') && !input.value.includes('/') && !input.value.includes('-')) {
+                let res = parseSmartDate(input.value);
+                if (res.valid) {
+                    input.value = res.formatted;
+                    showDayOfWeek(input.id, res.dayOfWeek);
+                    calcFunc();
+                }
+            }
+        }
+
+        function onBlurDate(input, calcFunc) {
+            let res = parseSmartDate(input.value);
+            if (res.valid) {
+                input.value = res.formatted;
+                clearDateError(input.id);
+                showDayOfWeek(input.id, res.dayOfWeek);
+                calcFunc();
+            } else if (!res.empty) {
+                setDateError(input.id, res.error);
+                hideDayOfWeek(input.id);
+            } else {
+                clearDateError(input.id);
+                hideDayOfWeek(input.id);
+                calcFunc();
+            }
+        }
+
+        function onKeyDownDate(event, input) {
+            if (event.key === 'Enter') {
+                input.blur();
+            }
+        }
+
+        function setTodayAll() {
+            const today = getTodayStr();
+            document.getElementById('p-start-date').value = today;
+            document.getElementById('p-end-date').value = today;
+            document.getElementById('t-base-date').value = today;
+            document.getElementById('d-target-date').value = today;
+
+            ['p-start-date', 'p-end-date', 't-base-date', 'd-target-date'].forEach(id => {
+                let res = parseSmartDate(today);
+                if (res.valid) showDayOfWeek(id, res.dayOfWeek);
+            });
+
+            calcPeriod();
+            calcTargetDate();
+            calcDday();
+        }
+    </script>
+</body>
+</html>

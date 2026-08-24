@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>파일 찾기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        mark.highlight { background-color: #fef08a; color: #1e3a8a; font-weight: bold; border-radius: 4px; padding: 0 3px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        
+        .app-row { user-select: none; }
+        .app-row.selected { background-color: #eff6ff !important; }
+        .sort-icon { display: inline-block; width: 12px; transition: transform 0.2s; }
+
+        /* 열너비 조절 */
+        table { table-layout: fixed; width: 100%; }
+        th { position: relative; }
+        .resizer { width: 6px; height: 100%; position: absolute; right: 0; top: 0; cursor: col-resize; user-select: none; z-index: 10; }
+        .resizer:hover, .resizer.resizing { background-color: #60a5fa; }
+        td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* 토글 스위치 디자인 */
+        .toggle-checkbox:checked { right: 0; border-color: #2563eb; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #2563eb; }
+        .toggle-checkbox { right: 4px; z-index: 1; border-color: #e5e7eb; transition: all 0.3s; }
+        .toggle-label { width: 44px; height: 24px; background-color: #e5e7eb; border-radius: 9999px; transition: all 0.3s; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans h-screen flex flex-col p-4 overflow-hidden" onclick="hideContextMenu()">
+
+    <!-- 기본 알림 팝업 -->
+    <div id="custom-popup" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[80] hidden backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-80 max-w-sm mx-4 transform transition-all border border-gray-100">
+            <h3 id="popup-title" class="text-lg font-bold text-gray-900 mb-2">알림</h3>
+            <p id="popup-message" class="text-gray-600 text-sm mb-6"></p>
+            <div class="flex justify-end gap-2" id="popup-buttons"></div>
+        </div>
+    </div>
+
+    <!-- 다중 검색 경로 설정 모달 -->
+    <div id="path-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] hidden backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden flex flex-col">
+            <div class="bg-gray-50 px-6 py-4 flex justify-between items-center border-b border-gray-200">
+                <h3 class="text-gray-800 text-lg font-bold flex items-center gap-2">
+                    <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                    검색 경로 설정
+                </h3>
+                <button onclick="closeModal('path-modal')" class="text-gray-400 hover:text-gray-600 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6">
+                <div class="space-y-4">
+                    <!-- 전체 드라이브 옵션 -->
+                    <label class="flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all" id="lbl-path-all" onclick="setSearchMode('all')">
+                        <div class="flex items-center h-5"><input type="radio" name="path_type" value="all" class="w-4 h-4 text-blue-600 focus:ring-blue-500" checked></div>
+                        <div class="flex flex-col">
+                            <span class="text-base font-bold text-gray-800">내 PC 전체 (모든 드라이브)</span>
+                            <span class="text-sm text-gray-500">연결된 모든 드라이브(C:, D: 등)를 한 번에 검색합니다.</span>
+                        </div>
+                    </label>
+                    
+                    <!-- 커스텀 경로 옵션 -->
+                    <label class="flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all" id="lbl-path-custom" onclick="setSearchMode('custom')">
+                        <div class="flex items-center h-5"><input type="radio" name="path_type" value="custom" class="w-4 h-4 text-blue-600 focus:ring-blue-500"></div>
+                        <div class="flex flex-col w-full">
+                            <span class="text-base font-bold text-gray-800">특정 폴더 다중 선택</span>
+                            <span class="text-sm text-gray-500 mb-3">원하는 폴더를 여러 개 추가하여 검색할 수 있습니다.</span>
+                            
+                            <!-- 선택된 폴더 리스트 영역 -->
+                            <div id="custom-path-container" class="space-y-2 hidden w-full">
+                                <ul id="custom-path-list" class="space-y-1"></ul>
+                                <button onclick="addCustomFolder(event)" class="mt-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg transition-colors border border-blue-200 w-full flex items-center justify-center gap-1.5">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> 폴더 추가하기
+                                </button>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50">
+                <button onclick="closeModal('path-modal')" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-5 py-2 rounded-lg text-sm font-medium transition-colors">취소</button>
+                <button onclick="applyPathSettings()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">적용</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 검색 도움말 모달 -->
+    <div id="help-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] hidden backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden flex flex-col">
+            <div class="bg-gray-50 px-6 py-4 flex justify-between items-center border-b border-gray-200">
+                <h3 class="text-gray-800 text-lg font-bold flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    스마트 검색 옵션 안내
+                </h3>
+            </div>
+            <div class="p-6 text-sm text-gray-600 space-y-4">
+                <p>파일명을 더 유연하게 찾고 싶을 때 아래 기호를 활용해 보세요.</p>
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <h4 class="font-bold text-blue-800 mb-2">1. 별표 (*) : 글자 수 상관없이 모든 문자 대체</h4>
+                    <ul class="list-disc pl-5 space-y-1 text-blue-900">
+                        <li><span class="font-bold">서명호*.pdf</span> ➔ <span class="text-gray-500">앞/뒤 상관없이 '서명호'가 들어가고 '.pdf'로 끝나는 파일 검색 (예: abc서명호결과.pdf)</span></li>
+                    </ul>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg border border-green-100">
+                    <h4 class="font-bold text-green-800 mb-2">2. 물음표 (?) : 딱 한 글자만 대체</h4>
+                    <ul class="list-disc pl-5 space-y-1 text-green-900">
+                        <li><span class="font-bold">보고서?.hwp</span> ➔ <span class="text-gray-500">보고서1.hwp, 보고서A.hwp (보고서12.hwp는 제외됨)</span></li>
+                    </ul>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">* 기호를 아예 입력하지 않으면, 입력한 단어가 포함된 모든 파일을 찾습니다.</p>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-100 flex justify-end">
+                <button onclick="closeModal('help-modal')" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 검색 제외 필터 모달 -->
+    <div id="filter-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] hidden backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden flex flex-col">
+            <div class="bg-gray-50 px-6 py-4 flex justify-between items-center border-b border-gray-200">
+                <h3 class="text-gray-800 text-lg font-bold flex items-center gap-2">
+                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                    검색 제외 필터 설정
+                </h3>
+            </div>
+            <div class="p-6">
+                <p class="text-sm text-gray-500 mb-4">업무 파일만 빠르게 찾기 위해 시스템 파일이나 임시 파일을 검색에서 제외합니다.</p>
+                <div class="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-gray-700">
+                        <input type="checkbox" id="exclude-no-ext" class="w-4 h-4 text-blue-600 rounded border-gray-300" checked> 
+                        확장자가 없는 파일 모두 제외 <span class="text-xs text-gray-400 font-normal ml-auto">(시스템 더미파일)</span>
+                    </label>
+                    <hr class="border-gray-200">
+                    <div class="grid grid-cols-2 gap-3 text-sm text-gray-700">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="exclude-ext w-4 h-4 text-blue-600 rounded border-gray-300" value=".lnk" checked> 바로가기 (.lnk)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="exclude-ext w-4 h-4 text-blue-600 rounded border-gray-300" value=".tmp" checked> 임시파일 (.tmp)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="exclude-ext w-4 h-4 text-blue-600 rounded border-gray-300" value=".ini" checked> 설정파일 (.ini)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="exclude-ext w-4 h-4 text-blue-600 rounded border-gray-300" value=".dll" checked> 시스템 (.dll, .sys)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="exclude-ext w-4 h-4 text-blue-600 rounded border-gray-300" value=".log" checked> 로그파일 (.log)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="exclude-ext w-4 h-4 text-blue-600 rounded border-gray-300" value=".db" checked> DB파일 (.db, .dat)</label>
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-100 flex justify-end">
+                <button onclick="closeModal('filter-modal')" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">적용 및 닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 통계 대시보드 모달 -->
+    <div id="stats-popup" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[50] hidden backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex justify-between items-center shrink-0">
+                <h3 class="text-white text-lg font-bold flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    검색 결과 상세 통계
+                </h3>
+                <button onclick="closeModal('stats-popup')" class="text-white opacity-70 hover:opacity-100 transition-opacity"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6 overflow-y-auto bg-gray-50" id="stats-content"></div>
+        </div>
+    </div>
+
+    <!-- 컨텍스트 메뉴 -->
+    <div id="context-menu" class="hidden fixed bg-white border border-gray-200 shadow-xl rounded-lg w-44 z-40 overflow-hidden text-sm flex flex-col py-1">
+        <button onclick="cmExecute()" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors font-medium">열기</button>
+        <div class="h-px bg-gray-100 my-1"></div>
+        <button onclick="cmCopy()" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors font-medium">경로 복사</button>
+        <button onclick="cmOpenLocation()" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors font-medium">파일 위치 열기</button>
+    </div>
+
+    <!-- 헤더 -->
+    <header class="mb-5 flex justify-between items-end shrink-0">
+        <div>
+            <h1 class="text-2xl font-extrabold text-gray-800 tracking-tight flex items-center gap-2">파일 찾기</h1>
+            <p class="text-sm text-gray-500 mt-1">실시간 고속 검색. 더블클릭으로 파일을 실행하세요.</p>
+        </div>
+    </header>
+
+    <!-- 검색 컨트롤 패널 -->
+    <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-4 flex flex-col gap-4 shrink-0">
+        <!-- 상단: 검색어 및 경로 -->
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1 flex items-center bg-gray-50 border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 transition-all">
+                <div class="pl-3 pr-2 text-gray-400"><svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg></div>
+                <input type="text" id="search-keyword" placeholder="검색어 입력 (예: 보고서*.pdf)" class="w-full bg-transparent py-3 outline-none text-sm font-medium" onkeypress="handleEnter(event)">
+                <button onclick="openModal('help-modal')" class="pr-3 text-gray-400 hover:text-blue-500 transition-colors" title="검색 도움말">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </button>
+            </div>
+            
+            <!-- 다중 경로 표시 영역 -->
+            <div class="flex flex-1 gap-2">
+                <div onclick="openModal('path-modal'); setSearchMode(currentPathMode);" class="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 bg-gray-50 hover:bg-white focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer flex items-center gap-1.5 overflow-x-auto" id="path-display-container" title="경로를 변경하려면 클릭하세요.">
+                    <!-- 선택된 경로가 뱃지 형태로 여기에 그려집니다 -->
+                    <span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold whitespace-nowrap shadow-sm border border-blue-200">내 PC 전체 (모든 드라이브)</span>
+                </div>
+                <button onclick="openModal('path-modal'); setSearchMode(currentPathMode);" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 rounded-lg text-sm font-bold border border-gray-300 transition-colors whitespace-nowrap flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    경로 설정
+                </button>
+            </div>
+        </div>
+
+        <!-- 하단: 옵션 버튼들 및 검색버튼 -->
+        <div class="flex items-center justify-between mt-1">
+            <div class="flex items-center gap-6">
+                <button onclick="openModal('filter-modal')" class="text-sm font-semibold text-gray-600 hover:text-blue-600 flex items-center gap-1.5 transition-colors bg-white border border-gray-200 px-3 py-1.5 rounded-md shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg> 필터 설정
+                </button>
+                
+                <div class="flex items-center gap-2">
+                    <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                        <input type="checkbox" name="toggle" id="append-mode" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                        <label for="append-mode" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                    </div>
+                    <label for="append-mode" class="text-sm font-bold text-gray-700 cursor-pointer">기존 결과 누적</label>
+                </div>
+            </div>
+
+            <button onclick="toggleSearch()" id="search-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center justify-center min-w-[140px] tracking-wide">
+                <span>검색 시작</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 결과 상태 및 테이블 영역 -->
+    <div class="flex justify-between items-center mb-2 px-1 shrink-0">
+        <div id="search-status" class="text-sm font-medium text-gray-600 flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-full border border-gray-200 shadow-sm">
+            <div class="w-2 h-2 rounded-full bg-gray-400"></div> 대기 중
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="openModal('stats-popup'); showStats();" class="text-xs font-bold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-md transition-colors border border-indigo-100 hidden shadow-sm flex items-center gap-1" id="stats-btn">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg> 상세 통계
+            </button>
+            <button onclick="clearResults()" class="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors hidden border border-red-100 shadow-sm" id="clear-btn">목록 비우기</button>
+            <div id="result-count" class="text-sm text-gray-700 font-extrabold ml-3"></div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col relative">
+        <div class="overflow-y-auto flex-1 h-full">
+            <table class="w-full text-left border-collapse" id="result-table">
+                <thead class="bg-gray-50 text-gray-700 text-xs uppercase tracking-wider sticky top-0 shadow-sm z-10 select-none border-b border-gray-200">
+                    <tr>
+                        <th style="width: 80px;" class="px-2 py-3.5 font-bold text-center cursor-pointer hover:bg-gray-200 transition-colors" onclick="sortData('type')">종류 <span id="sort-icon-type" class="sort-icon text-gray-400"></span></th>
+                        <th style="width: 30%;" class="px-4 py-3.5 font-bold border-l border-gray-200 cursor-pointer hover:bg-gray-200 transition-colors" onclick="sortData('name')">이름 <span id="sort-icon-name" class="sort-icon text-gray-400"></span></th>
+                        <th style="width: 40%;" class="px-4 py-3.5 font-bold border-l border-gray-200 cursor-pointer hover:bg-gray-200 transition-colors" onclick="sortData('path')">위치 <span id="sort-icon-path" class="sort-icon text-gray-400"></span></th>
+                        <th style="width: 100px;" class="px-4 py-3.5 font-bold border-l border-gray-200 text-right cursor-pointer hover:bg-gray-200 transition-colors" onclick="sortData('size')">크기 <span id="sort-icon-size" class="sort-icon text-gray-400"></span></th>
+                        <th style="width: 140px;" class="px-4 py-3.5 font-bold border-l border-gray-200 cursor-pointer hover:bg-gray-200 transition-colors" onclick="sortData('date')">날짜 <span id="sort-icon-date" class="sort-icon text-gray-400"></span></th>
+                        <th style="width: 70px;" class="px-2 py-3.5 font-bold border-l border-gray-200 text-center">폴더 열기</th>
+                    </tr>
+                </thead>
+                <tbody id="result-body" class="text-sm divide-y divide-gray-100">
+                    <tr id="empty-row"><td colspan="6" class="px-4 py-16 text-center text-gray-400 font-medium">검색어와 경로를 지정하고 검색을 시작해주세요.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let isSearching = false;
+        let currentKeyword = "";
+        let allResultsData = [];
+        let selectedRowElement = null;
+        let selectedPath = "";
+        let currentSortColumn = '';
+        let currentSortAsc = true;
+
+        // 다중 경로 관리 변수
+        let currentPathMode = "all"; // "all" 또는 "custom"
+        let customFolders = [];
+
+        // 모달 관리
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        function showAlert(message, title = "알림") {
+            document.getElementById('popup-title').innerText = title;
+            document.getElementById('popup-message').innerText = message;
+            document.getElementById('popup-buttons').innerHTML = `<button onclick="closeModal('custom-popup')" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm">확인</button>`;
+            openModal('custom-popup');
+        }
+
+        // =====================================
+        // 다중 경로 (모달) 로직
+        // =====================================
+        function setSearchMode(mode) {
+            document.querySelector(`input[name="path_type"][value="${mode}"]`).checked = true;
+            
+            const lblAll = document.getElementById('lbl-path-all');
+            const lblCustom = document.getElementById('lbl-path-custom');
+            const container = document.getElementById('custom-path-container');
+
+            if (mode === 'all') {
+                lblAll.classList.add('border-blue-500', 'bg-blue-50');
+                lblAll.classList.remove('border-gray-200', 'bg-white');
+                lblCustom.classList.remove('border-blue-500', 'bg-blue-50');
+                lblCustom.classList.add('border-gray-200', 'bg-white');
+                container.classList.add('hidden');
+            } else {
+                lblCustom.classList.add('border-blue-500', 'bg-blue-50');
+                lblCustom.classList.remove('border-gray-200', 'bg-white');
+                lblAll.classList.remove('border-blue-500', 'bg-blue-50');
+                lblAll.classList.add('border-gray-200', 'bg-white');
+                container.classList.remove('hidden');
+            }
+        }
+
+        async function addCustomFolder(e) {
+            if(e) e.preventDefault();
+            const api = getApi();
+            if (!api) return;
+            const selected = await api.select_folder();
+            if (selected && selected.length > 0) {
+                const newPath = Array.isArray(selected) ? selected[0] : selected;
+                if (!customFolders.includes(newPath)) {
+                    customFolders.push(newPath);
+                    renderCustomFolders();
+                }
+                setSearchMode('custom');
+            }
+        }
+
+        function removeCustomFolder(index) {
+            customFolders.splice(index, 1);
+            renderCustomFolders();
+        }
+
+        function renderCustomFolders() {
+            const list = document.getElementById('custom-path-list');
+            list.innerHTML = '';
+            customFolders.forEach((folder, idx) => {
+                const li = document.createElement('li');
+                li.className = "flex items-center justify-between bg-white border border-gray-200 px-3 py-2 rounded-lg shadow-sm";
+                li.innerHTML = `
+                    <span class="text-sm font-medium text-gray-700 truncate mr-2" title="${folder}">${folder}</span>
+                    <button onclick="event.stopPropagation(); removeCustomFolder(${idx})" class="text-gray-400 hover:text-red-500 transition-colors bg-gray-50 hover:bg-red-50 p-1 rounded">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        function applyPathSettings() {
+            const mode = document.querySelector('input[name="path_type"]:checked').value;
+            if (mode === 'custom' && customFolders.length === 0) {
+                showAlert("선택된 폴더가 없습니다. '폴더 추가하기'를 누르거나 '내 PC 전체'를 선택해주세요.");
+                return;
+            }
+            
+            currentPathMode = mode;
+            const container = document.getElementById('path-display-container');
+            
+            if (currentPathMode === 'all') {
+                container.innerHTML = `<span class="bg-blue-100 text-blue-700 px-2 py-1.5 rounded text-xs font-bold whitespace-nowrap shadow-sm border border-blue-200">내 PC 전체 (모든 드라이브)</span>`;
+            } else {
+                container.innerHTML = customFolders.map(p => {
+                    const folderName = p.split('\\').pop() || p;
+                    return `<span class="bg-indigo-50 text-indigo-700 px-2 py-1.5 rounded text-xs font-bold whitespace-nowrap shadow-sm border border-indigo-200 flex items-center gap-1" title="${p}">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>${folderName}</span>`;
+                }).join('');
+            }
+            closeModal('path-modal');
+        }
+
+        // =====================================
+        // 기본 설정 (테이블 크기 조절 등)
+        // =====================================
+        document.addEventListener('DOMContentLoaded', () => {
+            const ths = document.querySelectorAll('th');
+            ths.forEach(th => {
+                const resizer = document.createElement('div');
+                resizer.classList.add('resizer');
+                th.appendChild(resizer);
+                let x = 0, w = 0;
+                const md = function(e) { e.stopPropagation(); x = e.clientX; w = parseInt(window.getComputedStyle(th).width, 10); document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu); resizer.classList.add('resizing'); };
+                const mm = function(e) { th.style.width = `${w + (e.clientX - x)}px`; };
+                const mu = function() { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); resizer.classList.remove('resizing'); };
+                resizer.addEventListener('mousedown', md);
+            });
+            // 경로 모달 초기 UI 세팅
+            setSearchMode('all');
+        });
+
+        function getApi() {
+            if (window.pywebview && window.pywebview.api) return window.pywebview.api;
+            if (window.parent && window.parent.pywebview && window.parent.pywebview.api) return window.parent.pywebview.api;
+            return null;
+        }
+
+        function handleEnter(e) { if (e.key === 'Enter') toggleSearch(); }
+
+        // =====================================
+        // 검색 및 통계, 컨텍스트 메뉴 로직 (기존과 동일하되 다중경로 처리 추가)
+        // =====================================
+        function selectRow(el, path) { if(selectedRowElement) selectedRowElement.classList.remove('selected'); selectedRowElement = el; selectedRowElement.classList.add('selected'); selectedPath = path; }
+        function showContextMenu(e, el, path) { e.preventDefault(); selectRow(el, path); const menu = document.getElementById('context-menu'); menu.classList.remove('hidden'); let x=e.clientX, y=e.clientY; if(x+176>window.innerWidth)x=window.innerWidth-181; if(y+135>window.innerHeight)y=window.innerHeight-140; menu.style.left=`${x}px`; menu.style.top=`${y}px`; }
+        function hideContextMenu() { document.getElementById('context-menu').classList.add('hidden'); }
+        function cmExecute() { if(selectedPath) executeFile(selectedPath); hideContextMenu(); }
+        function cmOpenLocation() { if(selectedPath) openLocation(selectedPath); hideContextMenu(); }
+        function cmCopy() { if(selectedPath){ const t=document.createElement("textarea");t.value=selectedPath;document.body.appendChild(t);t.select();document.execCommand("copy");document.body.removeChild(t);showAlert("파일 경로가 클립보드에 복사되었습니다.", "복사 완료"); } hideContextMenu(); }
+
+        async function openLocation(path) { const api = getApi(); if(api) await api.open_file_location(path); }
+        async function executeFile(path) { const api = getApi(); if(api) await api.execute_file(path); }
+
+        function clearResults() {
+            allResultsData = []; currentSortColumn = ''; updateSortIcons();
+            document.getElementById('result-body').innerHTML = `<tr id="empty-row"><td colspan="6" class="px-4 py-16 text-center text-gray-400 font-medium">목록이 비워졌습니다.</td></tr>`;
+            document.getElementById('result-count').innerText = "";
+            document.getElementById('clear-btn').classList.add('hidden');
+            document.getElementById('stats-btn').classList.add('hidden');
+            document.getElementById('search-status').innerHTML = `<div class="w-2 h-2 rounded-full bg-gray-400"></div> 대기 중`;
+            document.getElementById('search-status').className = "text-sm font-medium text-gray-600 flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-full border border-gray-200 shadow-sm";
+        }
+
+        function sortData(column) {
+            if(allResultsData.length===0) return;
+            if(currentSortColumn===column) currentSortAsc=!currentSortAsc; else {currentSortColumn=column; currentSortAsc=true;}
+            updateSortIcons();
+            allResultsData.sort((a,b)=>{
+                let vA,vB;
+                if(column==='name'){vA=a.name.toLowerCase();vB=b.name.toLowerCase();} else if(column==='path'){vA=a.path.toLowerCase();vB=b.path.toLowerCase();} else if(column==='size'){vA=a.size;vB=b.size;} else if(column==='date'){vA=a.modified;vB=b.modified;} else if(column==='type'){vA=a.is_dir?0:1;vB=b.is_dir?0:1;if(vA===vB&&!a.is_dir){vA=(a.name.split('.').pop()||'').toLowerCase();vB=(b.name.split('.').pop()||'').toLowerCase();}}
+                if(vA<vB)return currentSortAsc?-1:1;if(vA>vB)return currentSortAsc?1:-1;return 0;
+            }); renderAllRows();
+        }
+        function updateSortIcons() {
+            ['type','name','path','size','date'].forEach(c=>{ const el=document.getElementById(`sort-icon-${c}`); if(c===currentSortColumn){ el.innerHTML=currentSortAsc?`<svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd"></path></svg>`:`<svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>`; el.className='sort-icon text-blue-600'; }else{el.innerHTML=''; el.className='sort-icon text-gray-400';} });
+        }
+
+        function getFileBadge(item) {
+            if(item.is_dir) return `<svg class="w-6 h-6 text-yellow-500 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path></svg>`;
+            let ext = item.name.split('.').pop().toLowerCase(); if(item.name.indexOf('.')===-1) ext='';
+            if(!ext) return `<div class="mx-auto bg-gray-200 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded w-10 text-center uppercase tracking-tighter shadow-sm">FILE</div>`;
+            let txt = ext.length>4?ext.substring(0,4):ext; let cls="bg-gray-100 text-gray-700 border border-gray-200";
+            if(['pdf'].includes(ext))cls="bg-red-50 text-red-600 border border-red-200"; else if(['xls','xlsx','csv'].includes(ext))cls="bg-emerald-50 text-emerald-700 border border-emerald-200"; else if(['hwp','hwpx'].includes(ext))cls="bg-cyan-50 text-cyan-700 border border-cyan-200"; else if(['doc','docx'].includes(ext))cls="bg-blue-50 text-blue-700 border border-blue-200"; else if(['ppt','pptx'].includes(ext))cls="bg-orange-50 text-orange-600 border border-orange-200"; else if(['jpg','jpeg','png','gif','svg'].includes(ext))cls="bg-purple-50 text-purple-700 border border-purple-200"; else if(['zip','7z','tar','gz'].includes(ext))cls="bg-slate-700 text-white border border-slate-800"; else if(['mp4','avi','mov','mp3','wav'].includes(ext))cls="bg-pink-50 text-pink-700 border border-pink-200";
+            return `<div class="mx-auto ${cls} text-[10px] font-extrabold px-1 py-0.5 rounded w-11 text-center uppercase tracking-tighter drop-shadow-sm">${txt}</div>`;
+        }
+
+        function highlightText(text, kw) {
+            if(!kw) return escapeHtml(text);
+            const p = kw.split(/[*?]+/).filter(x=>x.trim()!==''); if(p.length===0) return escapeHtml(text);
+            let res = escapeHtml(text); p.forEach(x=>{ const reg=new RegExp(`(${escapeHtml(x).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`,'gi'); res=res.replace(reg,`<mark class="highlight">$1</mark>`); }); return res;
+        }
+        function escapeHtml(u){return u.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");}
+        function formatBytes(b){if(!b)return'0 B';const k=1024,s=['B','KB','MB','GB','TB'],i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i];}
+        function formatDate(t){if(!t)return"-";const d=new Date(t*1000);return`${d.getFullYear().toString().slice(2)}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+
+        function createRowHtml(item) {
+            const tr = document.createElement('tr'); const safePath = item.path.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            tr.className = "hover:bg-blue-50/50 transition-colors cursor-pointer app-row group border-b border-gray-50 last:border-0";
+            tr.setAttribute('onclick', `selectRow(this, '${safePath}')`); tr.setAttribute('ondblclick', `executeFile('${safePath}')`); tr.setAttribute('oncontextmenu', `showContextMenu(event, this, '${safePath}')`);
+            tr.innerHTML = `<td class="px-2 py-2 text-center align-middle">${getFileBadge(item)}</td><td class="px-4 py-2 font-medium text-gray-800" title="${item.name}">${highlightText(item.name, currentKeyword)}</td><td class="px-4 py-2 text-gray-500 text-xs" title="${item.path}">${item.path}</td><td class="px-4 py-2 text-gray-500 text-xs text-right whitespace-nowrap">${item.is_dir?'-':formatBytes(item.size)}</td><td class="px-4 py-2 text-gray-500 text-xs whitespace-nowrap">${formatDate(item.modified)}</td><td class="px-2 py-2 text-center"><button onclick="event.stopPropagation(); openLocation('${safePath}')" class="text-gray-400 hover:text-blue-600 hover:bg-blue-100 p-1.5 rounded-md transition-colors shadow-sm bg-white border border-gray-100 hover:border-blue-200"><svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg></button></td>`;
+            return tr;
+        }
+
+        function renderAllRows() {
+            const tbody = document.getElementById('result-body'); tbody.innerHTML = '';
+            if(allResultsData.length===0){tbody.innerHTML=`<tr id="empty-row"><td colspan="6" class="px-4 py-16 text-center text-gray-400 font-medium">조건에 맞는 결과가 없습니다.</td></tr>`;return;}
+            const frag = document.createDocumentFragment(); allResultsData.forEach(i=>frag.appendChild(createRowHtml(i))); tbody.appendChild(frag);
+        }
+
+        function showStats() {
+            if(allResultsData.length===0){document.getElementById('stats-content').innerHTML=`<div class="py-12 text-center text-gray-500">통계를 분석할 데이터가 없습니다.</div>`;return;}
+            let tF=0,tD=0,tS=0,lF=null,oF=null,nF=null,eC={};
+            allResultsData.forEach(i=>{if(i.is_dir)tD++;else{tF++;tS+=i.size;if(!lF||i.size>lF.size)lF=i;if(!oF||i.modified<oF.modified)oF=i;if(!nF||i.modified>nF.modified)nF=i;const ext=(i.name.indexOf('.')!==-1)?'.'+i.name.split('.').pop().toLowerCase():'없음';eC[ext]=(eC[ext]||0)+1;}});
+            const top = Object.keys(eC).map(k=>({ext:k,count:eC[k]})).sort((a,b)=>b.count-a.count).slice(0,5);
+            document.getElementById('stats-content').innerHTML = `
+                <div class="grid grid-cols-2 gap-4 mb-6"><div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm"><div class="text-sm text-blue-600 font-bold mb-1">검색된 항목</div><div class="text-3xl font-extrabold text-gray-800">${allResultsData.length.toLocaleString()} <span class="text-sm font-medium text-gray-500">개</span></div><div class="text-xs text-gray-500 mt-2 bg-gray-50 py-1 px-2 rounded-md inline-block">파일: ${tF.toLocaleString()}개 / 폴더: ${tD.toLocaleString()}개</div></div><div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm"><div class="text-sm text-indigo-600 font-bold mb-1">전체 파일 용량</div><div class="text-3xl font-extrabold text-gray-800">${formatBytes(tS)}</div><div class="text-xs text-gray-500 mt-2 bg-gray-50 py-1 px-2 rounded-md inline-block">평균 크기: ${formatBytes(tF>0?tS/tF:0)}</div></div></div>
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-6"><h4 class="font-bold text-gray-800 border-b border-gray-100 pb-3 mb-3">파일 상세 정보</h4><div class="grid grid-cols-[100px_1fr] gap-y-3 text-sm"><div class="text-gray-500 font-medium bg-gray-50 px-2 py-1 rounded">가장 큰 파일</div><div class="truncate font-medium text-gray-800 py-1">${lF?`${lF.name} <span class="text-blue-600 ml-2">(${formatBytes(lF.size)})</span>`:'-'}</div><div class="text-gray-500 font-medium bg-gray-50 px-2 py-1 rounded">최신 파일</div><div class="truncate text-gray-800 py-1">${nF?`${formatDate(nF.modified)} <span class="text-gray-300 mx-1">|</span> ${nF.name}`:'-'}</div><div class="text-gray-500 font-medium bg-gray-50 px-2 py-1 rounded">오래된 파일</div><div class="truncate text-gray-800 py-1">${oF?`${formatDate(oF.modified)} <span class="text-gray-300 mx-1">|</span> ${oF.name}`:'-'}</div></div></div>
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5"><h4 class="font-bold text-gray-800 border-b border-gray-100 pb-3 mb-4">주요 확장자 분포 (Top 5)</h4><div class="space-y-3">${top.length>0?top.map(i=>`<div class="flex items-center text-sm"><div class="w-20 font-bold text-gray-700 uppercase">${i.ext}</div><div class="flex-1 bg-gray-100 rounded-full h-3 mr-4 overflow-hidden shadow-inner"><div class="bg-gradient-to-r from-blue-400 to-indigo-500 h-full rounded-full" style="width: ${(i.count/tF)*100}%"></div></div><div class="w-16 text-right font-medium text-gray-600">${i.count.toLocaleString()}개</div></div>`).join(''):'<div class="text-sm text-gray-400">파일이 없습니다.</div>'}</div></div>
+            `;
+        }
+
+        window.receiveChunk = function(b64Data, isLast) {
+            if(b64Data){
+                const data = JSON.parse(decodeURIComponent(escape(atob(b64Data))));
+                if(data.length>0){
+                    const tbody = document.getElementById('result-body');
+                    const empty = document.getElementById('empty-row'); if(empty) empty.remove();
+                    document.getElementById('clear-btn').classList.remove('hidden'); document.getElementById('stats-btn').classList.remove('hidden');
+                    const frag = document.createDocumentFragment();
+                    data.forEach(i=>{ allResultsData.push(i); if(!currentSortColumn) frag.appendChild(createRowHtml(i)); });
+                    if(!currentSortColumn) tbody.appendChild(frag); else { sortData(currentSortColumn); currentSortAsc=!currentSortAsc; }
+                    document.getElementById('result-count').innerText = `${allResultsData.length.toLocaleString()}개 발견`;
+                }
+            }
+            if(isLast) finishSearchUI();
+        };
+
+        async function toggleSearch() {
+            const api = getApi();
+            if(!api){showAlert("프로그램 API를 찾을 수 없습니다.");return;}
+            if(isSearching){ document.getElementById('search-btn').innerHTML=`중지 중...`; document.getElementById('search-btn').disabled=true; await api.stop_search(); return; }
+
+            const keyword = document.getElementById('search-keyword').value.trim();
+            if(!keyword){showAlert("검색어를 입력해주세요.");document.getElementById('search-keyword').focus();return;}
+            
+            // 다중 경로 정보 수집
+            let finalPaths = [];
+            if (currentPathMode === 'all') finalPaths = ["ALL_DRIVES"];
+            else finalPaths = customFolders;
+
+            const isAppend = document.getElementById('append-mode').checked;
+            const exNoExt = document.getElementById('exclude-no-ext').checked;
+            const exExts = Array.from(document.querySelectorAll('.exclude-ext:checked')).map(el=>el.value);
+
+            isSearching = true; currentKeyword = keyword;
+            const btn = document.getElementById('search-btn');
+            btn.innerHTML = `<div class="loader mr-2"></div> <span class="font-bold">검색 중지</span>`;
+            btn.classList.replace('bg-blue-600','bg-red-500'); btn.classList.replace('hover:bg-blue-700','hover:bg-red-600');
+            const sts = document.getElementById('search-status');
+            sts.innerHTML = `<div class="loader mr-1 border-gray-400 border-t-blue-600" style="width:12px; height:12px; border-width:2px;"></div> 검색 진행 중...`;
+            sts.className = "text-sm font-bold text-blue-600 flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full border border-blue-200 shadow-sm";
+
+            if(!isAppend){
+                allResultsData=[]; currentSortColumn=''; updateSortIcons();
+                document.getElementById('result-body').innerHTML = `<tr id="empty-row"><td colspan="6" class="px-4 py-16 text-center text-gray-500 font-medium">열심히 찾는 중입니다...</td></tr>`;
+                document.getElementById('result-count').innerText = "0개 발견";
+            }
+
+            try { await api.search_files(keyword, finalPaths, exExts, exNoExt); } 
+            catch(e){
+                showAlert("검색 중 오류가 발생했습니다.");
+                sts.innerHTML = `<div class="w-2 h-2 rounded-full bg-red-500"></div> 검색 오류`;
+                sts.className = "text-sm font-bold text-red-600 flex items-center gap-2 bg-red-50 px-3 py-1 rounded-full border border-red-200 shadow-sm";
+                finishSearchUI();
+            }
+        }
+
+        function finishSearchUI() {
+            isSearching = false;
+            const btn = document.getElementById('search-btn');
+            btn.innerHTML = `<span>검색 시작</span>`; btn.disabled = false;
+            btn.classList.replace('bg-red-500','bg-blue-600'); btn.classList.replace('hover:bg-red-600','hover:bg-blue-700');
+            const sts = document.getElementById('search-status');
+            sts.innerHTML = `<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.8)]"></div> 검색 완료`;
+            sts.className = "text-sm font-bold text-emerald-600 flex items-center gap-2 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 shadow-sm";
+            if(allResultsData.length===0) document.getElementById('result-body').innerHTML = `<tr id="empty-row"><td colspan="6" class="px-4 py-16 text-center text-gray-500 font-medium">조건에 맞는 결과가 없습니다. 필터 옵션이나 검색어를 확인해 보세요.</td></tr>`;
+        }
+    </script>
+</body>
+</html>

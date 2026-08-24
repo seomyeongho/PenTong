@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>교실 점수판</title>
+    
+    <!-- 구글 폰트 추가 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700;900&family=Orbitron:wght@700;900&family=VT323&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; overflow: hidden; margin: 0; padding: 0; background-color: #1a1a1a; }
+        
+        .font-modern { font-family: 'Black Han Sans', sans-serif; font-weight: 400; }
+        .font-sports { font-family: 'Orbitron', sans-serif; letter-spacing: -2px; }
+        .font-arcade { font-family: 'VT323', monospace; }
+
+        .bg-mesh-animated {
+            background: radial-gradient(circle at 15% 50%, rgba(238, 242, 255, 1), transparent 25%),
+                        radial-gradient(circle at 85% 30%, rgba(240, 253, 244, 1), transparent 25%),
+                        radial-gradient(circle at 50% 80%, rgba(255, 241, 242, 1), transparent 25%);
+            background-color: #f8fafc;
+            background-size: 200% 200%;
+            animation: moveBackground 15s ease infinite;
+        }
+
+        .bg-stadium { background-color: #1a1a1a; background-image: radial-gradient(#333 1px, transparent 1px); background-size: 20px 20px; }
+        .bg-retro-grid {
+            background-color: #050510;
+            background-image: linear-gradient(rgba(217, 70, 239, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(217, 70, 239, 0.2) 1px, transparent 1px);
+            background-size: 40px 40px; background-position: center bottom;
+            transform: perspective(500px) rotateX(20deg) scale(1.5); transform-origin: bottom; position: absolute; inset: 0; z-index: 0;
+        }
+        .crt-overlay {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px; pointer-events: none; position: absolute; inset: 0; z-index: 50;
+        }
+
+        @keyframes moveBackground { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes firework { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 70% { opacity: 1; } 100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; } }
+        .animate-firework { animation: firework 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-8px) rotate(-1deg); } 40% { transform: translateX(8px) rotate(1deg); } 60% { transform: translateX(-4px) rotate(-0.5deg); } 80% { transform: translateX(4px) rotate(0.5deg); } }
+        .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes fall { 0% { transform: translateY(-20px) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(360deg); opacity: 0; } }
+        .animate-fall { animation: fall linear infinite; }
+
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; background: rgba(128,128,128,0.3); border-radius: 3px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; margin-top: -5px; cursor: pointer; }
+
+        /* 캔버스 커스텀 스크롤바 */
+        .canvas-scroll::-webkit-scrollbar { width: 12px; height: 12px; }
+        .canvas-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); }
+        .canvas-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 6px; border: 3px solid transparent; background-clip: padding-box; }
+        .canvas-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); border: 3px solid transparent; background-clip: padding-box; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
+
+        // 아이콘 SVG 컴포넌트
+        const Icon = ({ children, size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        );
+        const Plus = (p) => <Icon {...p}><path d="M12 5v14M5 12h14"/></Icon>;
+        const Minus = (p) => <Icon {...p}><path d="M5 12h14"/></Icon>;
+        const RotateCcw = (p) => <Icon {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></Icon>;
+        const Users = (p) => <Icon {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>;
+        const Trophy = (p) => <Icon {...p}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></Icon>;
+        const Edit2 = (p) => <Icon {...p}><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></Icon>;
+        const Check = (p) => <Icon {...p}><path d="M20 6 9 17l-5-5"/></Icon>;
+        const Palette = (p) => <Icon {...p}><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></Icon>;
+        const SlidersIcon = (p) => <Icon {...p}><line x1="4" x2="20" y1="21" y2="14"/><line x1="4" x2="20" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><path d="M10 12h4"/><path d="M10 8h4"/></Icon>;
+        const HelpCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></Icon>;
+        const Maximize = (p) => <Icon {...p}><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></Icon>;
+        const GridIcon = (p) => <Icon {...p}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></Icon>;
+
+        // 크기 조절 핸들 (우측 하단)
+        const ResizeHandle = (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...p}><path d="M21 15v6h-6M21 21l-7-7M15 3h6v6M21 3l-7 7M9 21H3v-6M3 21l7-7M3 9V3h6M3 3l7 7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+
+        const TEAM_GRADIENTS = [ 'from-red-500 to-red-700', 'from-blue-500 to-blue-700', 'from-green-500 to-green-700', 'from-orange-400 to-orange-600', 'from-purple-500 to-purple-700', 'from-teal-400 to-teal-600', 'from-pink-500 to-pink-700', 'from-yellow-400 to-yellow-600', 'from-indigo-500 to-indigo-700', 'from-cyan-400 to-cyan-600', 'from-lime-500 to-lime-700', 'from-rose-500 to-rose-700' ];
+        const TEAM_COLORS = [ 'bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-purple-500', 'bg-teal-500', 'bg-pink-500', 'bg-yellow-500', 'bg-indigo-500', 'bg-cyan-500', 'bg-lime-500', 'bg-rose-500' ];
+        const TEAM_TEXT_COLORS = [ 'text-red-500', 'text-blue-500', 'text-green-500', 'text-orange-500', 'text-purple-500', 'text-teal-500', 'text-pink-500', 'text-yellow-500', 'text-indigo-500', 'text-cyan-500', 'text-lime-500', 'text-rose-500' ];
+        const TEAM_BORDER_COLORS = [ 'border-red-500', 'border-blue-500', 'border-green-500', 'border-orange-500', 'border-purple-500', 'border-teal-500', 'border-pink-500', 'border-yellow-500', 'border-indigo-500', 'border-cyan-500', 'border-lime-500', 'border-rose-500' ];
+
+        const THEMES = { MODERN: 'modern', SPORTS: 'sports', ARCADE: 'arcade' };
+
+        // 초기 그리드 배열 생성 함수 (화면 크기에 맞춰 중앙 정렬)
+        const generateInitialLayout = (totalCount, activeCount = 4) => {
+            const w = 360;
+            const h = 360; // 높이를 좀 더 컴팩트하게 조절
+            const gap = 30;
+
+            // 현재 화면 크기 가져오기
+            const screenW = window.innerWidth || 1200;
+            const screenH = window.innerHeight || 800;
+
+            // 화면 너비에 맞춰 들어갈 수 있는 최대 열(Column) 계산
+            let cols = Math.floor((screenW - 40 + gap) / (w + gap));
+            cols = Math.max(1, Math.min(cols, activeCount)); // 최대 필요한 열까지만
+
+            // 전체 그리드의 너비와 높이 계산
+            const rows = Math.ceil(activeCount / cols);
+            const totalW = cols * w + (cols - 1) * gap;
+            const totalH = rows * h + (rows - 1) * gap;
+
+            // 정중앙 좌표 계산 (헤더 높이 64px 제외)
+            const startX = Math.max(20, (screenW - totalW) / 2);
+            const startY = Math.max(20, (screenH - 64 - totalH) / 2);
+
+            return Array.from({ length: totalCount }, (_, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                return {
+                    id: i + 1, name: `${i + 1}팀`, score: 0, isEditing: false,
+                    x: startX + col * (w + gap),
+                    y: startY + row * (h + gap),
+                    w: w, h: h, z: i + 1
+                };
+            });
+        };
+
+        const App = () => {
+          const [title, setTitle] = useState('우리반 점수판');
+          const [isEditingTitle, setIsEditingTitle] = useState(false);
+          const [theme, setTheme] = useState(THEMES.MODERN);
+          const [teamCount, setTeamCount] = useState(4);
+          const [teams, setTeams] = useState(() => generateInitialLayout(12, teamCount));
+
+          const [cardScale, setCardScale] = useState(1.0);
+          const [highestZ, setHighestZ] = useState(12);
+
+          // 드래그 및 리사이즈 상태
+          const [action, setAction] = useState(null);
+
+          const [showResetModal, setShowResetModal] = useState(false);
+          const [showHelpModal, setShowHelpModal] = useState(false);
+          const [fireworks, setFireworks] = useState([]);
+          const [shakingCards, setShakingCards] = useState([]);
+          const [winner, setWinner] = useState(null);
+
+          // 드래그 & 리사이즈 이벤트 처리
+          useEffect(() => {
+            if (!action) return;
+            const handlePointerMove = (e) => {
+                const dx = (e.clientX - action.startX) / cardScale;
+                const dy = (e.clientY - action.startY) / cardScale;
+
+                setTeams(prev => prev.map(t => {
+                    if (t.id === action.id) {
+                        if (action.type === 'drag') {
+                            return { ...t, x: Math.max(0, action.initX + dx), y: Math.max(0, action.initY + dy) };
+                        } else if (action.type === 'resize') {
+                            return { ...t, w: Math.max(220, action.initW + dx), h: Math.max(160, action.initH + dy) };
+                        }
+                    }
+                    return t;
+                }));
+            };
+            const handlePointerUp = () => setAction(null);
+
+            window.addEventListener('pointermove', handlePointerMove);
+            window.addEventListener('pointerup', handlePointerUp);
+            window.addEventListener('pointercancel', handlePointerUp);
+            window.addEventListener('blur', handlePointerUp); // 창이 포커스를 잃었을 때 드래그 강제 종료
+
+            return () => {
+                window.removeEventListener('pointermove', handlePointerMove);
+                window.removeEventListener('pointerup', handlePointerUp);
+                window.removeEventListener('pointercancel', handlePointerUp);
+                window.removeEventListener('blur', handlePointerUp);
+            };
+          }, [action, cardScale]);
+
+          // 마우스 휠 이벤트 처리 (Ctrl + 휠로 줌)
+          useEffect(() => {
+            const handleWheel = (e) => {
+              if (e.ctrlKey) {
+                e.preventDefault();
+                setCardScale(prev => {
+                  let newScale = prev - (e.deltaY * 0.001);
+                  return Math.min(Math.max(0.4, newScale), 2.5);
+                });
+              }
+            };
+            window.addEventListener('wheel', handleWheel, { passive: false });
+            return () => window.removeEventListener('wheel', handleWheel);
+          }, []);
+
+          const startAction = (type, e, id) => {
+              // e.preventDefault(); // 포인터 이벤트 버그 원인이 될 수 있어 제거 (텍스트 드래그 방지는 CSS select-none이 처리)
+              setHighestZ(prev => prev + 1);
+              setTeams(prev => prev.map(t => t.id === id ? { ...t, z: highestZ + 1 } : t));
+              const t = teams.find(team => team.id === id);
+              setAction({ type, id, startX: e.clientX, startY: e.clientY, initX: t.x, initY: t.y, initW: t.w, initH: t.h });
+
+              // 마우스가 브라우저(또는 Iframe) 창 밖으로 나가도 이벤트를 놓치지 않도록 캡처 설정
+              try { e.target.setPointerCapture(e.pointerId); } catch(err) {}
+          };
+
+         // 깔끔하게 그리드 재정렬 (각 카드의 개별 크기를 반영하여 절대 겹치지 않게 정렬)
+          const autoArrangeGrid = () => {
+              setTeams(prev => {
+                  const gap = 30; // 카드 사이의 기본 간격
+                  const containerW = window.innerWidth / cardScale;
+                  const containerH = (window.innerHeight - 64) / cardScale;
+
+                  // 1. 현재 활성화된 팀들 중에서 '가장 넓은 너비'와 '가장 높은 높이'를 찾습니다.
+                  const activeTeams = prev.slice(0, teamCount);
+                  const maxW = Math.max(...activeTeams.map(t => t.w));
+                  const maxH = Math.max(...activeTeams.map(t => t.h));
+
+                  // 2. 가장 큰 카드를 기준으로 한 줄에 몇 열(Column)이 들어갈지 계산합니다.
+                  let cols = Math.floor((containerW - 40 + gap) / (maxW + gap));
+                  cols = Math.max(1, Math.min(cols, teamCount));
+
+                  // 3. 전체 그리드가 차지할 총 너비와 높이를 계산합니다.
+                  const rows = Math.ceil(teamCount / cols);
+                  const totalW = cols * maxW + (cols - 1) * gap;
+                  const totalH = rows * maxH + (rows - 1) * gap;
+
+                  // 4. 화면 정중앙 시작 좌표를 계산합니다.
+                  const startX = Math.max(20, (containerW - totalW) / 2);
+                  const startY = Math.max(20, (containerH - totalH) / 2);
+
+                  // 5. 각 카드를 그리드에 배치합니다.
+                  return prev.map((t, i) => {
+                      if (i < teamCount) {
+                          const col = i % cols;
+                          const row = Math.floor(i / cols);
+
+                          // 카드의 크기가 서로 다를 경우, 자기 자리(셀) 안에서 정중앙에 오도록 오프셋을 줍니다.
+                          const offsetX = (maxW - t.w) / 2;
+                          const offsetY = (maxH - t.h) / 2;
+
+                          return {
+                              ...t,
+                              x: startX + col * (maxW + gap) + offsetX,
+                              y: startY + row * (maxH + gap) + offsetY
+                          };
+                      }
+                      return t;
+                  });
+              });
+          };
+
+          const updateScore = (id, delta) => {
+            setTeams(prev => prev.map(t => t.id === id ? { ...t, score: Math.max(0, t.score + delta) } : t));
+            if (delta > 0) triggerFireworks(id);
+            else if (delta < 0) triggerShake(id);
+          };
+
+          const triggerFireworks = (teamId) => {
+            const fwId = Date.now();
+            const particles = Array.from({ length: 30 }).map((_, i) => ({
+              id: `${fwId}-${i}`, angle: (i * 12) * (Math.PI / 180), velocity: 80 + Math.random() * 100, size: 6 + Math.random() * 10,
+              color: ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#a855f7', '#ffffff'][Math.floor(Math.random() * 6)]
+            }));
+            setFireworks(prev => [...prev, { id: fwId, teamId, particles }]);
+            setTimeout(() => setFireworks(prev => prev.filter(fw => fw.id !== fwId)), 1000);
+          };
+
+          const triggerShake = (teamId) => {
+            if (!shakingCards.includes(teamId)) {
+              setShakingCards(prev => [...prev, teamId]);
+              setTimeout(() => setShakingCards(prev => prev.filter(id => id !== teamId)), 400);
+            }
+          };
+
+          const resetScores = () => {
+            setTeams(prev => prev.map(t => ({ ...t, score: 0 })));
+            setShowResetModal(false);
+            setWinner(null);
+          };
+
+          const toggleEdit = (id) => setTeams(prev => prev.map(t => t.id === id ? { ...t, isEditing: !t.isEditing } : t));
+          const handleNameChange = (id, newName) => setTeams(prev => prev.map(t => t.id === id ? { ...t, name: newName } : t));
+
+          const showWinner = () => {
+            const activeTeams = teams.slice(0, teamCount);
+            const maxScore = Math.max(...activeTeams.map(t => t.score));
+            if (maxScore === 0) return;
+            setWinner(activeTeams.filter(t => t.score === maxScore));
+          };
+
+          const getThemeStyles = () => {
+            switch (theme) {
+              case THEMES.SPORTS: return { appClass: 'bg-stadium', header: 'bg-[#111] text-stone-100 border-b-4 border-[#222] z-40', iconBtn: 'text-stone-300 hover:bg-white/10', modalBg: 'bg-[#222] text-stone-100 border-2 border-stone-600', fontScore: 'font-sports text-shadow-glow', popover: 'bg-[#111] border border-stone-700 text-stone-300' };
+              case THEMES.ARCADE: return { appClass: 'bg-slate-900 overflow-hidden', header: 'bg-black/90 text-white border-b-2 border-fuchsia-500 shadow-[0_0_20px_rgba(217,70,239,0.5)] z-40', iconBtn: 'text-fuchsia-400 hover:bg-fuchsia-500/20', modalBg: 'bg-black text-fuchsia-400 border-4 border-fuchsia-500 shadow-[0_0_30px_rgba(217,70,239,0.4)]', fontScore: 'font-arcade text-shadow-neon', popover: 'bg-black border-2 border-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.3)] text-fuchsia-400' };
+              default: return { appClass: 'bg-mesh-animated', header: 'bg-white/80 backdrop-blur-xl text-slate-700 border-b border-slate-200 shadow-sm z-40', iconBtn: 'text-slate-600 hover:bg-black/5', modalBg: 'bg-white text-slate-800 rounded-[2rem] border border-slate-100', fontScore: 'font-modern drop-shadow-md text-slate-800', popover: 'bg-white border border-slate-100 shadow-2xl text-slate-700' };
+            }
+          };
+
+          const getCardStyles = (index) => {
+            switch (theme) {
+              case THEMES.SPORTS: return { wrapper: `bg-[#0a0a0a] rounded-xl border-4 border-[#222] shadow-2xl flex flex-col`, top: `${TEAM_COLORS[index]} text-white rounded-t-sm shadow-inner cursor-move`, scoreArea: `bg-black relative rounded-md border border-[#1a1a1a] m-2 flex-1 shadow-inner overflow-hidden`, scoreText: `${TEAM_TEXT_COLORS[index]} brightness-150`, btnArea: `flex gap-2 p-2 pt-0 bg-[#0a0a0a]`, btnPlus1: `flex-1 ${TEAM_COLORS[index]} text-white border-b-4 border-black/60 rounded hover:brightness-110`, btnPlus5: `w-14 bg-[#222] text-stone-300 border-b-4 border-[#111] rounded hover:bg-[#333]`, btnMinus: `w-14 bg-[#111] text-stone-500 rounded hover:text-red-500 border border-[#222]` };
+              case THEMES.ARCADE: return { wrapper: `bg-black rounded-none border-4 ${TEAM_BORDER_COLORS[index]} shadow-[0_0_15px_rgba(0,0,0,0.8)] flex flex-col`, top: `bg-[#0a0a0a] ${TEAM_TEXT_COLORS[index]} border-b-2 border-dashed ${TEAM_BORDER_COLORS[index]} cursor-move`, scoreArea: `bg-transparent m-2 flex-1 relative`, scoreText: `${TEAM_TEXT_COLORS[index]}`, btnArea: `flex gap-2 p-2 pt-0 bg-black`, btnPlus1: `flex-1 bg-transparent ${TEAM_TEXT_COLORS[index]} border-2 ${TEAM_BORDER_COLORS[index]} hover:bg-white/10`, btnPlus5: `w-14 bg-transparent text-white border-2 border-white/30 hover:bg-white/10`, btnMinus: `w-14 bg-transparent text-red-500 border-2 border-red-500/30 hover:bg-red-500/20` };
+              default: return { wrapper: `bg-white/70 backdrop-blur-md rounded-[2rem] border border-white/60 shadow-xl flex flex-col overflow-hidden`, top: `bg-gradient-to-r ${TEAM_GRADIENTS[index]} text-white shadow-md cursor-move`, scoreArea: `bg-transparent m-2 flex-1 relative overflow-hidden`, scoreText: ``, btnArea: `flex gap-2 p-3 bg-white/40 border-t border-white/50`, btnPlus1: `flex-[2] bg-gradient-to-br ${TEAM_GRADIENTS[index]} text-white rounded-xl shadow hover:shadow-md hover:-translate-y-0.5`, btnPlus5: `flex-1 bg-white/80 backdrop-blur-sm text-slate-700 rounded-xl hover:bg-white shadow-sm border border-white`, btnMinus: `flex-1 bg-white/50 text-slate-500 rounded-xl hover:bg-red-50 hover:text-red-500 shadow-sm border border-white` };
+            }
+          };
+
+          const currentStyles = getThemeStyles();
+
+          // 캔버스 내부 사이즈 (모든 점수판이 잘리지 않도록 계산)
+          const activeTeams = teams.slice(0, teamCount);
+          const maxX = Math.max(...activeTeams.map(t => t.x + t.w)) + 200;
+          const maxY = Math.max(...activeTeams.map(t => t.y + t.h)) + 200;
+          const containerWidth = Math.max(window.innerWidth, maxX);
+          const containerHeight = Math.max(window.innerHeight - 64, maxY);
+
+          return (
+            <div className={`w-screen h-screen flex flex-col select-none transition-colors duration-500 relative ${currentStyles.appClass}`}>
+              {theme === THEMES.ARCADE && ( <div className="absolute inset-0 pointer-events-none overflow-hidden z-0"><div className="bg-retro-grid"></div><div className="crt-overlay"></div></div> )}
+
+              {/* 헤더 */}
+              <div className={`w-full h-16 flex justify-between items-center px-4 lg:px-6 transition-all duration-300 relative shrink-0 ${currentStyles.header}`}>
+                <div className="flex-1 flex items-center justify-start">
+                  <div className="flex items-center gap-3">
+                    {theme === THEMES.MODERN && <div className="w-10 h-10 bg-indigo-500 text-white rounded-xl flex items-center justify-center shadow-lg"><Trophy size={20} /></div>}
+                    {isEditingTitle ? (
+                      <div className="flex items-center gap-2">
+                        <input autoFocus className="text-2xl font-black bg-transparent border-b-2 border-current outline-none w-64 whitespace-nowrap" value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => setIsEditingTitle(false)} onKeyDown={(e) => e.key === 'Enter' && setIsEditingTitle(false)} />
+                        <button onClick={() => setIsEditingTitle(false)} className="p-1 hover:bg-black/10 rounded-full"><Check size={20} /></button>
+                      </div>
+                    ) : (
+                      <h1 onClick={() => setIsEditingTitle(true)} className="text-2xl font-black tracking-tight cursor-pointer hover:opacity-75 transition-opacity flex items-center gap-2 group whitespace-nowrap" title="제목 수정하기">
+                        {title} <Edit2 size={16} className="opacity-0 group-hover:opacity-50 transition-opacity" />
+                      </h1>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 lg:gap-2">
+                  <div className="relative group">
+                    <button className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${currentStyles.iconBtn}`} title="테마 변경"><Palette size={20} /></button>
+                    <div className="absolute top-full right-0 pt-2 opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-200 w-36">
+                      <div className={`rounded-xl p-2 flex flex-col gap-1 ${currentStyles.popover}`}>
+                        <button onClick={() => setTheme(THEMES.MODERN)} className={`px-3 py-2 rounded-lg text-sm font-bold text-left transition-all ${theme === THEMES.MODERN ? 'bg-indigo-500 text-white' : 'hover:bg-current hover:bg-opacity-10'}`}>✨ 모던</button>
+                        <button onClick={() => setTheme(THEMES.SPORTS)} className={`px-3 py-2 rounded-lg text-sm font-bold text-left transition-all ${theme === THEMES.SPORTS ? 'bg-[#333] text-white' : 'hover:bg-current hover:bg-opacity-10'}`}>🏓 스포츠</button>
+                        <button onClick={() => setTheme(THEMES.ARCADE)} className={`px-3 py-2 rounded-lg text-sm font-bold text-left transition-all ${theme === THEMES.ARCADE ? 'bg-fuchsia-600 text-white' : 'hover:bg-current hover:bg-opacity-10'}`}>🕹️ 아케이드</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative group">
+                    <button className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${currentStyles.iconBtn}`} title="팀 설정"><Users size={20} /></button>
+                    <div className="absolute top-full right-0 pt-2 opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-200 w-56">
+                      <div className={`rounded-xl p-3 ${currentStyles.popover}`}>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[2,3,4,5,6,7,8,9,10,11,12].map(num => (
+                            <button key={num} onClick={() => { setTeamCount(num); setWinner(null); }} className={`aspect-square rounded-lg font-bold flex items-center justify-center transition-all ${teamCount === num ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-500/10 hover:bg-opacity-20'}`}>{num}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative group">
+                    <button className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${currentStyles.iconBtn}`} title="화면 배율 조절"><Maximize size={20} /></button>
+                    <div className="absolute top-full right-0 pt-2 opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-200 w-56">
+                      <div className={`rounded-xl p-4 ${currentStyles.popover}`}>
+                        <div className="text-xs font-bold opacity-70 mb-2 flex justify-between"><span>전체 배율</span><span>{Math.round(cardScale * 100)}%</span></div>
+                        <input type="range" min="0.4" max="2.5" step="0.05" value={cardScale} onChange={(e) => setCardScale(parseFloat(e.target.value))} className={`w-full ${theme === THEMES.ARCADE ? 'text-fuchsia-500' : 'text-indigo-500'}`} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button onClick={autoArrangeGrid} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${currentStyles.iconBtn}`} title="그리드로 자동 정렬"><GridIcon size={20} /></button>
+
+                  <div className="w-px h-5 bg-current opacity-20 mx-1"></div>
+
+                  <button onClick={() => setShowHelpModal(true)} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${currentStyles.iconBtn}`} title="도움말"><HelpCircle size={20} /></button>
+                  <button onClick={() => setShowResetModal(true)} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${currentStyles.iconBtn}`} title="모든 점수 초기화"><RotateCcw size={20} /></button>
+
+                  <button onClick={showWinner} className={`ml-1 h-10 px-4 rounded-xl font-bold flex items-center gap-1 transition-all shadow-md hover:shadow-lg ${theme === THEMES.ARCADE ? 'bg-fuchsia-600 text-white' : theme === THEMES.SPORTS ? 'bg-yellow-600 text-black' : 'bg-indigo-600 text-white'}`} title="우승팀 발표">
+                    <Trophy size={18} /><span>발표</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 자유형 캔버스 영역 (오버플로우 시 스크롤바 생성) */}
+              <div className="flex-1 w-full relative overflow-auto canvas-scroll z-10" style={{ cursor: action ? 'grabbing' : 'default' }}>
+                {/* Scale이 적용되는 내부 래퍼 (자식 요소가 삐져나가면 크기가 늘어나 스크롤 가능해짐) */}
+                <div style={{ transform: `scale(${cardScale})`, transformOrigin: '0 0', width: `${containerWidth}px`, height: `${containerHeight}px`, position: 'relative' }}>
+
+                  {activeTeams.map((team, index) => {
+                    const cardStyles = getCardStyles(index);
+                    const isShaking = shakingCards.includes(team.id);
+
+                    return (
+                      <div
+                        key={team.id}
+                        className={`absolute group shadow-2xl transition-shadow ${cardStyles.wrapper} ${isShaking ? 'animate-shake' : ''} ${action?.id === team.id ? 'ring-4 ring-white/50' : ''}`}
+                        style={{ left: team.x, top: team.y, width: team.w, height: team.h, zIndex: team.z }}
+                        onPointerDown={() => { setHighestZ(prev => prev + 1); setTeams(ts => ts.map(t => t.id === team.id ? { ...t, z: highestZ + 1 } : t)); }}
+                      >
+                        {isShaking && <div className="absolute inset-0 bg-red-500/30 z-30 pointer-events-none rounded-inherit" />}
+
+                        {/* 이름표 & 드래그 핸들 */}
+                        <div
+                          className={`p-2 lg:p-3 text-center flex items-center justify-center gap-2 relative z-20 shrink-0 ${cardStyles.top}`}
+                          onPointerDown={(e) => { e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'svg' && startAction('drag', e, team.id) }}
+                        >
+                          {team.isEditing ? (
+                            <div className="flex items-center w-full px-2">
+                              <input autoFocus className="bg-black/20 text-current font-bold text-center w-full rounded outline-none border border-current/40 px-2 py-0.5 text-lg" value={team.name} onChange={(e) => handleNameChange(team.id, e.target.value)} onBlur={() => toggleEdit(team.id)} onKeyDown={(e) => e.key === 'Enter' && toggleEdit(team.id)} onPointerDown={e => e.stopPropagation()} />
+                              <button onClick={() => toggleEdit(team.id)} className="ml-2 bg-white/20 p-1 rounded-md" onPointerDown={e => e.stopPropagation()}><Check size={14}/></button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="text-xl lg:text-2xl font-black truncate drop-shadow-sm leading-none select-none">{team.name}</span>
+                              <button onClick={() => toggleEdit(team.id)} className="opacity-0 group-hover:opacity-100 p-1.5 bg-black/20 hover:bg-black/40 rounded-lg transition-all absolute right-2" onPointerDown={e => e.stopPropagation()}><Edit2 size={14} /></button>
+                            </>
+                          )}
+                        </div>
+
+                        {/* 점수 (SVG viewBox 사용 -> 상자 크기에 맞춰 자동 확대/축소) */}
+                        <div className={`flex items-center justify-center transition-colors ${cardStyles.scoreArea}`}>
+                          {theme === THEMES.SPORTS && <div className="absolute top-1/2 left-0 w-full h-[2px] bg-black/90 z-10"></div>}
+                          {fireworks.filter(f => f.teamId === team.id).map(fw => (
+                            <div key={fw.id} className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                              <div className="absolute w-24 h-24 rounded-full border-4 border-current opacity-0 animate-ripple"></div>
+                              {fw.particles.map(p => ( <div key={p.id} className="absolute rounded-full animate-firework" style={{ width: `${p.size}px`, height: `${p.size}px`, backgroundColor: p.color, '--tx': `${Math.cos(p.angle) * p.velocity}px`, '--ty': `${Math.sin(p.angle) * p.velocity}px` }} /> ))}
+                            </div>
+                          ))}
+
+                          {/* 완벽한 반응형 숫자 렌더링을 위한 SVG Text */}
+                          <svg viewBox="0 0 300 150" className={`w-full h-full drop-shadow-md z-0 select-none ${currentStyles.fontScore} ${cardStyles.scoreText} ${isShaking ? 'text-red-500' : ''}`}>
+                            <text x="150" y="85" dominantBaseline="middle" textAnchor="middle" fontSize="120" fontWeight="bold" fill="currentColor">{team.score}</text>
+                          </svg>
+                        </div>
+
+                        {/* 1줄 버튼 컨트롤 영역 */}
+                        <div className={`${cardStyles.btnArea}`} onPointerDown={e => e.stopPropagation()}>
+                          <button onClick={() => updateScore(team.id, -1)} className={`font-bold transition-all active:scale-95 text-lg flex items-center justify-center shadow-sm ${cardStyles.btnMinus}`}>-1</button>
+                          <button onClick={() => updateScore(team.id, 1)} className={`font-black transition-all active:scale-95 text-2xl flex items-center justify-center gap-1 ${cardStyles.btnPlus1}`}>+1</button>
+                          <button onClick={() => updateScore(team.id, 5)} className={`font-bold transition-all active:scale-95 text-lg flex items-center justify-center shadow-sm ${cardStyles.btnPlus5}`}>+5</button>
+                        </div>
+
+                        {/* 사이즈 조절 핸들 (우측 하단) */}
+                        <div
+                          className="absolute bottom-0 right-0 w-8 h-8 cursor-se-resize z-50 flex items-end justify-end p-1.5 opacity-20 hover:opacity-100 transition-opacity text-current"
+                          onPointerDown={(e) => startAction('resize', e, team.id)}
+                          title="크기 조절"
+                        >
+                            <ResizeHandle className="w-5 h-5 text-slate-400" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 초기화 모달 */}
+              {showResetModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                  <div className={`p-8 max-w-sm w-full shadow-2xl rounded-3xl animate-in zoom-in duration-200 ${currentStyles.modalBg}`}>
+                    <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mb-6 mx-auto"><RotateCcw size={32} /></div>
+                    <h2 className="text-2xl font-black text-center mb-2">점수를 초기화할까요?</h2>
+                    <p className="opacity-70 text-center mb-8 font-medium">모든 팀의 점수가 0점으로 돌아가며, 되돌릴 수 없습니다.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button onClick={() => setShowResetModal(false)} className="py-4 bg-gray-500/10 hover:bg-opacity-10 rounded-2xl font-bold transition-all">취소</button>
+                      <button onClick={resetScores} className="py-4 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 transition-all shadow-lg">초기화</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 도움말 모달 */}
+              {showHelpModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                  <div className={`p-8 max-w-md w-full shadow-2xl rounded-3xl animate-in zoom-in duration-200 ${currentStyles.modalBg}`}>
+                    <div className="flex items-center gap-4 mb-8">
+                      <div className="w-12 h-12 bg-blue-500/20 text-blue-500 rounded-2xl flex items-center justify-center shrink-0"><HelpCircle size={26} /></div>
+                      <div>
+                        <h2 className="text-2xl font-black tracking-tight text-current">도움말 및 기능</h2>
+                        <p className="opacity-60 text-sm mt-1 font-medium">간편한 조작 방법 안내</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 mb-8 text-current">
+                      <div className="flex justify-between items-center bg-gray-500/10 p-3 px-4 rounded-xl">
+                        <span className="font-bold opacity-80 text-sm">점수판 이동하기</span>
+                        <span className="opacity-80 text-sm font-medium">상단(이름표) 드래그</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-gray-500/10 p-3 px-4 rounded-xl">
+                        <span className="font-bold opacity-80 text-sm">개별 크기 조절</span>
+                        <span className="opacity-80 text-sm flex items-center gap-1 font-medium">우측 하단 ⤡ 드래그</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-gray-500/10 p-3 px-4 rounded-xl">
+                        <span className="font-bold opacity-80 text-sm">전체 화면 줌(확대/축소)</span>
+                        <span className="flex items-center gap-1.5 opacity-90">
+                          <kbd className="px-2.5 py-1 bg-gray-200 text-gray-800 rounded-lg shadow-sm font-mono text-sm border border-gray-300">Ctrl</kbd> + 휠 굴리기
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center bg-gray-500/10 p-3 px-4 rounded-xl">
+                        <span className="font-bold opacity-80 text-sm">이름 변경</span>
+                        <span className="opacity-80 text-sm font-medium">글씨 클릭 후 수정</span>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowHelpModal(false)} className={`w-full py-4 text-white rounded-2xl font-black transition-all shadow-lg active:scale-95 ${theme === THEMES.ARCADE ? 'bg-fuchsia-600 hover:bg-fuchsia-700' : 'bg-blue-600 hover:bg-blue-700'}`}>확인했습니다</button>
+                  </div>
+                </div>
+              )}
+
+              {/* 우승 모달 */}
+              {winner && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 overflow-hidden">
+                  <div className="absolute inset-0 pointer-events-none">
+                    {[...Array(60)].map((_, i) => (
+                      <div key={i} className="absolute animate-fall" style={{ backgroundColor: ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#a855f7', '#ec4899', '#06b6d4'][Math.floor(Math.random()*7)], width: Math.random() * 8 + 6 + 'px', height: Math.random() * 12 + 8 + 'px', top: '-20px', left: Math.random() * 100 + '%', animationDelay: Math.random() * 3 + 's', animationDuration: Math.random() * 3 + 2 + 's', transform: `rotate(${Math.random() * 360}deg)` }} />
+                    ))}
+                  </div>
+
+                  <div className={`p-10 max-w-2xl w-full shadow-2xl rounded-[3rem] text-center relative animate-in slide-in-from-bottom duration-500 border border-white/10 ${currentStyles.modalBg}`}>
+                    <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-32 h-32 bg-yellow-400 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(250,204,21,0.6)] border-8 border-current z-10">
+                      <Trophy size={56} className="text-black animate-pulse" />
+                    </div>
+                    <h2 className="text-4xl lg:text-5xl font-black mt-12 mb-2 tracking-tight">우승을 축하합니다!</h2>
+                    <div className="opacity-50 font-bold mb-8 uppercase tracking-widest text-sm">Winner Celebration</div>
+                    <div className="flex flex-wrap justify-center gap-6 mb-10 max-h-[50vh] overflow-y-auto p-4">
+                      {winner.map(t => (
+                        <div key={t.id} className="flex flex-col items-center">
+                          <div className={`w-28 h-28 rounded-3xl bg-gradient-to-br ${TEAM_GRADIENTS[t.id-1]} flex items-center justify-center text-white text-5xl font-black shadow-lg border-2 border-white/20 ${currentStyles.fontScore}`}>{t.score}</div>
+                          <span className="mt-4 font-black text-2xl">{t.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => setWinner(null)} className={`w-full py-5 text-white rounded-2xl font-black text-xl shadow-xl transition-all active:scale-95 ${theme === THEMES.ARCADE ? 'bg-fuchsia-600 hover:bg-fuchsia-700' : 'bg-blue-600 hover:bg-blue-700'}`}>닫기</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

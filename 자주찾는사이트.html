@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>만능 즐겨찾기</title>
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 웹 폰트 (Pretendard) -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <style>
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
+            ::-webkit-scrollbar { width: 8px; }
+            ::-webkit-scrollbar-track { background: transparent; }
+            ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+            ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        /* 모달 트랜지션용 클래스 */
+        .modal-open { opacity: 1 !important; pointer-events: auto !important; }
+        .modal-open > div { transform: scale(1) !important; }
+
+        /* 커스텀 라디오/선택 버튼 스타일 */
+        .icon-radio:checked + div { border-color: #3b82f6; background-color: #eff6ff; color: #2563eb; }
+        .color-radio:checked + div { transform: scale(1.2); border: 2px solid #1e293b; }
+        .type-radio:checked + div { background-color: #3b82f6; color: white; border-color: #3b82f6; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen w-full flex flex-col overflow-hidden relative">
+
+    <!-- 상단 헤더 영역 -->
+    <header class="w-full pt-5 pb-3 px-6 flex justify-between items-end shrink-0 border-b border-slate-200 bg-slate-50 z-10">
+        <div>
+            <h1 class="text-xl font-bold text-slate-800 tracking-tight">만능 즐겨찾기</h1>
+            <p class="text-xs text-slate-500 mt-1">인터넷, 문서 파일, 프로그램, 내 폴더까지 한 곳에서 빠르게 여세요.</p>
+        </div>
+        <div>
+            <!-- 편집 모드 토글 스위치 -->
+            <label class="flex items-center cursor-pointer gap-2 group">
+                <span class="text-xs font-medium text-slate-500 group-hover:text-slate-700 transition-colors" id="edit-mode-text">편집 끄기</span>
+                <div class="relative">
+                    <input type="checkbox" id="edit-mode-toggle" class="sr-only">
+                    <div class="block bg-slate-300 w-9 h-5 rounded-full transition-colors duration-300" id="toggle-bg"></div>
+                    <div class="dot absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform duration-300" id="toggle-dot"></div>
+                </div>
+            </label>
+        </div>
+    </header>
+
+    <!-- 메인 컨테이너 -->
+    <main class="flex-1 overflow-y-auto px-6 w-full">
+        <div id="shortcut-container" class="flex flex-col gap-6 min-h-full pb-10 pt-4">
+            <!-- JavaScript를 통해 이 곳에 섹션과 카드가 동적으로 생성됩니다 -->
+        </div>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- 팝업(모달) 영역 - 사용자 입력 폼 및 확인창 -->
+    <!-- ========================================== -->
+
+    <!-- 단순 알림 모달 -->
+    <div id="alertModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-white rounded-xl p-5 shadow-2xl max-w-sm w-full mx-4 transform scale-95 transition-transform duration-300">
+            <h3 id="alertTitle" class="text-lg font-bold text-slate-800 mb-2">알림</h3>
+            <p id="alertMessage" class="text-sm text-slate-600 mb-5 leading-relaxed"></p>
+            <div class="flex justify-end">
+                <button onclick="closeAlertModal()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 확인/삭제 모달 -->
+    <div id="confirmModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-white rounded-xl p-5 shadow-2xl max-w-sm w-full mx-4 transform scale-95 transition-transform duration-300">
+            <h3 id="confirmTitle" class="text-lg font-bold text-slate-800 mb-2">확인</h3>
+            <p id="confirmMessage" class="text-sm text-slate-600 mb-5 leading-relaxed"></p>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors">취소</button>
+                <button id="confirmBtn" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors">삭제</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 카테고리 편집 모달 -->
+    <div id="categoryModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-white rounded-xl p-5 shadow-2xl max-w-md w-full mx-4 transform scale-95 transition-transform duration-300">
+            <h3 id="categoryModalTitle" class="text-lg font-bold text-slate-800 mb-4">카테고리 추가</h3>
+            <div class="mb-5">
+                <label class="block text-xs font-medium text-slate-700 mb-1">카테고리 이름</label>
+                <input type="text" id="categoryNameInput" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-shadow" placeholder="예: 즐겨찾기">
+            </div>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeCategoryModal()" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors">취소</button>
+                <button id="categorySaveBtn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 사이트 편집 모달 -->
+    <div id="siteModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-white rounded-xl p-5 shadow-2xl max-w-md w-full mx-4 transform scale-95 transition-transform duration-300 max-h-[90vh] overflow-y-auto">
+            <h3 id="siteModalTitle" class="text-lg font-bold text-slate-800 mb-4">항목 추가</h3>
+            
+            <div class="space-y-4 mb-5">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-2">즐겨찾기 종류</label>
+                    <div class="flex gap-2">
+                        <label class="cursor-pointer flex-1">
+                            <input type="radio" name="siteType" value="web" class="hidden type-radio" checked>
+                            <div class="text-center py-1.5 border border-slate-300 rounded-lg text-[13px] font-medium text-slate-600 transition-colors">🌐 웹사이트</div>
+                        </label>
+                        <label class="cursor-pointer flex-1">
+                            <input type="radio" name="siteType" value="file" class="hidden type-radio">
+                            <div class="text-center py-1.5 border border-slate-300 rounded-lg text-[13px] font-medium text-slate-600 transition-colors">📄 파일/앱</div>
+                        </label>
+                        <label class="cursor-pointer flex-1">
+                            <input type="radio" name="siteType" value="folder" class="hidden type-radio">
+                            <div class="text-center py-1.5 border border-slate-300 rounded-lg text-[13px] font-medium text-slate-600 transition-colors">📁 폴더</div>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">표시될 이름</label>
+                    <input type="text" id="siteNameInput" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-shadow" placeholder="예: 교육청 홈페이지">
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1" id="urlLabel">인터넷 주소 (URL)</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="siteUrlInput" class="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-shadow" placeholder="https://...">
+                        <button id="browseBtn" class="hidden px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors shrink-0">찾아보기</button>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-2">아이콘 선택</label>
+                    <div class="grid grid-cols-6 gap-2" id="iconSelectorContainer">
+                        <!-- JS에서 동적 생성 -->
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-2">테마 색상</label>
+                    <div class="flex flex-wrap gap-2" id="colorSelectorContainer">
+                        <!-- JS에서 동적 생성 -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <button onclick="closeSiteModal()" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors">취소</button>
+                <button id="siteSaveBtn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================================
+        // 🚀 Pywebview API 접근 유틸리티
+        // ============================================================================
+        function getPywebviewApi() {
+            const pwv = window.pywebview || 
+                       (window.parent && window.parent.pywebview) || 
+                       (window.top && window.top.pywebview);
+            return pwv && pwv.api ? pwv.api : null;
+        }
+
+        // ============================================================================
+        // 🎨 아이콘 및 색상 라이브러리
+        // ============================================================================
+        const ICONS = {
+            building: `<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />`,
+            computer: `<path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />`,
+            academic: `<path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />`,
+            gift: `<path stroke-linecap="round" stroke-linejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />`,
+            school: `<path stroke-linecap="round" stroke-linejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />`,
+            document: `<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />`,
+            folder: `<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />`,
+            globe: `<path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />`,
+            chat: `<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.84 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />`,
+            mail: `<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />`,
+            users: `<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />`,
+            default: `<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />`
+        };
+
+        const TAILWIND_COLORS = ['blue', 'teal', 'emerald', 'green', 'rose', 'red', 'indigo', 'purple', 'sky', 'orange', 'amber', 'slate'];
+        const BORDER_COLORS = ['border-blue-400', 'border-emerald-400', 'border-rose-400', 'border-amber-400', 'border-purple-400'];
+
+        // ============================================================================
+        // ⚙️ 데이터 상태 변수
+        // ============================================================================
+        let CATEGORIES = [
+            { id: "busan", title: "부산광역시교육청 관련", borderColor: "border-blue-400" },
+            { id: "public", title: "대국민 및 공공 서비스", borderColor: "border-emerald-400" }
+        ];
+
+        let SITES = [
+            { id: "s1", category: "busan", type: "web", name: "교육청 홈페이지", url: "https://www.pen.go.kr", icon: "building", color: "blue" },
+            { id: "s2", category: "busan", type: "web", name: "업무포털", url: "https://pen.eduptl.kr/", icon: "computer", color: "teal" },
+            { id: "s3", category: "busan", type: "web", name: "공직자통합메일", url: "https://mail.korea.kr", icon: "mail", color: "rose" },
+            { id: "s4", category: "busan", type: "web", name: "교육연수원", url: "https://edu.beti.go.kr", icon: "academic", color: "indigo" },
+            { id: "s5", category: "busan", type: "web", name: "맞춤형복지", url: "https://pen.benepia.co.kr", icon: "gift", color: "orange" },
+            { id: "s6", category: "busan", type: "web", name: "교육연구정보원", url: "https://home.pen.go.kr/busanedu", icon: "users", color: "sky" },
+            { id: "s7", category: "public", type: "web", name: "정부24", url: "https://www.gov.kr", icon: "globe", color: "emerald" },
+            { id: "s8", category: "public", type: "web", name: "국민신문고", url: "https://www.epeople.go.kr", icon: "chat", color: "blue" },
+            { id: "s9", category: "public", type: "web", name: "나라장터(G2B)", url: "https://www.g2b.go.kr", icon: "building", color: "amber" },
+            { id: "s10", category: "public", type: "web", name: "학교알리미", url: "https://www.schoolinfo.go.kr", icon: "school", color: "indigo" },
+            { id: "s11", category: "public", type: "web", name: "정보공개포털", url: "https://www.open.go.kr", icon: "document", color: "rose" },
+            { id: "s12", category: "public", type: "web", name: "인터넷등기소", url: "https://www.iros.go.kr", icon: "computer", color: "teal" },
+        ];
+
+        let isEditMode = false;
+
+        // ============================================================================
+        // 💾 데이터 로드 및 저장
+        // ============================================================================
+        async function loadData() {
+            const api = getPywebviewApi();
+            try {
+                if (api && api.load_shortcut_data) {
+                    const raw = await api.load_shortcut_data();
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if(parsed.categories) CATEGORIES = parsed.categories;
+                        if(parsed.sites) {
+                            SITES = parsed.sites.map(s => ({...s, type: s.type || 'web'})); 
+                        }
+                    }
+                } else {
+                    const local = localStorage.getItem('pentong_shortcuts');
+                    if (local) {
+                        const parsed = JSON.parse(local);
+                        CATEGORIES = parsed.categories;
+                        SITES = parsed.sites.map(s => ({...s, type: s.type || 'web'}));
+                    }
+                }
+            } catch (e) {
+                console.error("데이터 로드 실패:", e);
+            }
+            renderShortcuts();
+        }
+
+        async function saveData() {
+            const data = JSON.stringify({ categories: CATEGORIES, sites: SITES });
+            const api = getPywebviewApi();
+            try {
+                if (api && api.save_shortcut_data) {
+                    await api.save_shortcut_data(data);
+                } else {
+                    localStorage.setItem('pentong_shortcuts', data);
+                }
+            } catch (e) {
+                console.error("데이터 저장 실패:", e);
+            }
+        }
+
+        // ============================================================================
+        // 🛠️ 편집 모드 토글
+        // ============================================================================
+        const toggleInput = document.getElementById('edit-mode-toggle');
+        const toggleBg = document.getElementById('toggle-bg');
+        const toggleDot = document.getElementById('toggle-dot');
+        const editModeText = document.getElementById('edit-mode-text');
+
+        toggleInput.addEventListener('change', (e) => {
+            isEditMode = e.target.checked;
+            
+            if (isEditMode) {
+                toggleBg.classList.replace('bg-slate-300', 'bg-blue-500');
+                toggleDot.classList.add('translate-x-4');
+                editModeText.innerText = "편집 켜짐";
+                editModeText.classList.replace('text-slate-500', 'text-blue-600');
+            } else {
+                toggleBg.classList.replace('bg-blue-500', 'bg-slate-300');
+                toggleDot.classList.remove('translate-x-4');
+                editModeText.innerText = "편집 끄기";
+                editModeText.classList.replace('text-blue-600', 'text-slate-500');
+            }
+            renderShortcuts();
+        });
+
+        // ============================================================================
+        // 🖥️ 화면 렌더링
+        // ============================================================================
+        function renderShortcuts() {
+            const container = document.getElementById('shortcut-container');
+            container.innerHTML = '';
+            let globalDelayIndex = 0;
+
+            CATEGORIES.forEach((category, index) => {
+                const categorySites = SITES.filter(site => site.category === category.id);
+                if (!isEditMode && categorySites.length === 0) return; 
+
+                const section = document.createElement('section');
+                section.className = "w-full animate-fade-in";
+
+                // 카테고리 제목과 편집 버튼들을 가로로 바로 나열 (mr-3으로 텍스트와 버튼 사이 여백)
+                const titleWrapper = document.createElement('div');
+                titleWrapper.className = `flex items-center mb-3 pl-3 border-l-4 ${category.borderColor}`;
+                
+                let titleHTML = `<h2 class="text-[15px] font-bold text-slate-700 tracking-tight mr-3">${category.title}</h2>`;
+                
+                if (isEditMode) {
+                    const isFirst = index === 0;
+                    const isLast = index === CATEGORIES.length - 1;
+                    
+                    titleHTML += `
+                        <div class="flex items-center gap-1.5">
+                            <button onclick="moveCategoryUp('${category.id}')" class="text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-600 transition-colors" ${isFirst ? 'disabled style="opacity:0.3;cursor:not-allowed;"' : ''}>▲</button>
+                            <button onclick="moveCategoryDown('${category.id}')" class="text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-600 transition-colors" ${isLast ? 'disabled style="opacity:0.3;cursor:not-allowed;"' : ''}>▼</button>
+                            <button onclick="openCategoryModal('${category.id}')" class="text-[11px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-600 transition-colors">수정</button>
+                            <button onclick="requestDeleteCategory('${category.id}')" class="text-[11px] px-2 py-1 rounded bg-red-100 hover:bg-red-200 text-red-600 transition-colors">삭제</button>
+                        </div>
+                    `;
+                }
+                titleWrapper.innerHTML = titleHTML;
+                section.appendChild(titleWrapper);
+
+                const grid = document.createElement('div');
+                grid.className = "flex flex-wrap items-center gap-4";
+
+                categorySites.forEach((site) => {
+                    const svgPath = ICONS[site.icon] || ICONS.default;
+                    const card = document.createElement('div');
+                    card.style.animationDelay = `${globalDelayIndex * 0.02}s`;
+                    globalDelayIndex++;
+
+                    card.className = `
+                        group relative flex flex-col items-center justify-center w-36 h-36 
+                        bg-white rounded-2xl shadow-[0_4px_15px_-4px_rgba(0,0,0,0.05)] 
+                        hover:shadow-[0_8px_25px_-4px_rgba(0,0,0,0.12)] hover:-translate-y-1 
+                        transition-all duration-300 cursor-pointer overflow-hidden border border-slate-100
+                    `;
+
+                    // 종류에 따른 뱃지 표시를 좌측 상단으로 이동
+                    let typeBadge = '';
+                    if (site.type === 'folder') typeBadge = `<span class="absolute top-2 left-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 shadow-sm pointer-events-none">폴더</span>`;
+                    else if (site.type === 'file') typeBadge = `<span class="absolute top-2 left-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 shadow-sm pointer-events-none">파일/앱</span>`;
+
+                    let innerHTML = `
+                        <div class="absolute inset-0 bg-gradient-to-br from-${site.color}-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+                        ${typeBadge}
+                        <div class="relative z-10 w-12 h-12 rounded-xl bg-${site.color}-100 text-${site.color}-600 flex items-center justify-center mb-2 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="w-6 h-6">
+                                ${svgPath}
+                            </svg>
+                        </div>
+                        <h3 class="relative z-10 text-[13px] leading-snug font-semibold text-slate-700 text-center px-2 word-keep group-hover:text-${site.color}-700 transition-colors">
+                            ${site.name}
+                        </h3>
+                    `;
+
+                    // 편집 모드일 때만 우측 상단에 작은 수정/삭제 버튼 추가
+                    if (isEditMode) {
+                        innerHTML += `
+                            <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20">
+                                <button onclick="openSiteModal('${site.id}', '${category.id}'); event.stopPropagation();" class="p-1 rounded bg-white hover:bg-slate-100 text-slate-600 shadow-sm border border-slate-200 transition-colors" title="수정">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                                    </svg>
+                                </button>
+                                <button onclick="requestDeleteSite('${site.id}'); event.stopPropagation();" class="p-1 rounded bg-white hover:bg-red-50 text-red-500 shadow-sm border border-slate-200 transition-colors" title="삭제">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                    </svg>
+                                </button>
+                            </div>
+                        `;
+                    } 
+                    
+                    // 실행 로직은 편집 모드 상관없이 항상 작동하도록 통합
+                    card.addEventListener('click', async () => {
+                        const type = site.type || 'web';
+                        if (type === 'web') {
+                            window.open(site.url, '_blank');
+                        } else {
+                            const api = getPywebviewApi();
+                            if (api && api.execute_shortcut) {
+                                const res = await api.execute_shortcut(site.url);
+                                if(res && !res.success) {
+                                    showAlert("실행 오류", res.message || "경로를 열 수 없습니다.");
+                                }
+                            } else {
+                                showAlert("알림", "로컬 파일이나 폴더 실행은 프로그램 내에서만 지원됩니다.");
+                            }
+                        }
+                    });
+
+                    card.innerHTML = innerHTML;
+                    grid.appendChild(card);
+                });
+
+                if (isEditMode) {
+                    const addSiteBtn = document.createElement('div');
+                    addSiteBtn.className = `
+                        flex flex-col items-center justify-center w-36 h-36 
+                        bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400
+                        hover:bg-slate-100 hover:border-slate-400 hover:text-slate-500
+                        transition-colors cursor-pointer
+                    `;
+                    addSiteBtn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-7 h-7 mb-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        <span class="text-xs font-medium">항목 추가</span>
+                    `;
+                    addSiteBtn.onclick = () => openSiteModal(null, category.id);
+                    grid.appendChild(addSiteBtn);
+                }
+
+                section.appendChild(grid);
+                container.appendChild(section);
+            });
+
+            if (isEditMode) {
+                const addCatBtn = document.createElement('button');
+                addCatBtn.className = "w-full py-3 mt-4 rounded-xl border-2 border-dashed border-blue-300 text-blue-500 bg-blue-50/50 hover:bg-blue-50 hover:border-blue-400 transition-colors text-sm font-semibold flex items-center justify-center gap-2 animate-fade-in";
+                addCatBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    새 카테고리 추가
+                `;
+                addCatBtn.onclick = () => openCategoryModal(null);
+                container.appendChild(addCatBtn);
+            }
+        }
+
+        // ============================================================================
+        // 🧩 모달 및 동작 로직
+        // ============================================================================
+        function showAlert(title, message) {
+            document.getElementById('alertTitle').innerText = title;
+            document.getElementById('alertMessage').innerText = message;
+            document.getElementById('alertModal').classList.add('modal-open');
+        }
+        function closeAlertModal() {
+            document.getElementById('alertModal').classList.remove('modal-open');
+        }
+
+        function moveCategoryUp(id) {
+            const index = CATEGORIES.findIndex(c => c.id === id);
+            if (index > 0) {
+                const temp = CATEGORIES[index - 1];
+                CATEGORIES[index - 1] = CATEGORIES[index];
+                CATEGORIES[index] = temp;
+                saveData();
+                renderShortcuts();
+            }
+        }
+
+        function moveCategoryDown(id) {
+            const index = CATEGORIES.findIndex(c => c.id === id);
+            if (index !== -1 && index < CATEGORIES.length - 1) {
+                const temp = CATEGORIES[index + 1];
+                CATEGORIES[index + 1] = CATEGORIES[index];
+                CATEGORIES[index] = temp;
+                saveData();
+                renderShortcuts();
+            }
+        }
+
+        let confirmAction = null;
+        function requestDeleteCategory(id) {
+            document.getElementById('confirmTitle').innerText = "카테고리 삭제";
+            document.getElementById('confirmMessage').innerText = "이 카테고리와 안에 포함된 모든 항목이 삭제됩니다. 계속하시겠습니까?";
+            confirmAction = () => {
+                CATEGORIES = CATEGORIES.filter(c => c.id !== id);
+                SITES = SITES.filter(s => s.category !== id);
+                saveData();
+                renderShortcuts();
+            };
+            document.getElementById('confirmModal').classList.add('modal-open');
+        }
+
+        function requestDeleteSite(id) {
+            document.getElementById('confirmTitle').innerText = "항목 삭제";
+            document.getElementById('confirmMessage').innerText = "해당 항목을 즐겨찾기에서 삭제하시겠습니까?";
+            confirmAction = () => {
+                SITES = SITES.filter(s => s.id !== id);
+                saveData();
+                renderShortcuts();
+            };
+            document.getElementById('confirmModal').classList.add('modal-open');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.remove('modal-open');
+            confirmAction = null;
+        }
+
+        document.getElementById('confirmBtn').onclick = () => {
+            if (confirmAction) confirmAction();
+            closeConfirmModal();
+        };
+
+        let editingCategoryId = null;
+        function openCategoryModal(id) {
+            editingCategoryId = id;
+            const input = document.getElementById('categoryNameInput');
+            if (id) {
+                const cat = CATEGORIES.find(c => c.id === id);
+                document.getElementById('categoryModalTitle').innerText = "카테고리 수정";
+                input.value = cat.title;
+            } else {
+                document.getElementById('categoryModalTitle').innerText = "새 카테고리 추가";
+                input.value = "";
+            }
+            document.getElementById('categoryModal').classList.add('modal-open');
+            setTimeout(() => input.focus(), 100);
+        }
+
+        function closeCategoryModal() {
+            document.getElementById('categoryModal').classList.remove('modal-open');
+        }
+
+        document.getElementById('categorySaveBtn').onclick = () => {
+            const title = document.getElementById('categoryNameInput').value.trim();
+            if (!title) return;
+
+            if (editingCategoryId) {
+                const cat = CATEGORIES.find(c => c.id === editingCategoryId);
+                if (cat) cat.title = title;
+            } else {
+                const newId = "cat_" + Date.now();
+                const randomBorder = BORDER_COLORS[Math.floor(Math.random() * BORDER_COLORS.length)];
+                CATEGORIES.push({ id: newId, title: title, borderColor: randomBorder });
+            }
+            
+            saveData();
+            renderShortcuts();
+            closeCategoryModal();
+        };
+
+        // --- 항목 추가 폼 UI 렌더링 ---
+        const iconContainer = document.getElementById('iconSelectorContainer');
+        const colorContainer = document.getElementById('colorSelectorContainer');
+
+        Object.keys(ICONS).forEach(key => {
+            const label = document.createElement('label');
+            label.className = "cursor-pointer text-center group";
+            label.innerHTML = `
+                <input type="radio" name="siteIcon" value="${key}" class="hidden icon-radio">
+                <div class="w-10 h-10 mx-auto rounded-xl bg-slate-100 text-slate-500 border border-transparent flex items-center justify-center transition-all group-hover:bg-slate-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="w-5 h-5">${ICONS[key]}</svg>
+                </div>
+            `;
+            iconContainer.appendChild(label);
+        });
+
+        TAILWIND_COLORS.forEach(color => {
+            const label = document.createElement('label');
+            label.className = "cursor-pointer group";
+            label.innerHTML = `
+                <input type="radio" name="siteColor" value="${color}" class="hidden color-radio">
+                <div class="w-7 h-7 rounded-full bg-${color}-500 shadow-sm transition-transform"></div>
+            `;
+            colorContainer.appendChild(label);
+        });
+
+        // --- 항목 폼 작동 ---
+        let editingSiteId = null;
+        let activeCategoryId = null;
+
+        const typeRadios = document.querySelectorAll('input[name="siteType"]');
+        const urlLabel = document.getElementById('urlLabel');
+        const urlInput = document.getElementById('siteUrlInput');
+        const browseBtn = document.getElementById('browseBtn');
+
+        typeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (e.target.value === 'web') {
+                    urlLabel.innerText = '인터넷 주소 (URL)';
+                    browseBtn.classList.add('hidden');
+                    if (!urlInput.value.startsWith('http')) urlInput.value = 'https://';
+                } else {
+                    urlLabel.innerText = e.target.value === 'folder' ? '폴더 경로' : '실행 파일 또는 문서 경로';
+                    browseBtn.classList.remove('hidden');
+                    if (urlInput.value.startsWith('http')) urlInput.value = '';
+                }
+            });
+        });
+
+        browseBtn.addEventListener('click', async () => {
+            const currentType = document.querySelector('input[name="siteType"]:checked').value;
+            const api = getPywebviewApi();
+            if (api && api.select_local_path) {
+                const path = await api.select_local_path(currentType);
+                if (path) {
+                    urlInput.value = path;
+
+                    // --- 추가된 기능: 파일명/폴더명 추출 및 자동 입력 ---
+                    // 경로가 윈도우(\) 형태든 맥/리눅스(/) 형태든 마지막 이름만 깔끔하게 빼냅니다.
+                    let baseName = path.split('\\').pop().split('/').pop();
+
+                    // 파일/앱인 경우 이름에서 확장자(.exe, .xlsx 등)를 지웁니다.
+                    if (currentType === 'file') {
+                        baseName = baseName.replace(/\.[^/.]+$/, "");
+                    }
+
+                    // '표시될 이름' 입력칸이 비어있을 때만 자동으로 입력해 줍니다.
+                    // (사용자가 이미 이름을 적어둔 경우엔 덮어쓰지 않음)
+                    const nameInput = document.getElementById('siteNameInput');
+                    if (nameInput.value.trim() === '') {
+                        nameInput.value = baseName;
+                    }
+                    // -----------------------------------------------
+                }
+            } else {
+                showAlert('알림', '경로 탐색은 프로그램 내에서만 지원됩니다.');
+            }
+        });
+
+        function openSiteModal(siteId, categoryId) {
+            editingSiteId = siteId;
+            activeCategoryId = categoryId;
+            
+            const nameInput = document.getElementById('siteNameInput');
+
+            if (siteId) {
+                const site = SITES.find(s => s.id === siteId);
+                document.getElementById('siteModalTitle').innerText = "항목 수정";
+                nameInput.value = site.name;
+                urlInput.value = site.url;
+                document.querySelector(`input[name="siteType"][value="${site.type || 'web'}"]`).click();
+                document.querySelector(`input[name="siteIcon"][value="${site.icon}"]`).checked = true;
+                document.querySelector(`input[name="siteColor"][value="${site.color}"]`).checked = true;
+            } else {
+                document.getElementById('siteModalTitle').innerText = "새 항목 추가";
+                nameInput.value = "";
+                urlInput.value = "https://";
+                document.querySelector(`input[name="siteType"][value="web"]`).click();
+                document.querySelector(`input[name="siteIcon"][value="default"]`).checked = true;
+                document.querySelector(`input[name="siteColor"][value="blue"]`).checked = true;
+            }
+
+            document.getElementById('siteModal').classList.add('modal-open');
+            setTimeout(() => nameInput.focus(), 100);
+        }
+
+        function closeSiteModal() {
+            document.getElementById('siteModal').classList.remove('modal-open');
+        }
+
+        document.getElementById('siteSaveBtn').onclick = () => {
+            const type = document.querySelector('input[name="siteType"]:checked').value;
+            const name = document.getElementById('siteNameInput').value.trim();
+            const url = document.getElementById('siteUrlInput').value.trim();
+            const icon = document.querySelector('input[name="siteIcon"]:checked').value;
+            const color = document.querySelector('input[name="siteColor"]:checked').value;
+
+            if (!name || !url) {
+                showAlert("입력 오류", "이름과 경로(주소)를 모두 입력해주세요.");
+                return;
+            }
+
+            if (editingSiteId) {
+                const site = SITES.find(s => s.id === editingSiteId);
+                if (site) {
+                    site.type = type;
+                    site.name = name;
+                    site.url = url;
+                    site.icon = icon;
+                    site.color = color;
+                }
+            } else {
+                SITES.push({
+                    id: "site_" + Date.now(),
+                    category: activeCategoryId,
+                    type: type,
+                    name: name,
+                    url: url,
+                    icon: icon,
+                    color: color
+                });
+            }
+
+            saveData();
+            renderShortcuts();
+            closeSiteModal();
+        };
+
+        // ============================================================================
+        // 🚀 초기 실행 
+        // ============================================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            let retries = 0;
+            const checkTimer = setInterval(() => {
+                if (getPywebviewApi() || retries > 10) { 
+                    clearInterval(checkTimer);
+                    loadData(); 
+                }
+                retries++;
+            }, 100);
+        });
+
+    </script>
+</body>
+</html>

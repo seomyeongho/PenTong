@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>자동 데이터 요약</title>
+    <style>
+        :root {
+            --primary-color: #217346; /* 엑셀 그린 */
+            --primary-light: #e6f2ea;
+            --primary-dashed: #4caf50;
+            --border-color: #ddd;
+            --text-color: #333;
+            --bg-color: #f3f3f3;
+            --disabled-color: #e0e0e0;
+        }
+
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #444;
+            font-size: 1.5rem;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* 메인 레이아웃 */
+        .container {
+            display: flex;
+            flex: 1;
+            gap: 20px;
+            overflow: hidden;
+        }
+
+        /* 왼쪽: 입력 및 설정 영역 (카드 디자인) */
+        .input-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            min-width: 350px;
+            position: relative;
+        }
+
+        /* --- 데이터 입력 UI 스타일 --- */
+        .input-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .icon-box-title {
+            width: 32px;
+            height: 32px;
+            background-color: #e8f0fe;
+            color: #1a73e8;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+        }
+        
+        .input-label {
+            font-weight: bold;
+            color: #333;
+            font-size: 1.1rem;
+        }
+
+        .btn-sample {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            background-color: #f1f3f4;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #5f6368;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        
+        .btn-sample:hover {
+            background-color: #e8eaed;
+            color: #202124;
+        }
+
+        /* 붙여넣기 래퍼 (디자인 + 기능) */
+        .paste-wrapper {
+            width: 100%;
+            height: 220px;
+            border: 2px dashed var(--primary-dashed);
+            background-color: #f0fdf4;
+            border-radius: 12px;
+            position: relative; /* 자식 요소 절대 위치 기준 */
+            transition: all 0.3s;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        /* 포커스 시 스타일 (입력 활성화 상태) */
+        .paste-wrapper:focus-within {
+            background-color: #e6f7eb;
+            border-color: #2e7d32;
+            box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.1);
+        }
+
+        /* 내부 시각적 콘텐츠 (클릭 무시, 보여주기용) */
+        .paste-visuals {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            width: 100%;
+            pointer-events: none; /* 클릭 통과 */
+            z-index: 1;
+        }
+
+        .icon-circle {
+            width: 60px;
+            height: 60px;
+            background-color: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .icon-clipboard {
+            font-size: 30px;
+            color: var(--primary-dashed);
+        }
+
+        .text-sub {
+            color: #5f6368;
+            font-size: 1rem;
+            margin-bottom: -10px;
+        }
+
+        .text-main {
+            color: #1b5e20;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        /* 실제 입력받는 투명 Textarea (최상단 레이어) */
+        .paste-target {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            opacity: 0; /* 투명하게 */
+            z-index: 2; /* 시각 요소보다 위에 배치 */
+            cursor: pointer;
+            border: none;
+            resize: none;
+        }
+
+        .input-footer {
+            margin-top: 15px;
+            text-align: center;
+            color: #9aa0a6;
+            font-size: 0.85rem;
+        }
+
+        /* --- 설정 영역 스타일 --- */
+        #config-area {
+            height: 100%;
+            display: none; /* JS로 제어 */
+            flex-direction: column;
+        }
+
+        .config-group {
+            margin-bottom: 20px;
+            overflow-y: auto;
+            flex: 1;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+        .config-group:last-child { border-bottom: none; }
+
+        .config-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.95rem;
+            color: #555;
+        }
+
+        .column-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+        .column-chip {
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid #ccc;
+            background: #fff;
+            cursor: pointer;
+            font-size: 0.9rem;
+            user-select: none;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .column-chip.disabled { opacity: 0.4; pointer-events: none; background-color: #eee; border-color: #ddd; }
+        .group-col .column-chip.active { background-color: #333; color: white; border-color: #333; }
+
+        .calc-col .column-chip {
+            flex-direction: column;
+            align-items: flex-start;
+            border-radius: 8px;
+            padding: 10px;
+            width: 100%;
+            box-sizing: border-box;
+            border-left: 4px solid transparent;
+        }
+        .calc-col .column-chip.active { border-color: #ccc; border-left-color: var(--primary-color); background-color: var(--primary-light); }
+        .calc-col .column-name { font-weight: bold; margin-bottom: 8px; width: 100%; }
+        .calc-options { display: flex; gap: 4px; flex-wrap: wrap; width: 100%; }
+        
+        .calc-option-btn {
+            font-size: 0.75rem; padding: 4px 8px; border: 1px solid #ccc;
+            background: white; color: #555; border-radius: 4px; cursor: pointer; flex: 1; text-align: center; transition: all 0.1s;
+        }
+        .calc-option-btn:hover { background-color: #f0f0f0; }
+        .calc-option-btn.selected { background: var(--primary-color); color: white; border-color: var(--primary-color); font-weight: bold; }
+
+        .global-toolbar { display: flex; gap: 5px; background-color: #eee; padding: 8px; border-radius: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+        .global-label { font-size: 0.8rem; font-weight: bold; margin-right: 5px; color: #555; }
+        .global-btn { font-size: 0.75rem; padding: 4px 8px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer; }
+        .global-btn:hover { background-color: #ddd; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: auto; padding-top: 10px; }
+        button { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-family: inherit; transition: background 0.2s; }
+        .btn-primary { background-color: var(--primary-color); color: white; flex: 1; }
+        .btn-primary:hover { background-color: #1a5c38; }
+        .btn-secondary { background-color: #6c757d; color: white; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        .btn-outline { background-color: white; border: 1px solid #ccc; color: #333; padding: 6px 12px; font-size: 0.9rem; }
+        .btn-outline:hover { background-color: #f1f1f1; }
+
+        /* 오른쪽: 결과 영역 */
+        .result-section {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        .table-wrapper { flex: 1; overflow: auto; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px; background: white; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { background-color: #f1f1f1; position: sticky; top: 0; padding: 10px; border-bottom: 2px solid #ccc; text-align: left; font-weight: bold; color: #333; white-space: nowrap; z-index: 10; }
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #eee;
+            white-space: nowrap;
+        }
+
+        /* 원본 데이터 표의 데이터 가운데 정렬 */
+        #raw-table td {
+            text-align: center;
+        }
+        tr:hover { background-color: #f9f9f9; }
+        tfoot tr { background-color: #fffbec; font-weight: bold; border-top: 2px solid #ccc; }
+        tfoot td { position: sticky; bottom: 0; background-color: #fffbec; z-index: 5; }
+
+        .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+        .tab-group { display: flex; gap: 5px; }
+        .tab-btn { background: none; border: none; border-bottom: 3px solid transparent; padding: 8px 15px; font-size: 1rem; color: #888; cursor: pointer; border-radius: 4px 4px 0 0; transition: all 0.2s; }
+        .tab-btn:hover { color: var(--primary-color); background-color: #f0f0f0; }
+        .tab-btn.active { color: var(--primary-color); border-bottom-color: var(--primary-color); font-weight: bold; background-color: #e6f2ea; }
+
+        .view-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        #toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; }
+        .toast { background-color: rgba(50, 50, 50, 0.95); color: white; padding: 12px 24px; border-radius: 24px; margin-top: 10px; opacity: 0; transition: opacity 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .toast.show { opacity: 1; }
+
+        .empty-state { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; color: #aaa; text-align: center; }
+        .empty-state span { font-size: 3rem; margin-bottom: 10px; opacity: 0.5; }
+    </style>
+</head>
+<body>
+
+    <h2>자동 데이터 요약</h2>
+
+    <div class="container">
+        <!-- 왼쪽: 설정 영역 -->
+        <div class="input-section">
+            <div id="paste-input-container">
+                <!-- 헤더 -->
+                <div class="input-header">
+                    <div class="header-left">
+                        <div class="icon-box-title">📰</div>
+                        <span class="input-label">데이터 입력</span>
+                    </div>
+                    <button class="btn-sample" onclick="loadSampleData()">
+                        🧪 샘플 데이터
+                    </button>
+                </div>
+
+                <!-- 붙여넣기 영역 (수정됨: 투명 Textarea 적용) -->
+                <div class="paste-wrapper">
+                    <!-- 보여지는 디자인 (클릭 통과됨) -->
+                    <div class="paste-visuals">
+                        <div class="icon-circle">
+                            <svg class="icon-clipboard" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                            </svg>
+                        </div>
+                        <div class="text-sub">여기를 클릭하고</div>
+                        <div class="text-main">엑셀 데이터를 붙여넣기(Ctrl+V) 하세요</div>
+                    </div>
+                    
+                    <!-- 실제 입력을 받는 투명한 창 -->
+                    <textarea id="paste-target" class="paste-target" autofocus></textarea>
+                </div>
+
+                <!-- 풋터 안내 -->
+                <div class="input-footer">
+                    ⓘ 엑셀 표를 복사하여 붙여넣으세요. (표 형식 자동 감지)
+                </div>
+            </div>
+
+            <!-- 설정 영역 -->
+            <div id="config-area">
+                <div class="config-group group-col" style="flex:1;">
+                    <div class="config-title">
+                        1. 그룹화 기준 (행)
+                        <span style="font-size:0.8em; color:#888; font-weight:normal;">*그룹화할 항목을 선택해주세요</span>
+                    </div>
+                    <div id="group-columns" class="column-list"></div>
+                </div>
+
+                <div class="config-group calc-col" style="flex:2;">
+                    <div class="config-title">
+                        2. 요약할 값 및 함수
+                        <span style="font-size:0.8em; color:#888; font-weight:normal;">*다중 선택 가능</span>
+                    </div>
+                    
+                    <div class="global-toolbar">
+                        <span class="global-label">일괄 적용:</span>
+                        <button class="global-btn" onclick="applyGlobal('sum')">합계</button>
+                        <button class="global-btn" onclick="applyGlobal('avg')">평균</button>
+                        <button class="global-btn" onclick="applyGlobal('count')">개수</button>
+                        <button class="global-btn" onclick="applyGlobal('max')">최대</button>
+                        <button class="global-btn" onclick="applyGlobal('min')">최소</button>
+                        <button class="global-btn" onclick="applyGlobal('median')">중앙값</button>
+                        <button class="global-btn" onclick="applyGlobal('unique')">고유개수</button>
+                        <button class="global-btn" style="color:red; border-color:red;" onclick="applyGlobal('clear')">전체해제</button>
+                    </div>
+
+                    <div id="calc-columns" class="column-list" style="flex-direction: column;"></div>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn-secondary" onclick="resetAll()">초기화</button>
+                    <button class="btn-primary" onclick="calculateSummary()">요약 실행</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 오른쪽: 결과 영역 -->
+        <div class="result-section">
+            <div id="result-empty" class="empty-state">
+                <span>📊</span>
+                <div>왼쪽에서 데이터를 입력하면<br>원본 데이터가 표시됩니다.</div>
+            </div>
+            
+            <div id="result-content" style="display:none; flex-direction:column; height:100%;">
+                <div class="result-header">
+                    <div class="tab-group">
+                        <button class="tab-btn" id="tab-summary" onclick="switchView('summary')">요약 결과</button>
+                        <button class="tab-btn active" id="tab-raw" onclick="switchView('raw')">원본 데이터</button>
+                    </div>
+                    <button class="btn-outline" onclick="copyToClipboard()">📋 복사</button>
+                </div>
+
+                <!-- 요약 결과 뷰 -->
+                <div id="view-summary" class="view-container" style="display:none;">
+                    <div class="table-wrapper">
+                        <table id="result-table">
+                            <thead></thead>
+                            <tbody></tbody>
+                            <tfoot></tfoot>
+                        </table>
+                    </div>
+                    <div style="font-size:0.8rem; color:#888; text-align:right;">
+                        * 총 <span id="summary-row-count">0</span>개 행으로 요약됨
+                    </div>
+                </div>
+
+                <!-- 원본 데이터 뷰 -->
+                <div id="view-raw" class="view-container">
+                    <div class="table-wrapper">
+                        <table id="raw-table">
+                            <thead></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div style="font-size:0.8rem; color:#888; text-align:right;">
+                        * 원본 데이터: <span id="raw-row-count">0</span>행
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        let rawData = [];
+        let headers = [];
+        let colTypes = {};
+        let currentView = 'raw'; 
+
+        const sampleData = `학년\t반\t번호\t국어\t수학\t평균
+1\t1\t1\t85\t90\t87.5
+1\t1\t2\t78\t65\t71.5
+1\t1\t3\t95\t100\t97.5
+1\t1\t4\t60\t80\t70
+1\t1\t5\t88\t82\t85
+1\t2\t1\t90\t85\t87.5
+1\t2\t2\t75\t70\t72.5
+1\t2\t3\t100\t95\t97.5
+1\t2\t4\t80\t88\t84
+1\t2\t5\t82\t88\t85
+1\t3\t1\t65\t70\t67.5
+1\t3\t2\t88\t92\t90
+1\t3\t3\t72\t68\t70
+1\t3\t4\t95\t85\t90
+1\t3\t5\t80\t80\t80
+1\t4\t1\t92\t94\t93
+1\t4\t2\t68\t72\t70
+1\t4\t3\t85\t85\t85
+1\t4\t4\t77\t83\t80
+1\t4\t5\t90\t90\t90
+1\t5\t1\t83\t87\t85
+1\t5\t2\t76\t74\t75
+1\t5\t3\t89\t91\t90
+1\t5\t4\t64\t66\t65
+1\t5\t5\t93\t97\t95
+2\t1\t1\t77\t88\t82.5
+2\t1\t2\t92\t90\t91
+2\t1\t3\t65\t75\t70
+2\t1\t4\t88\t85\t86.5
+2\t1\t5\t95\t92\t93.5
+2\t2\t1\t80\t80\t80
+2\t2\t2\t70\t65\t67.5
+2\t2\t3\t85\t90\t87.5
+2\t2\t4\t90\t95\t92.5
+2\t2\t5\t88\t84\t86
+2\t3\t1\t82\t84\t83
+2\t3\t2\t75\t75\t75
+2\t3\t3\t91\t89\t90
+2\t3\t4\t66\t68\t67
+2\t3\t5\t80\t82\t81
+2\t4\t1\t94\t96\t95
+2\t4\t2\t71\t69\t70
+2\t4\t3\t88\t88\t88
+2\t4\t4\t73\t77\t75
+2\t4\t5\t85\t85\t85
+2\t5\t1\t90\t92\t91
+2\t5\t2\t78\t76\t77
+2\t5\t3\t86\t84\t85
+2\t5\t4\t62\t64\t63
+2\t5\t5\t98\t100\t99`;
+
+        // DOM Elements
+        const pasteTarget = document.getElementById('paste-target');
+        const pasteContainer = document.getElementById('paste-input-container');
+        const configArea = document.getElementById('config-area');
+        const groupColsDiv = document.getElementById('group-columns');
+        const calcColsDiv = document.getElementById('calc-columns');
+        const resultEmpty = document.getElementById('result-empty');
+        const resultContent = document.getElementById('result-content');
+        const tabSummary = document.getElementById('tab-summary');
+        const tabRaw = document.getElementById('tab-raw');
+        const viewSummary = document.getElementById('view-summary');
+        const viewRaw = document.getElementById('view-raw');
+
+        // [이벤트] 붙여넣기 (Textarea 전용)
+        pasteTarget.addEventListener('paste', (e) => {
+            e.preventDefault(); // 기본 붙여넣기(글자 입력) 방지하고 데이터만 가져옴
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            processData(text);
+            // 붙여넣기 후 내용 비우기 (다음 입력을 위해)
+            pasteTarget.value = ''; 
+        });
+
+        // [이벤트] 클릭 시 포커스 보장
+        pasteTarget.addEventListener('click', () => {
+            pasteTarget.focus();
+        });
+
+        function loadSampleData() {
+            processData(sampleData);
+        }
+
+        function switchView(viewName) {
+            currentView = viewName;
+            if (viewName === 'summary') {
+                tabSummary.classList.add('active');
+                tabRaw.classList.remove('active');
+                viewSummary.style.display = 'flex';
+                viewRaw.style.display = 'none';
+                
+                if(document.querySelector('#result-table tbody').children.length === 0) {
+                     showToast("먼저 '요약 실행'을 눌러주세요.");
+                }
+
+            } else {
+                tabSummary.classList.remove('active');
+                tabRaw.classList.add('active');
+                viewSummary.style.display = 'none';
+                viewRaw.style.display = 'flex';
+            }
+        }
+
+        function processData(text) {
+            // HTML 방어 로직
+            const isHtmlSource = /<(?:"[^"]*"['"]*|'[^']*'['"]*|[^'">])+>/g.test(text) && 
+                                 (text.includes('</div>') || text.includes('</span>') || text.includes('<script') || text.includes('<!DOCTYPE'));
+
+            if (isHtmlSource) {
+                 showToast("🚫 HTML 소스 코드는 계산할 수 없습니다. 엑셀 데이터를 복사해주세요.");
+                 return;
+            }
+
+            const lines = text.trim().split('\n').filter(line => line.trim() !== '');
+            
+            if (lines.length < 2) {
+                showToast("데이터가 너무 적습니다. 헤더를 포함하여 2줄 이상이어야 합니다.");
+                return;
+            }
+
+            // 구분자 감지
+            const candidates = [
+                { name: 'tab', regex: /\t/ },
+                { name: 'comma', regex: /,/ },
+                { name: 'space', regex: /[ ]+/ }
+            ];
+
+            let bestSep = null;
+            const sampleLines = lines.slice(0, Math.min(lines.length, 5));
+
+            for (let cand of candidates) {
+                const counts = sampleLines.map(l => l.trim().split(cand.regex).length);
+                const avg = counts.reduce((a,b) => a+b, 0) / counts.length;
+                const min = Math.min(...counts);
+                if (avg >= 2 && min >= 2) {
+                    bestSep = cand.regex;
+                    break; 
+                }
+            }
+
+            const finalSep = bestSep || '\t';
+            const rows = lines.map(row => row.trim().split(finalSep));
+            headers = rows[0].map(h => h.trim());
+
+            // 1열 HTML 태그 방어
+            if (headers.length === 1 && (headers[0].includes('<') || headers[0].includes('>'))) {
+                 showToast("🚫 형식이 올바르지 않습니다. 엑셀 표 데이터를 붙여넣어주세요.");
+                 return;
+            }
+
+            rawData = [];
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (row.length === 0 || (row.length === 1 && row[0] === '')) continue;
+
+                let rowObj = {};
+                headers.forEach((h, idx) => {
+                    let cell = row[idx] || '';
+                    const cleanCell = cell.trim().replace(/,/g, '');
+                    const numVal = (cleanCell !== '' && !isNaN(cleanCell)) ? parseFloat(cleanCell) : NaN;
+                    rowObj[h] = isNaN(numVal) ? cell.trim() : numVal;
+                });
+                rawData.push(rowObj);
+            }
+
+            if (rawData.length === 0) {
+                showToast("유효한 데이터가 없습니다.");
+                return;
+            }
+
+            headers.forEach(h => colTypes[h] = 'string');
+            const sampleSize = Math.min(rawData.length, 10);
+            for (let h of headers) {
+                let numCount = 0;
+                for (let i = 0; i < sampleSize; i++) {
+                    if (typeof rawData[i][h] === 'number') numCount++;
+                }
+                if (numCount >= sampleSize * 0.8) colTypes[h] = 'number';
+            }
+
+            showToast(`${rawData.length}개 행을 불러왔습니다.`);
+            pasteContainer.style.display = 'none';
+            configArea.style.display = 'flex';
+            
+            renderColumnSelectors();
+            renderRawTable();
+            
+            resultEmpty.style.display = 'none';
+            resultContent.style.display = 'flex';
+            switchView('raw');
+        }
+
+        function renderRawTable() {
+            const table = document.getElementById('raw-table');
+            const thead = table.querySelector('thead');
+            const tbody = table.querySelector('tbody');
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            const trHead = document.createElement('tr');
+            headers.forEach(h => {
+                const th = document.createElement('th');
+                th.innerText = h;
+                trHead.appendChild(th);
+            });
+            thead.appendChild(trHead);
+
+            const displayLimit = 1000;
+            const displayData = rawData.slice(0, displayLimit);
+            
+            displayData.forEach(row => {
+                const tr = document.createElement('tr');
+                headers.forEach(h => {
+                    const td = document.createElement('td');
+                    const val = row[h];
+                    td.innerText = (val !== undefined && val !== null) ? val : '';
+                    // td.style.textAlign = 'right'; 코드를 삭제하여 CSS의 가운데 정렬이 적용되게 함
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            
+            let countText = rawData.length;
+            if (rawData.length > displayLimit) countText += ` (상위 ${displayLimit}개만 표시)`;
+            document.getElementById('raw-row-count').innerText = countText;
+        }
+
+        function renderColumnSelectors() {
+            groupColsDiv.innerHTML = '';
+            calcColsDiv.innerHTML = '';
+
+            headers.forEach(h => {
+                const groupChip = document.createElement('div');
+                groupChip.className = 'column-chip';
+                groupChip.innerText = h;
+                groupChip.dataset.col = h;
+                groupChip.onclick = () => {
+                    groupChip.classList.toggle('active');
+                    updateExclusionLogic();
+                };
+                groupColsDiv.appendChild(groupChip);
+            });
+
+            headers.forEach(h => {
+                if (colTypes[h] === 'number') {
+                    const calcChip = document.createElement('div');
+                    calcChip.className = 'column-chip active';
+                    calcChip.dataset.col = h;
+                    
+                    let html = `
+                        <div class="column-name">${h}</div>
+                        <div class="calc-options">
+                            <span class="calc-option-btn selected" data-type="sum" onclick="toggleCalcOption(this)">합계</span>
+                            <span class="calc-option-btn" data-type="avg" onclick="toggleCalcOption(this)">평균</span>
+                            <span class="calc-option-btn" data-type="count" onclick="toggleCalcOption(this)">개수</span>
+                            <span class="calc-option-btn" data-type="max" onclick="toggleCalcOption(this)">최대</span>
+                            <span class="calc-option-btn" data-type="min" onclick="toggleCalcOption(this)">최소</span>
+                            <span class="calc-option-btn" data-type="median" onclick="toggleCalcOption(this)">중앙값</span>
+                            <span class="calc-option-btn" data-type="unique" onclick="toggleCalcOption(this)">고유개수</span>
+                        </div>`;
+                    calcChip.innerHTML = html;
+                    calcColsDiv.appendChild(calcChip);
+                }
+            });
+            updateExclusionLogic();
+        }
+
+        function updateExclusionLogic() {
+            const selectedGroups = Array.from(groupColsDiv.children)
+                .filter(c => c.classList.contains('active'))
+                .map(c => c.dataset.col);
+
+            Array.from(calcColsDiv.children).forEach(chip => {
+                const colName = chip.dataset.col;
+                if (selectedGroups.includes(colName)) {
+                    chip.classList.add('disabled');
+                } else {
+                    chip.classList.remove('disabled');
+                }
+            });
+        }
+
+        function toggleCalcOption(btn) {
+            const chip = btn.closest('.column-chip');
+            if (chip.classList.contains('disabled')) return;
+            btn.classList.toggle('selected');
+            const hasSelected = chip.querySelectorAll('.calc-option-btn.selected').length > 0;
+            if(hasSelected) chip.classList.add('active');
+            else chip.classList.remove('active');
+        }
+
+        function applyGlobal(type) {
+            const chips = Array.from(calcColsDiv.children);
+            chips.forEach(chip => {
+                if(chip.classList.contains('disabled')) return;
+                if (type === 'clear') {
+                    chip.querySelectorAll('.calc-option-btn').forEach(b => b.classList.remove('selected'));
+                    chip.classList.remove('active');
+                } else {
+                    const targetBtn = chip.querySelector(`.calc-option-btn[data-type="${type}"]`);
+                    if(targetBtn) {
+                        targetBtn.classList.add('selected');
+                        chip.classList.add('active');
+                    }
+                }
+            });
+        }
+
+        function calculateSummary() {
+            const groupFields = Array.from(groupColsDiv.children)
+                .filter(c => c.classList.contains('active'))
+                .map(c => c.innerText);
+
+            if (groupFields.length === 0) {
+                showToast("그룹화할 기준(행)을 하나 이상 선택해주세요.");
+                return;
+            }
+
+            const calcRequests = [];
+            Array.from(calcColsDiv.children).forEach(chip => {
+                if (!chip.classList.contains('disabled')) {
+                    const colName = chip.dataset.col;
+                    const selectedBtns = chip.querySelectorAll('.calc-option-btn.selected');
+                    selectedBtns.forEach(btn => {
+                        const type = btn.dataset.type;
+                        const label = btn.innerText;
+                        calcRequests.push({ 
+                            srcCol: colName, type: type, label: label,
+                            outCol: `${colName}(${label})` 
+                        });
+                    });
+                }
+            });
+
+            if (calcRequests.length === 0) {
+                showToast("요약할 값이나 함수를 선택해주세요.");
+                return;
+            }
+
+            const groups = {};
+            const grandTotal = {}; 
+
+            calcRequests.forEach(req => {
+                grandTotal[req.outCol] = { vals: [], count: 0, sum: 0 };
+            });
+
+            rawData.forEach(row => {
+                const key = groupFields.map(f => row[f]).join(' | ');
+                
+                if (!groups[key]) {
+                    groups[key] = { 
+                        _keyVals: groupFields.map(f => row[f]),
+                        _count: 0,
+                        _data: {} 
+                    };
+                    calcRequests.forEach(req => {
+                        groups[key]._data[req.outCol] = { vals: [], count: 0, sum: 0, uniqueSet: new Set() };
+                    });
+                }
+
+                groups[key]._count++;
+                
+                calcRequests.forEach(req => {
+                    const val = row[req.srcCol];
+                    const numVal = (typeof val === 'number') ? val : 0;
+                    const isValidNum = (typeof val === 'number');
+
+                    const gData = groups[key]._data[req.outCol];
+                    const tData = grandTotal[req.outCol];
+
+                    if(isValidNum) {
+                        gData.vals.push(numVal);
+                        gData.sum += numVal;
+                        tData.vals.push(numVal);
+                        tData.sum += numVal;
+                    }
+                    if(val !== '' && val !== undefined && val !== null) {
+                        gData.count++;
+                        tData.count++;
+                        gData.uniqueSet.add(val);
+                    }
+                });
+            });
+
+            const resultData = Object.keys(groups).map(key => {
+                const g = groups[key];
+                const rowResult = {};
+                groupFields.forEach((f, idx) => rowResult[f] = g._keyVals[idx]);
+                calcRequests.forEach(req => {
+                    const d = g._data[req.outCol];
+                    rowResult[req.outCol] = calculateFinalValue(req.type, d.sum, d.vals, d.count, d.uniqueSet.size);
+                });
+                return rowResult;
+            });
+
+            const totalResult = {};
+            calcRequests.forEach(req => {
+                const d = grandTotal[req.outCol];
+                let grandUniqueSize = 0;
+                if(req.type === 'unique') {
+                    const allVals = rawData.map(r => r[req.srcCol]).filter(v => v !== '' && v !== undefined);
+                    grandUniqueSize = new Set(allVals).size;
+                }
+                totalResult[req.outCol] = calculateFinalValue(req.type, d.sum, d.vals, d.count, grandUniqueSize);
+            });
+
+            resultData.sort((a, b) => {
+                if(groupFields.length === 0) return 0;
+                const valA = a[groupFields[0]];
+                const valB = b[groupFields[0]];
+                return (valA > valB) ? 1 : -1;
+            });
+
+            renderTable(groupFields, calcRequests, resultData, totalResult);
+            switchView('summary');
+        }
+
+        function calculateFinalValue(type, sum, vals, count, uniqueCount) {
+            let finalVal = 0;
+            if (type === 'sum') finalVal = sum;
+            else if (type === 'avg') finalVal = vals.length > 0 ? sum / vals.length : 0;
+            else if (type === 'count') finalVal = count;
+            else if (type === 'max') finalVal = vals.length ? Math.max(...vals) : 0;
+            else if (type === 'min') finalVal = vals.length ? Math.min(...vals) : 0;
+            else if (type === 'median') finalVal = getMedian(vals);
+            else if (type === 'unique') finalVal = uniqueCount;
+
+            if (typeof finalVal === 'number' && !Number.isInteger(finalVal)) {
+               // finalVal = parseFloat(finalVal.toFixed(2));
+            }
+            return finalVal;
+        }
+
+        function getMedian(values) {
+            if (values.length === 0) return 0;
+            values.sort((a, b) => a - b);
+            const half = Math.floor(values.length / 2);
+            if (values.length % 2) return values[half];
+            return (values[half - 1] + values[half]) / 2.0;
+        }
+
+        function renderTable(groupFields, calcRequests, data, totalResult) {
+            const table = document.getElementById('result-table');
+            const thead = table.querySelector('thead');
+            const tbody = table.querySelector('tbody');
+            const tfoot = table.querySelector('tfoot');
+            
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+            tfoot.innerHTML = '';
+
+            const trHead = document.createElement('tr');
+            groupFields.forEach(h => {
+                const th = document.createElement('th');
+                th.innerText = h;
+                trHead.appendChild(th);
+            });
+            calcRequests.forEach(req => {
+                const th = document.createElement('th');
+                th.innerText = req.outCol;
+                th.style.textAlign = 'right';
+                trHead.appendChild(th);
+            });
+            thead.appendChild(trHead);
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                groupFields.forEach(f => {
+                    const td = document.createElement('td');
+                    td.innerText = row[f] || '(비어있음)';
+                    td.style.fontWeight = 'bold';
+                    tr.appendChild(td);
+                });
+                calcRequests.forEach(req => {
+                    const td = document.createElement('td');
+                    td.style.textAlign = 'right';
+                    td.innerText = row[req.outCol].toLocaleString('ko-KR', { maximumFractionDigits: 20 });
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            if (data.length > 0) {
+                const trFoot = document.createElement('tr');
+                if (groupFields.length > 0) {
+                    const tdLabel = document.createElement('td');
+                    tdLabel.innerText = "전체 요약 (Grand Total)";
+                    tdLabel.colSpan = groupFields.length;
+                    tdLabel.style.textAlign = 'center';
+                    tdLabel.style.color = '#217346';
+                    trFoot.appendChild(tdLabel);
+                }
+                calcRequests.forEach(req => {
+                    const td = document.createElement('td');
+                    td.innerText = totalResult[req.outCol].toLocaleString('ko-KR', { maximumFractionDigits: 20 })
+                    td.style.textAlign = 'right';
+                    trFoot.appendChild(td);
+                });
+                tfoot.appendChild(trFoot);
+            }
+            document.getElementById('summary-row-count').innerText = data.length;
+        }
+
+        function resetAll() {
+            pasteContainer.style.display = 'block';
+            configArea.style.display = 'none';
+            resultContent.style.display = 'none';
+            resultEmpty.style.display = 'flex';
+            rawData = [];
+            headers = [];
+            switchView('raw');
+        }
+
+        function showToast(msg) {
+            const container = document.getElementById('toast-container');
+            const div = document.createElement('div');
+            div.className = 'toast show';
+            div.innerText = msg;
+            container.appendChild(div);
+            setTimeout(() => {
+                div.classList.remove('show');
+                setTimeout(() => div.remove(), 300);
+            }, 3000);
+        }
+
+        function copyToClipboard() {
+            const activeTableId = currentView === 'summary' ? 'result-table' : 'raw-table';
+            const table = document.getElementById(activeTableId);
+            
+            if (!table || (currentView === 'summary' && table.querySelector('tbody').children.length === 0)) {
+                showToast("복사할 데이터가 없습니다.");
+                return;
+            }
+
+            let text = "";
+            const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText);
+            text += headers.join('\t') + '\n';
+
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach(tr => {
+                const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+                text += cells.join('\t') + '\n';
+            });
+            
+            const footRows = table.querySelectorAll('tfoot tr');
+            footRows.forEach(tr => {
+                const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+                if(tr.children[0].colSpan > 1) {
+                    const tabs = '\t'.repeat(tr.children[0].colSpan - 1);
+                    cells[0] = cells[0] + tabs;
+                }
+                text += cells.join('\t') + '\n';
+            });
+
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            const label = currentView === 'summary' ? '요약 결과' : '원본 데이터';
+            showToast(`${label}가 복사되었습니다!`);
+        }
+    </script>
+</body>
+</html>

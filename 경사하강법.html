@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>경사하강법 (Gradient Descent) - 데이터 기반 학습 (W1, W2, Bias)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Plotly.js for 3D Graph -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f8fafc;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 1);
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+        .math-font { font-family: 'Times New Roman', Times, serif; }
+        
+        /* 커스텀 스크롤바 (얇게 조정) */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #e2e8f0; padding: 6px; text-align: center; font-size: 0.75rem; }
+        th { background-color: #f1f5f9; font-weight: bold; color: #334155; }
+    </style>
+</head>
+<body class="h-screen p-2 md:p-4 flex flex-col items-center overflow-hidden bg-slate-50">
+
+    <!-- Header (화면 낭비를 줄이기 위해 여백 축소) -->
+    <header class="w-full max-w-[1600px] mb-2 flex-shrink-0">
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">경사하강법: 가중치와 편향의 학습</h1>
+            <button id="btnInfo" class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 flex items-center justify-center font-black shadow transition-colors" title="경사하강법이란?">?</button>
+        </div>
+        <p class="text-slate-600 mt-1 text-sm"><b>감자(x₁)</b>와 <b>양파(x₂)</b> 개수를 보고 필요한 <b>소스량(y)</b>을 예측하는 AI 모델입니다. 최적의 가중치(W₁, W₂)와 편향(b)을 찾아보세요.</p>
+    </header>
+
+    <!-- Main Content (3열 레이아웃, 화면 전체 채우기) -->
+    <main class="w-full max-w-[1600px] grid grid-cols-1 lg:grid-cols-12 gap-4 flex-grow min-h-0">
+        
+        <!-- 1열: 수식 및 데이터 (Col 1, 12칸 중 4칸 차지) -->
+        <section class="lg:col-span-4 flex flex-col gap-3 overflow-y-auto pr-1 pb-2">
+            
+            <!-- 1. Model Equation -->
+            <div class="glass-panel p-4 rounded-xl border-l-4 border-indigo-500 flex-shrink-0">
+                <h3 class="text-md font-bold text-slate-800 mb-2">1. 확장된 AI 가설 (수식)</h3>
+                <div class="bg-indigo-50 p-3 rounded text-center border border-indigo-100">
+                    <div class="text-[13px] font-bold text-indigo-900 mb-2 leading-relaxed">
+                        예측 소스량(ŷ) = <br>
+                        <span class="text-blue-600">W₁</span> × 감자(x₁) + <span class="text-emerald-600">W₂</span> × 양파(x₂) + <span class="text-purple-600">b(기본 소스)</span>
+                    </div>
+                    <div class="text-xs text-indigo-700 bg-white inline-block px-3 py-1 rounded shadow-sm border border-indigo-100">정답 모델: W₁=2, W₂=3, b=1</div>
+                </div>
+            </div>
+
+            <!-- 2. Training Data Table -->
+            <div class="glass-panel p-4 rounded-xl border-l-4 border-rose-500 flex-shrink-0 flex-grow">
+                <h3 class="font-bold text-slate-800 mb-2 text-sm">2. 학습 데이터 (5개 세트)</h3>
+                <div class="overflow-x-auto rounded border mb-2">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>x₁<br><span class="text-[10px] text-slate-500 font-normal">감자</span></th>
+                                <th>x₂<br><span class="text-[10px] text-slate-500 font-normal">양파</span></th>
+                                <th>정답(y)<br><span class="text-[10px] text-slate-500 font-normal">실제 소스</span></th>
+                                <th class="bg-indigo-50">예측(ŷ)<br><span class="text-[10px] text-indigo-400 font-normal">AI 예측</span></th>
+                                <th class="bg-rose-50 text-rose-700">오차<br><span class="text-[10px] text-rose-400 font-normal">(y-ŷ)²</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody"></tbody>
+                    </table>
+                </div>
+                <div class="bg-rose-50 p-2 rounded border border-rose-100 flex justify-between items-center mt-auto">
+                    <div class="text-xs font-bold text-rose-800">평균 제곱 오차 (MSE)</div>
+                    <div class="text-xl font-black text-rose-600" id="statTotalError">0.00</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2열: 컨트롤 및 상태 (Col 2, 12칸 중 3칸 차지) -->
+        <section class="lg:col-span-3 flex flex-col gap-3 overflow-y-auto pr-1 pb-2">
+            
+            <!-- 3. Current Values & Controls -->
+            <div class="glass-panel p-4 rounded-xl bg-slate-50 flex flex-col gap-4 h-full">
+                <div class="flex justify-between items-center flex-shrink-0">
+                    <h3 class="font-bold text-slate-800 text-sm">3. 상태 및 조종기</h3>
+                    <div class="text-xs font-bold text-slate-700 bg-slate-200 px-2 py-1 rounded-full shadow-inner">
+                        학습: <span id="stepDisplay" class="text-indigo-700">0</span> 회
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-2 flex-shrink-0">
+                    <div class="bg-white border p-2 rounded shadow-sm text-center">
+                        <div class="text-[10px] text-slate-500 font-bold">W₁</div>
+                        <div id="statW1" class="text-base font-black text-blue-600">1.00</div>
+                    </div>
+                    <div class="bg-white border p-2 rounded shadow-sm text-center">
+                        <div class="text-[10px] text-slate-500 font-bold">W₂</div>
+                        <div id="statW2" class="text-base font-black text-emerald-600">1.00</div>
+                    </div>
+                    <div class="bg-white border p-2 rounded shadow-sm text-center">
+                        <div class="text-[10px] text-slate-500 font-bold">Bias (b)</div>
+                        <div id="statB" class="text-base font-black text-purple-600">0.00</div>
+                    </div>
+                </div>
+
+                <!-- Sliders -->
+                <div class="space-y-4 flex-grow flex flex-col justify-center">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="flex justify-between text-[10px] font-bold text-slate-700 mb-1">
+                                <span>초기 W₁</span><span id="initW1Value" class="text-blue-600">1.0</span>
+                            </label>
+                            <input type="range" id="initW1Slider" min="-5" max="5" step="0.5" value="1" class="w-full h-1.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                        </div>
+                        <div>
+                            <label class="flex justify-between text-[10px] font-bold text-slate-700 mb-1">
+                                <span>초기 W₂</span><span id="initW2Value" class="text-emerald-600">1.0</span>
+                            </label>
+                            <input type="range" id="initW2Slider" min="-5" max="5" step="0.5" value="1" class="w-full h-1.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-emerald-600">
+                        </div>
+                        <div>
+                            <label class="flex justify-between text-[10px] font-bold text-slate-700 mb-1">
+                                <span>초기 편향(b)</span><span id="initBValue" class="text-purple-600">0.0</span>
+                            </label>
+                            <input type="range" id="initBiasSlider" min="-5" max="5" step="0.5" value="0" class="w-full h-1.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-purple-600">
+                        </div>
+                    </div>
+                    <div class="pt-3 border-t border-slate-200">
+                        <label class="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                            <span>학습률 (LR)</span>
+                            <span id="lrValue" class="text-indigo-600">0.03</span>
+                        </label>
+                        <input type="range" id="learningRate" min="0.001" max="0.1" step="0.001" value="0.03" 
+                               class="w-full h-1.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-auto flex-shrink-0">
+                    <button id="btnStep" class="col-span-2 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-bold rounded text-sm border border-indigo-200">
+                        + 1단계 학습
+                    </button>
+                    <button id="btnReset" class="py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded text-sm">
+                        위치 초기화
+                    </button>
+                    <button id="btnStart" class="py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded text-sm shadow">
+                        자동 학습
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3열: 3D Visualization (Col 3, 12칸 중 5칸 차지) -->
+        <section class="lg:col-span-5 glass-panel rounded-xl overflow-hidden flex flex-col h-full relative">
+            <div class="p-3 bg-slate-800 border-b flex justify-between items-center text-white flex-shrink-0">
+                <h2 class="font-bold text-sm">오차 공간 (W1, W2 vs MSE)</h2>
+                <div class="text-[10px] bg-slate-700 px-2 py-1 rounded">현재 편향: <span id="currentBLabel">0.0</span></div>
+            </div>
+            <!-- Plotly가 반응형으로 유연하게 꽉 차도록 relative 컨테이너로 감쌈 -->
+            <div class="w-full flex-grow relative bg-white min-h-[300px]">
+                <div id="graph-container" class="absolute inset-0"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal UI -->
+    <div id="customModal" class="fixed inset-0 z-50 hidden bg-black bg-opacity-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-11/12 max-w-sm">
+            <h3 id="modalTitle" class="text-xl font-bold mb-2 text-slate-800">알림</h3>
+            <p id="modalMessage" class="text-sm text-slate-600 mb-6"></p>
+            <div class="flex justify-end">
+                <button id="modalCloseBtn" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded hover:bg-indigo-700">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Modal (경사하강법 상세 설명 팝업) -->
+    <div id="infoModal" class="fixed inset-0 z-50 hidden bg-black bg-opacity-50 flex items-center justify-center backdrop-blur-sm p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col transform transition-all">
+            <div class="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
+                <h3 class="text-xl md:text-2xl font-black text-slate-800 flex items-center gap-2">
+                    <span class="text-indigo-600">⛰️</span> 경사하강법 (Gradient Descent) 이란?
+                </h3>
+                <button id="infoModalCloseBtnX" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto text-slate-700 space-y-5 text-sm md:text-base leading-relaxed">
+                <p>
+                    <b>경사하강법(Gradient Descent)</b>은 인공지능과 머신러닝에서 가장 핵심적이고 널리 사용되는 <b>'최적화 알고리즘(Optimization Algorithm)'</b>입니다.<br>
+                    쉽게 말해, <b>"인공지능이 스스로 오차를 줄여가며 정답(최적의 가중치와 편향)을 찾아가는 수학적 방법"</b>입니다.
+                </p>
+                
+                <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+                    <h4 class="font-bold text-indigo-900 mb-2">🧑‍🦯 눈 가리고 산 내려가기 비유</h4>
+                    <p class="text-indigo-800 text-sm">
+                        여러분이 안대를 쓴 채로 험준한 산맥(오차 공간) 한가운데 떨어졌다고 상상해 보세요. 목표는 산의 가장 깊은 골짜기(오차가 0인 정답)로 내려가는 것입니다.<br>
+                        안대를 썼기 때문에 전체 지형은 보이지 않지만, 발끝의 감각으로 <b>현재 서 있는 곳의 기울기(경사)</b>는 느낄 수 있습니다.<br>
+                        따라서 <b>가장 가파르게 내리막길인 방향</b>으로 한 걸음씩 걷다 보면, 언젠가는 가장 낮은 골짜기에 도착하게 될 것입니다. 이것이 바로 경사하강법의 원리입니다.
+                    </p>
+                </div>
+
+                <h4 class="font-bold text-slate-800 text-lg border-b pb-2 mt-4">핵심 개념 3가지</h4>
+                <ul class="list-disc pl-5 space-y-3">
+                    <li>
+                        <b class="text-rose-600">오차 함수 (Loss Function / MSE)</b>: 프로그램 우측의 3D 그래프 모양입니다. AI의 예측값과 실제 정답 사이의 차이(오차)를 수치화한 것으로, 이 값이 작을수록 똑똑한 AI입니다. 3D 그래프의 Z축(높이)이 바로 오차를 의미합니다.
+                    </li>
+                    <li>
+                        <b class="text-orange-600">기울기 (Gradient / 편미분)</b>: 현재 위치에서 오차가 어느 방향으로, 얼마나 가파르게 증가/감소하는지를 수학(미분)으로 계산한 값입니다. 인공지능은 이 기울기의 <b>반대 방향(오차가 줄어드는 방향)</b>으로 이동합니다.
+                    </li>
+                    <li>
+                        <b class="text-indigo-600">학습률 (Learning Rate / 보폭)</b>: 한 번에 얼마나 큰 걸음으로 이동할지 결정하는 값입니다. 
+                        <ul class="list-circle pl-5 mt-1 text-sm text-slate-500">
+                            <li><b>너무 작으면</b>: 찔끔찔끔 이동해서 골짜기까지 가는 데 시간이 너무 오래 걸립니다.</li>
+                            <li><b>너무 크면</b>: 성큼성큼 걷다가 반대편 산등성이로 넘어가 버리거나, 아예 산 밖으로 튕겨 나갑니다. (발산 현상)</li>
+                        </ul>
+                    </li>
+                </ul>
+
+                <div class="bg-slate-100 p-4 rounded-lg text-sm border border-slate-200">
+                    <b class="text-slate-800 font-bold mb-1 block">수식으로 보면?</b>
+                    <code class="text-indigo-700 font-mono font-bold">새로운 가중치 = 현재 가중치 - (학습률 × 현재 위치의 기울기)</code><br>
+                    <p class="mt-2 text-slate-600">이 공식을 오차가 더 이상 줄어들지 않을 때(기울기가 0이 될 때)까지 수백~수만 번 반복하는 과정이 바로 인공지능의 <b>'학습(Training)'</b>입니다.</p>
+                </div>
+            </div>
+            <div class="p-4 border-t bg-slate-50 flex justify-end rounded-b-xl">
+                <button id="infoModalCloseBtn" class="px-6 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow">이해했습니다</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. 학습 데이터 세트 (5개) ---
+        // 정답: W1=2, W2=3, b=1
+        const trainingData = [
+            { id: 1, x1: 1, x2: 1, y: 6 }, 
+            { id: 2, x1: 2, x2: 1, y: 8 }, 
+            { id: 3, x1: 1, x2: 2, y: 9 },
+            { id: 4, x1: 2, x2: 2, y: 11 },
+            { id: 5, x1: 3, x2: 1, y: 10 }
+        ];
+
+        // --- 2. 수학 모델 및 미분 ---
+        function calcMSE(w1, w2, b) {
+            let totalError = 0;
+            for (let d of trainingData) {
+                let y_pred = (w1 * d.x1) + (w2 * d.x2) + b;
+                totalError += Math.pow(d.y - y_pred, 2);
+            }
+            return totalError / trainingData.length;
+        }
+
+        function calcGradients(w1, w2, b) {
+            let dw1 = 0, dw2 = 0, db = 0;
+            for (let d of trainingData) {
+                let y_pred = (w1 * d.x1) + (w2 * d.x2) + b;
+                let error = y_pred - d.y;
+                dw1 += 2 * error * d.x1;
+                dw2 += 2 * error * d.x2;
+                db += 2 * error;
+            }
+            const n = trainingData.length;
+            return { dw1: dw1 / n, dw2: dw2 / n, db: db / n };
+        }
+
+        // --- 3. 상태 변수 ---
+        let currentW1 = 1.0;
+        let currentW2 = 1.0;
+        let currentB = 0.0;
+        let goalReached = false;
+        
+        let pathW1 = [currentW1], pathW2 = [currentW2], pathError = [calcMSE(currentW1, currentW2, currentB)];
+        let isAnimating = false, animationTimer = null, stepCount = 0;
+
+        // --- 4. UI 및 그래프 렌더링 ---
+        const dataTableBody = document.getElementById('dataTableBody');
+        const statTotalError = document.getElementById('statTotalError');
+        const statW1 = document.getElementById('statW1');
+        const statW2 = document.getElementById('statW2');
+        const statB = document.getElementById('statB');
+        const currentBLabel = document.getElementById('currentBLabel');
+        const stepDisplay = document.getElementById('stepDisplay');
+
+        // 그래프 뷰 및 범위 확장 (-6 ~ 6), Z축 자동 조정
+        const layout = {
+            margin: { l: 0, r: 0, b: 0, t: 0 },
+            scene: {
+                xaxis: { title: 'W1', range: [-6, 6] },
+                yaxis: { title: 'W2', range: [-6, 6] },
+                zaxis: { title: 'MSE', autorange: true }, // 오차 범위에 따라 높이 자동 조절
+                camera: { eye: { x: -1.8, y: -1.8, z: 1.2 } } // 공이 잘 보이도록 시점 뒤로 후퇴
+            },
+            showlegend: false,
+            uirevision: 1 // ★ 수정: 사용자 화면 상태(회전, 확대 등)를 애니메이션 갱신 시에도 강제 유지
+        };
+
+        // 오차 곡면 데이터 범위 확장 (-6 ~ 6)
+        function getSurfaceData(bValue) {
+            let x_surf = [], y_surf = [], z_data = [];
+            for (let y = -6; y <= 6; y += 0.5) {
+                let zRow = [];
+                for (let x = -6; x <= 6; x += 0.5) {
+                    zRow.push(calcMSE(x, y, bValue));
+                }
+                y_surf.push(y);
+                z_data.push(zRow);
+            }
+            for (let x = -6; x <= 6; x += 0.5) x_surf.push(x);
+            return { x: x_surf, y: y_surf, z: z_data };
+        }
+
+        function updateUI(refreshSurface = false) {
+            statW1.textContent = currentW1.toFixed(4);
+            statW2.textContent = currentW2.toFixed(4);
+            statB.textContent = currentB.toFixed(4);
+            currentBLabel.textContent = currentB.toFixed(4);
+            stepDisplay.textContent = stepCount;
+            
+            let totalMSE = calcMSE(currentW1, currentW2, currentB);
+            statTotalError.textContent = totalMSE.toFixed(4);
+
+            dataTableBody.innerHTML = '';
+            for (let d of trainingData) {
+                let y_pred = (currentW1 * d.x1) + (currentW2 * d.x2) + currentB;
+                let sqError = Math.pow(d.y - y_pred, 2);
+                dataTableBody.innerHTML += `
+                    <tr>
+                        <td class="font-bold text-slate-400">#${d.id}</td>
+                        <td>${d.x1}</td>
+                        <td>${d.x2}</td>
+                        <td class="font-bold text-slate-700">${d.y}</td>
+                        <td class="bg-indigo-50 font-bold text-indigo-600">${y_pred.toFixed(4)}</td>
+                        <td class="bg-rose-50 font-bold text-rose-500">${sqError.toFixed(4)}</td>
+                    </tr>
+                `;
+            }
+
+            const traces = [];
+            // 오차 곡면 (Bias가 변하면 곡면 모양 자체가 변함)
+            const surf = getSurfaceData(currentB);
+            traces.push({ z: surf.z, x: surf.x, y: surf.y, type: 'surface', colorscale: 'Viridis', opacity: 0.5, showscale: false });
+            // 학습 경로
+            traces.push({ x: pathW1, y: pathW2, z: pathError, type: 'scatter3d', mode: 'lines', line: { color: 'black', width: 4 } });
+            // 현재점
+            traces.push({ x: [currentW1], y: [currentW2], z: [totalMSE], type: 'scatter3d', mode: 'markers', marker: { size: 8, color: 'red' } });
+            // 목표점 (Target W1=2, W2=3 기준) - 크기를 10에서 5로 축소
+            traces.push({ x: [2], y: [3], z: [calcMSE(2, 3, currentB)], type: 'scatter3d', mode: 'markers', marker: { size: 5, color: 'gold', symbol: 'diamond' } });
+
+            Plotly.react('graph-container', traces, layout);
+        }
+
+        // --- 5. 경사하강법 로직 ---
+        function doOneStep() {
+            const lr = parseFloat(document.getElementById('learningRate').value);
+            const grads = calcGradients(currentW1, currentW2, currentB);
+            
+            // W1, W2, b 동시 업데이트
+            currentW1 -= lr * grads.dw1;
+            currentW2 -= lr * grads.dw2;
+            currentB -= lr * grads.db;
+            
+            let currentError = calcMSE(currentW1, currentW2, currentB);
+            stepCount++;
+            pathW1.push(currentW1);
+            pathW2.push(currentW2);
+            pathError.push(currentError);
+
+            updateUI();
+
+            if (currentError > 2000 || isNaN(currentError)) {
+                stopLearning();
+                showPopup("💥 발산!", "학습률이 너무 높아 오차가 폭발했습니다. 학습률을 낮추세요.");
+                return false;
+            }
+            if (currentError < 0.01 && !goalReached) {
+                goalReached = true;
+                stopLearning();
+                showPopup("🎉 1차 목표 달성!", `${stepCount}단계 만에 최적의 해에 근접했습니다!<br><br><b>팝업을 닫고 [자동 학습 시작]이나 [+ 1단계 학습]을 계속 눌러 오차를 끝까지 0으로 만들어보세요!</b>`);
+                return false; // 첫 도달 시에만 멈춤
+            }
+            if (currentError < 0.000001) {
+                stopLearning();
+                showPopup("🏆 완벽한 수렴!", "오차가 사실상 0이 되었습니다. 더 이상 학습할 오차가 없습니다.");
+                return false; // 완전히 수렴하면 최종 정지
+            }
+            return true;
+        }
+
+        function autoStepLoop() {
+            if (!isAnimating) return;
+            // ★ 수정: 40ms -> 120ms로 간격 늘림 (브라우저가 마우스 회전 이벤트를 처리할 수 있는 시간 확보)
+            if (doOneStep()) animationTimer = setTimeout(autoStepLoop, 120);
+        }
+
+        // --- 6. 이벤트 리스너 ---
+        const btnStart = document.getElementById('btnStart');
+        const btnStep = document.getElementById('btnStep');
+        const btnReset = document.getElementById('btnReset');
+        const initW1Slider = document.getElementById('initW1Slider');
+        const initW1ValLabel = document.getElementById('initW1Value');
+        const initW2Slider = document.getElementById('initW2Slider');
+        const initW2ValLabel = document.getElementById('initW2Value');
+        const initBSlider = document.getElementById('initBiasSlider');
+        const initBValLabel = document.getElementById('initBValue');
+        const lrSlider = document.getElementById('learningRate');
+        const lrValLabel = document.getElementById('lrValue');
+
+        // 값 초기화 및 UI 리프레시를 담당하는 공통 함수
+        function doReset() {
+            stopLearning();
+            currentW1 = parseFloat(initW1Slider.value); 
+            currentW2 = parseFloat(initW2Slider.value);
+            currentB = parseFloat(initBSlider.value); 
+            pathW1 = [currentW1]; pathW2 = [currentW2]; pathError = [calcMSE(currentW1, currentW2, currentB)];
+            stepCount = 0;
+            goalReached = false;
+            updateUI(true);
+        }
+
+        // 슬라이더를 움직일 때마다 라벨 업데이트 및 즉시 초기화 실행
+        initW1Slider.addEventListener('input', (e) => {
+            initW1ValLabel.textContent = parseFloat(e.target.value).toFixed(1);
+            doReset();
+        });
+        initW2Slider.addEventListener('input', (e) => {
+            initW2ValLabel.textContent = parseFloat(e.target.value).toFixed(1);
+            doReset();
+        });
+        initBSlider.addEventListener('input', (e) => {
+            initBValLabel.textContent = parseFloat(e.target.value).toFixed(1);
+            doReset();
+        });
+        lrSlider.addEventListener('input', (e) => {
+            lrValLabel.textContent = parseFloat(e.target.value).toFixed(3);
+            doReset();
+        });
+
+        btnStart.addEventListener('click', () => {
+            if (isAnimating) { stopLearning(); return; }
+            isAnimating = true;
+            btnStart.textContent = "일시정지 🛑";
+            btnStart.classList.replace('bg-indigo-600', 'bg-rose-500');
+            autoStepLoop();
+        });
+
+        function stopLearning() {
+            isAnimating = false;
+            clearTimeout(animationTimer);
+            btnStart.textContent = "자동 학습 시작";
+            btnStart.classList.replace('bg-rose-500', 'bg-indigo-600');
+        }
+
+        btnStep.addEventListener('click', doOneStep);
+        
+        // 초기화 버튼 이벤트 핸들러 간소화
+        btnReset.addEventListener('click', doReset);
+
+        // 모달
+        const modal = document.getElementById('customModal');
+        const modalCloseBtn = document.getElementById('modalCloseBtn');
+        function showPopup(title, msg) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').innerHTML = msg;
+            modal.classList.remove('hidden');
+        }
+        modalCloseBtn.addEventListener('click', () => modal.classList.add('hidden'));
+
+        // --- 설명 팝업 (Info Modal) 제어 ---
+        const btnInfo = document.getElementById('btnInfo');
+        const infoModal = document.getElementById('infoModal');
+        const infoModalCloseBtn = document.getElementById('infoModalCloseBtn');
+        const infoModalCloseBtnX = document.getElementById('infoModalCloseBtnX');
+
+        function openInfoModal() {
+            infoModal.classList.remove('hidden');
+        }
+
+        function closeInfoModal() {
+            infoModal.classList.add('hidden');
+        }
+
+        btnInfo.addEventListener('click', openInfoModal);
+        infoModalCloseBtn.addEventListener('click', closeInfoModal);
+        infoModalCloseBtnX.addEventListener('click', closeInfoModal);
+
+        // 설명 팝업 외부(어두운 배경) 클릭 시 닫기
+        infoModal.addEventListener('click', (e) => {
+            if (e.target === infoModal) closeInfoModal();
+        });
+
+        // 초기 실행
+        Plotly.newPlot('graph-container', [], layout, {responsive: true, displayModeBar: false});
+        
+        // ★ 추가: 최초 1회 렌더링 이후 카메라 고정을 해제하여, 사용자가 돌려놓은 시점을 강제로 빼앗지 않도록 설정
+        delete layout.scene.camera; 
+
+        updateUI(true);
+        window.addEventListener('resize', () => Plotly.Plots.resize('graph-container'));
+    </script>
+</body>
+</html>

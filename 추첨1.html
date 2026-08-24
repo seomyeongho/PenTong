@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>엑셀 스타일 추첨 프로그램</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Jspreadsheet CE & jSuites (Stable Version Combo) -->
+    <script src="https://cdn.jsdelivr.net/npm/jsuites@4.9.1/dist/jsuites.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@4.9.1/dist/jsuites.min.css" type="text/css" />
+    
+    <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.2.1/dist/index.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.2.1/dist/jspreadsheet.min.css" type="text/css" />
+
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* 헤더 스타일 */
+        .jexcel > thead > tr > td {
+            background-color: #2563EB !important; /* Blue-600 */
+            color: white !important;
+            font-weight: bold;
+        }
+        
+        /* 기본 셀 스타일 */
+        .jexcel > tbody > tr > td {
+            text-align: center !important;
+        }
+
+        /* 입력 불가(ReadOnly) 컬럼 음영 처리 */
+        #input-spreadsheet .jexcel tbody tr td:nth-child(2) {
+            background-color: #E5E7EB !important; /* 진한 회색 배경 */
+            color: #6B7280 !important; /* 회색 텍스트 */
+            pointer-events: none; /* 클릭 방지 */
+        }
+
+        #input-spreadsheet .jexcel tbody tr td:nth-child(3) {
+            background-color: #E5E7EB !important; /* 진한 회색 배경 */
+            color: #1E40AF !important; /* 파란색 텍스트 (강조) */
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        /* 결과 테이블 기본 텍스트 색상 */
+        #result-spreadsheet .jexcel > tbody > tr > td {
+            color: #111827 !important;
+            font-weight: 500;
+        }
+
+        /* 비활성화된 테이블 스타일 */
+        .table-disabled {
+            pointer-events: none;
+            opacity: 0.6;
+            background-color: #F3F4F6;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans text-sm">
+
+    <!-- 커스텀 모달 (Alert/Confirm 대체) -->
+    <div id="custom-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-[100] hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-lg shadow-2xl p-6 w-96 transform scale-95 transition-transform duration-300 border border-gray-200">
+            <div class="flex items-center gap-3 mb-4">
+                <div id="modal-icon" class="text-blue-600 text-xl">
+                    <i class="fas fa-info-circle"></i>
+                </div>
+                <h3 id="modal-title" class="text-lg font-bold text-gray-800">알림</h3>
+            </div>
+            <p id="modal-message" class="text-gray-600 mb-6 text-base leading-relaxed">메시지 내용</p>
+            <div class="flex justify-end gap-2">
+                <button id="modal-cancel" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-medium transition-colors hidden">
+                    취소
+                </button>
+                <button id="modal-confirm" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-bold shadow-sm transition-colors">
+                    확인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-[1600px] mx-auto p-4">
+        <!-- Toast Message -->
+        <div id="toast" class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg z-50 hidden transition-opacity duration-300">
+            알림 메시지
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- 1. 왼쪽 패널: 설정 (Settings) -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="bg-white border border-gray-400 shadow-sm relative">
+                    <!-- 설정 잠금용 오버레이 -->
+                    <div id="settings-overlay" class="hidden absolute inset-0 bg-gray-100 bg-opacity-50 z-10 cursor-not-allowed"></div>
+                    
+                    <table class="w-full border-collapse">
+                        <tbody>
+                            <tr class="border-b border-gray-300">
+                                <td class="bg-gray-100 p-2 border-r border-gray-300 font-bold w-1/3">1. 방법</td>
+                                <td class="p-2">
+                                    <div class="flex flex-col gap-1">
+                                        <label class="flex items-center cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                            <input type="radio" name="method" value="random" checked onchange="toggleSeedInput()" class="mr-2">
+                                            <span id="label-random" class="text-red-600 font-bold">무작위 생성</span>
+                                        </label>
+                                        <label class="flex items-center cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                            <input type="radio" name="method" value="seed" onchange="toggleSeedInput()" class="mr-2">
+                                            <span id="label-seed" class="">초기값 사용</span>
+                                        </label>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr class="border-b border-gray-300">
+                                <td class="bg-gray-100 p-2 border-r border-gray-300 font-bold">2. 난수 초기값</td>
+                                <td class="p-2">
+                                    <input type="number" id="seedValue" disabled
+                                        class="w-full border p-1 bg-gray-100 text-gray-400 transition-colors">
+                                </td>
+                            </tr>
+                            <tr class="border-b border-gray-300">
+                                <td class="bg-gray-100 p-2 border-r border-gray-300 font-bold">3. 추첨 인원수</td>
+                                <td class="p-2">
+                                    <input type="number" id="winnerCount" value="10"
+                                        class="w-full border border-gray-300 p-1 text-red-600 font-bold text-center">
+                                </td>
+                            </tr>
+                            <tr class="border-b border-gray-300">
+                                <td class="bg-gray-100 p-2 border-r border-gray-300 font-bold">4. 후보 인원수</td>
+                                <td class="p-2">
+                                    <input type="number" id="reserveCount" value="2"
+                                        class="w-full border border-gray-300 p-1 text-orange-500 font-bold text-center">
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <button onclick="runLottery()"
+                    class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xl rounded shadow-md flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-95">
+                    <i class="fas fa-shuffle"></i> [ 5. 추첨 하기 ]
+                </button>
+
+                <div class="space-y-4 text-xs text-gray-700">
+                    <div class="bg-gray-200 p-3 border-l-4 border-blue-500">
+                        <strong class="text-blue-700 block mb-1">1. 방법: 무작위</strong>
+                        추첨할 때 마다 당첨 결과가 바뀜
+                    </div>
+                    <div class="bg-gray-200 p-3 border-l-4 border-blue-500">
+                        <strong class="text-blue-700 block mb-1">1. 방법: 초기값 사용</strong>
+                        당첨 결과가 바뀌지 않음
+                    </div>
+                    <div class="bg-gray-200 p-3 border-l-4 border-blue-500">
+                        <strong class="text-blue-700 block mb-1">2. 난수 초기값 지정 방법</strong>
+                        가. 임의로 정한다.<br>
+                        나. 추첨 당일 날짜를 사용한다.<br>
+                        예) <span id="today-date"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 가운데 패널: Jspreadsheet 입력 -->
+            <div class="lg:col-span-6 flex flex-col h-full">
+                <div class="bg-orange-100 text-center p-2 font-bold text-red-600 border border-orange-200 mb-2 rounded shadow-sm">
+                    회색 칸(난수, 순위)은 자동 입력됩니다. 흰색 칸(소속, 성명, 비고)만 수정하세요.
+                </div>
+                
+                <!-- 입력 테이블 컨테이너 -->
+                <div id="input-container" class="bg-white border border-gray-400 shadow-sm flex-grow overflow-hidden p-1 transition-opacity duration-300">
+                    <div id="input-spreadsheet"></div>
+                </div>
+            </div>
+
+            <!-- 3. 오른쪽 패널: Jspreadsheet 결과 -->
+            <div class="lg:col-span-4 flex flex-col">
+                <button onclick="clearResults()"
+                    class="mb-2 w-full py-2 bg-white border border-blue-300 text-blue-600 hover:bg-blue-50 font-bold rounded shadow-sm flex items-center justify-center gap-2 transition-colors">
+                    <i class="fas fa-rotate-left"></i> [ 당첨 결과 지우기 ]
+                </button>
+
+                <div class="bg-white border border-gray-400 shadow-sm flex-grow overflow-hidden p-1">
+                    <div id="result-spreadsheet"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- 1. 초기 설정 및 유틸리티 ---
+        let inputTable = null;
+        let resultTable = null;
+        let isLotteryRun = false; // 추첨 실행 여부 상태
+
+        const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const seedInput = document.getElementById('seedValue');
+        if(seedInput) seedInput.value = today;
+        const todayLabel = document.getElementById('today-date');
+        if(todayLabel) todayLabel.innerText = today;
+
+        // --- 모달 관련 함수 ---
+        const modal = document.getElementById('custom-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalConfirmBtn = document.getElementById('modal-confirm');
+        const modalCancelBtn = document.getElementById('modal-cancel');
+        const modalIcon = document.getElementById('modal-icon');
+
+        function openModal() {
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                const content = modal.querySelector('div');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeModal() {
+            modal.classList.add('opacity-0');
+            const content = modal.querySelector('div');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function showCustomAlert(title, message) {
+            modalTitle.innerText = title;
+            modalMessage.innerHTML = message.replace(/\n/g, '<br>');
+            modalCancelBtn.classList.add('hidden');
+            
+            // 아이콘 및 색상 (정보/경고)
+            modalIcon.innerHTML = '<i class="fas fa-info-circle"></i>';
+            modalIcon.className = "text-blue-600 text-xl";
+            
+            modalConfirmBtn.onclick = closeModal;
+            openModal();
+        }
+
+        function showCustomConfirm(message, onConfirm) {
+            modalTitle.innerText = "확인";
+            modalMessage.innerHTML = message;
+            modalCancelBtn.classList.remove('hidden');
+            
+            // 아이콘 (질문)
+            modalIcon.innerHTML = '<i class="fas fa-question-circle"></i>';
+            modalIcon.className = "text-orange-600 text-xl";
+            
+            modalConfirmBtn.onclick = () => {
+                closeModal();
+                if (onConfirm) onConfirm();
+            };
+            modalCancelBtn.onclick = closeModal;
+            
+            openModal();
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            if(toast) {
+                toast.innerText = message;
+                toast.classList.remove('hidden');
+                setTimeout(() => toast.classList.add('hidden'), 3000);
+            }
+        }
+
+        // --- 2. Jspreadsheet 초기화 ---
+        window.addEventListener('load', function() {
+            if (typeof jspreadsheet === 'function') {
+                initTables();
+            } else if (typeof jexcel === 'function') {
+                window.jspreadsheet = jexcel;
+                initTables();
+            } else {
+                console.error("Library not loaded correctly.");
+                showToast("라이브러리 로드 실패.");
+            }
+        });
+
+        function initTables() {
+            const initialData = Array.from({ length: 22 }, () => ['', '', '', '', '']);
+
+            // 입력 테이블
+            inputTable = jspreadsheet(document.getElementById('input-spreadsheet'), {
+                data: initialData,
+                columns: [
+                    // 난수(0), 순위(1), 소속(2), 성명(3), 비고(4)
+                    { type: 'text', title: '난수', width: 90, readOnly: true },
+                    { type: 'text', title: '순위', width: 60, readOnly: true },
+                    { type: 'text', title: '소속', width: 100 },
+                    { type: 'text', title: '성명', width: 100 },
+                    { type: 'text', title: '비고', width: 100 },
+                ],
+                minDimensions: [5, 22],
+                tableOverflow: true,
+                tableHeight: '700px',
+            });
+
+            // 결과 테이블
+            resultTable = jspreadsheet(document.getElementById('result-spreadsheet'), {
+                data: [],
+                columns: [
+                    // 구분(0), 소속(1), 성명(2), 비고(3)
+                    { type: 'text', title: '구분', width: 80, readOnly: true },
+                    { type: 'text', title: '소속', width: 100, readOnly: true },
+                    { type: 'text', title: '성명', width: 100, readOnly: true },
+                    { type: 'text', title: '비고', width: 100, readOnly: true },
+                ],
+                minDimensions: [4, 15],
+                tableOverflow: true,
+                tableHeight: '700px',
+                allowInsertRow: false,
+                allowDeleteRow: false,
+                allowInsertColumn: false,
+                allowDeleteColumn: false,
+                // [핵심] updateTable: 데이터 렌더링 시 색상 적용
+                updateTable: function(instance, cell, col, row, val, label, cellName) {
+                    if (col == 0) {
+                        // 기존 스타일 초기화
+                        cell.style.color = '';
+                        cell.style.fontWeight = '';
+                        
+                        if (val === '당첨') {
+                            // Tailwind Blue-800 (#1E40AF)
+                            cell.style.setProperty('color', '#1E40AF', 'important');
+                            cell.style.setProperty('font-weight', 'bold', 'important');
+                        } else if (val === '후보') {
+                            // Tailwind Green-800 (#166534)
+                            cell.style.setProperty('color', '#166534', 'important');
+                            cell.style.setProperty('font-weight', 'bold', 'important');
+                        }
+                    }
+                }
+            });
+            
+            fillEmptyResultRows();
+        }
+
+        function fillEmptyResultRows() {
+            if (!resultTable) return;
+            const currentData = resultTable.getData();
+            const currentRows = currentData ? currentData.length : 0;
+            
+            if (currentRows < 15) {
+                const rowsToAdd = 15 - currentRows;
+                for(let i=0; i<rowsToAdd; i++) {
+                    resultTable.insertRow();
+                }
+            }
+        }
+
+        // --- 3. 입력 제어 함수 ---
+        function setInputsLocked(locked) {
+            isLotteryRun = locked;
+            
+            // 설정 패널 잠금 (오버레이)
+            const overlay = document.getElementById('settings-overlay');
+            if (locked) {
+                overlay.classList.remove('hidden');
+            } else {
+                overlay.classList.add('hidden');
+            }
+
+            // 입력 테이블 잠금 (스타일 및 클릭 방지)
+            const inputContainer = document.getElementById('input-container');
+            if (locked) {
+                inputContainer.classList.add('table-disabled');
+            } else {
+                inputContainer.classList.remove('table-disabled');
+            }
+        }
+
+        // --- 4. 로직 처리 (추첨 등) ---
+        function toggleSeedInput() {
+            const methodEl = document.querySelector('input[name="method"]:checked');
+            if(!methodEl) return;
+            
+            const method = methodEl.value;
+            const seedInput = document.getElementById('seedValue');
+            const labelRandom = document.getElementById('label-random');
+            const labelSeed = document.getElementById('label-seed');
+
+            if (method === 'seed') {
+                seedInput.disabled = false;
+                seedInput.classList.remove('bg-gray-100', 'text-gray-400');
+                seedInput.classList.add('text-orange-600', 'font-bold', 'border-orange-300');
+                labelRandom.classList.remove('text-red-600', 'font-bold');
+                labelSeed.classList.add('text-red-600', 'font-bold');
+            } else {
+                seedInput.disabled = true;
+                seedInput.classList.add('bg-gray-100', 'text-gray-400');
+                seedInput.classList.remove('text-orange-600', 'font-bold', 'border-orange-300');
+                labelRandom.classList.add('text-red-600', 'font-bold');
+                labelSeed.classList.remove('text-red-600', 'font-bold');
+            }
+        }
+
+        function mulberry32(a) {
+            return function() {
+                var t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+        }
+
+        function runLottery() {
+            if (!inputTable || !resultTable) {
+                showToast("테이블이 초기화되지 않았습니다.");
+                return;
+            }
+
+            // 이미 추첨된 상태라면, 재추첨 확인 (커스텀 모달 사용)
+            if (isLotteryRun) {
+                showCustomConfirm("당첨결과를 지우고<br>새로 입력하시겠습니까?", function() {
+                    clearResults(); // 초기화 및 잠금 해제
+                });
+                return;
+            }
+
+            // 1. 데이터 가져오기
+            const rawData = inputTable.getData();
+            
+            // 이름(인덱스 3)이 있는 행만 필터링
+            const participants = rawData.map((row, index) => ({
+                rowIndex: index,
+                id: index + 1,
+                affiliation: row[2],
+                name: row[3],
+                note: row[4]
+            })).filter(p => p.name && p.name.trim() !== "");
+
+            const winnerCount = parseInt(document.getElementById('winnerCount').value) || 0;
+            const reserveCount = parseInt(document.getElementById('reserveCount').value) || 0;
+
+            if (participants.length === 0) {
+                showCustomAlert("알림", "추첨할 명단을 입력해주세요.");
+                return;
+            }
+            if (participants.length < winnerCount) {
+                showCustomAlert("알림", `참가자 수(${participants.length}명)가 당첨 인원(${winnerCount}명)보다 적습니다.`);
+                return;
+            }
+
+            // 2. 난수 생성
+            const methodEl = document.querySelector('input[name="method"]:checked');
+            const method = methodEl ? methodEl.value : 'random';
+            
+            let seed;
+            if (method === 'seed') {
+                seed = parseInt(document.getElementById('seedValue').value) || 12345;
+            } else {
+                seed = Math.floor(Math.random() * 99999999);
+            }
+            const rng = mulberry32(seed);
+
+            // 3. 섞기 및 순위 선정
+            const drawn = participants.map(p => ({
+                ...p,
+                tempRandom: rng()
+            })).sort((a, b) => b.tempRandom - a.tempRandom);
+
+            // 4. 입력 테이블 업데이트
+            for(let i=0; i<rawData.length; i++) {
+                inputTable.setValueFromCoords(0, i, '', true); // 난수 초기화
+                inputTable.setValueFromCoords(1, i, '', true); // 순위 초기화
+            }
+
+            drawn.forEach((p, rankIndex) => {
+                const rank = rankIndex + 1;
+                const randomVal = p.tempRandom.toFixed(6);
+                
+                inputTable.setValueFromCoords(0, p.rowIndex, randomVal, true);
+                inputTable.setValueFromCoords(1, p.rowIndex, rank, true);
+            });
+
+            // 5. 결과 테이블 업데이트
+            const resultData = [];
+            const totalPicks = winnerCount + reserveCount;
+            
+            for(let i=0; i < totalPicks && i < drawn.length; i++) {
+                const p = drawn[i];
+                const typeText = i < winnerCount ? '당첨' : '후보';
+                
+                resultData.push([
+                    typeText,
+                    p.affiliation,
+                    p.name,
+                    p.note
+                ]);
+            }
+
+            resultTable.setData(resultData);
+            
+            fillEmptyResultRows();
+            showToast("추첨이 완료되었습니다!");
+            
+            // [잠금] 추첨 완료 후 입력 및 설정 잠금
+            setInputsLocked(true);
+        }
+
+        function clearResults() {
+            if (!resultTable || !inputTable) return;
+            
+            resultTable.setData([]);
+            fillEmptyResultRows();
+            
+            const rawData = inputTable.getData();
+            for(let i=0; i<rawData.length; i++) {
+                inputTable.setValueFromCoords(0, i, '', true);
+                inputTable.setValueFromCoords(1, i, '', true);
+            }
+            
+            showToast("결과를 초기화했습니다.");
+            
+            // [해제] 결과 초기화 시 잠금 해제
+            setInputsLocked(false);
+        }
+
+    </script>
+</body>
+</html>

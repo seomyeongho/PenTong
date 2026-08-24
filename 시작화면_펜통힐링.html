@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PenTong Zen Garden</title>
+    <!-- 폰트: Noto Serif KR (우아한 명조체) -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            /* 새벽 하늘 느낌의 그라데이션 */
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            background: linear-gradient(to bottom, #a1c4fd 0%, #c2e9fb 100%); /* 맑은 하늘 */
+            background: linear-gradient(to bottom, #dfe9f3 0%, #ffffff 100%); /* 아주 맑고 깨끗한 느낌 */
+            font-family: 'Noto Serif KR', serif;
+            color: #555;
+            user-select: none;
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .title-container {
+            text-align: center;
+            animation: fadeIn 2s ease-out;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.4);
+            border-radius: 20px;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 10px 30px rgba(163, 177, 198, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0;
+            font-weight: 700;
+            color: #4a5568;
+            letter-spacing: -0.5px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            font-size: 1.1rem;
+            margin: 0;
+            color: #718096;
+            font-weight: 500;
+            line-height: 1.6;
+        }
+
+        .highlight {
+            color: #e68ea3; /* 벚꽃색 포인트 */
+            font-weight: 700;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="overlay">
+        <div class="title-container">
+            <h1 id="user-greeting">PenTong</h1>
+            <p id="sub-greeting">오늘 하루도 평온하게 시작하세요.</p>
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script src="api_client.js"></script>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        let petals = [];
+        let ripples = [];
+        
+        // [추가] 애니메이션 실행 상태 플래그
+        let isAnimating = true;
+
+        // 마우스 설정
+        const mouse = { x: null, y: null };
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            initPetals();
+        }
+        window.addEventListener('resize', resize);
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.x;
+            mouse.y = e.y;
+        });
+
+        // 클릭 시 물결 효과
+        window.addEventListener('click', (e) => {
+            ripples.push(new Ripple(e.x, e.y));
+        });
+
+        // --- 물결 클래스 ---
+        class Ripple {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 0;
+                this.alpha = 0.6;
+                this.lineWidth = 2;
+            }
+            update() {
+                this.radius += 3;
+                this.alpha -= 0.01;
+                this.lineWidth -= 0.02;
+            }
+            draw() {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(100, 149, 237, ${this.alpha})`; // CornflowerBlue
+                ctx.lineWidth = Math.max(0.1, this.lineWidth);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // --- 벚꽃잎 클래스 ---
+        class Petal {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height - height; // 화면 위에서 시작
+                this.size = Math.random() * 10 + 5;
+                this.speedY = Math.random() * 1 + 0.5;
+                this.speedX = Math.random() * 1 - 0.5;
+                this.angle = Math.random() * 360;
+                this.spin = Math.random() < 0.5 ? 1 : -1;
+                
+                // 벚꽃 색상 (랜덤하게 약간씩 다르게)
+                const colors = ['#ffc3d0', '#ffd1dc', '#ffe4e1'];
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+                
+                // 흔들림 효과를 위한 변수
+                this.oscillation = 0;
+                this.oscillationSpeed = Math.random() * 0.02 + 0.01;
+            }
+
+            update() {
+                this.oscillation += this.oscillationSpeed;
+                
+                // 자연스러운 낙하 운동 (좌우로 흔들리며 떨어짐)
+                this.x += this.speedX + Math.sin(this.oscillation) * 0.5;
+                this.y += this.speedY;
+                this.angle += this.spin * 0.5;
+
+                // 마우스 바람 효과
+                if (mouse.x != null) {
+                    const dx = this.x - mouse.x;
+                    const dy = this.y - mouse.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < 150) {
+                        const force = (150 - dist) / 150;
+                        const angleToMouse = Math.atan2(dy, dx);
+                        this.x += Math.cos(angleToMouse) * force * 5; // 밀려남
+                        this.y += Math.sin(angleToMouse) * force * 2;
+                    }
+                }
+
+                // 화면 밖으로 나가면 위로 재설정
+                if (this.y > height + 20) {
+                    this.y = -20;
+                    this.x = Math.random() * width;
+                }
+                if (this.x > width + 20) this.x = -20;
+                if (this.x < -20) this.x = width + 20;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle * Math.PI / 180);
+                
+                // 꽃잎 그리기 (베지어 곡선)
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                // 하트 모양 비슷한 꽃잎
+                ctx.bezierCurveTo(this.size / 2, -this.size / 2, this.size, 0, 0, this.size);
+                ctx.bezierCurveTo(-this.size, 0, -this.size / 2, -this.size / 2, 0, 0);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+        }
+
+        function initPetals() {
+            petals = [];
+            const numberOfPetals = 80; // 꽃잎 개수
+            for (let i = 0; i < numberOfPetals; i++) {
+                petals.push(new Petal());
+            }
+            // 처음에 화면 전체에 퍼져있게 하기 위해 미리 시뮬레이션
+            for(let p of petals) {
+                p.y = Math.random() * height;
+            }
+        }
+
+        function animate() {
+            // [수정] 화면에 보이지 않으면(isAnimating = false) 루프 중단 (리소스 절약)
+            if (!isAnimating) return;
+
+            requestAnimationFrame(animate);
+            ctx.clearRect(0, 0, width, height);
+
+            // 꽃잎 업데이트
+            for (let petal of petals) {
+                petal.update();
+                petal.draw();
+            }
+
+            // 물결 업데이트
+            for (let i = 0; i < ripples.length; i++) {
+                ripples[i].update();
+                ripples[i].draw();
+                if (ripples[i].alpha <= 0) {
+                    ripples.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        resize();
+        animate();
+
+        // [추가] 화면 노출 여부 감지 (성능 최적화 핵심)
+        // iframe이 숨겨지거나(display: none) 탭이 바뀌면 애니메이션을 일시 정지합니다.
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // 화면에 나타남 (보임)
+                    if (!isAnimating) {
+                        isAnimating = true;
+                        animate(); // 멈췄던 애니메이션 재시작
+                    }
+                } else {
+                    // 화면에서 사라짐 (숨김)
+                    isAnimating = false; // 루프 차단
+                }
+            });
+        }, { threshold: 0.1 }); // 요소가 10%라도 보이면 실행
+
+        observer.observe(document.body); // body 전체를 감시
+
+        // 사용자 정보 로드
+        async function loadUserInfo() {
+            try {
+                if (typeof getAppSetting === 'function') {
+                    const userName = await getAppSetting('user_name', '');
+                    const titleEl = document.getElementById('user-greeting');
+                    const subEl = document.getElementById('sub-greeting');
+                    
+                    if (userName) {
+                        titleEl.innerHTML = `<span style="font-size:0.6em; font-weight:300; color:#888;">반갑습니다,</span><br><span class="highlight">${userName}</span> 님`;
+                        subEl.innerHTML = `오늘도 평온하고 기분 좋은 하루 되세요.`;
+                    }
+                }
+            } catch (e) {
+                console.error("사용자 정보 로드 실패:", e);
+            }
+        }
+        document.addEventListener('DOMContentLoaded', loadUserInfo);
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,1128 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>다중 클립보드</title>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: #f3f3f3;
+            margin: 0;
+            padding: 15px;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+            flex-shrink: 0;
+            border-left: 5px solid #217346;
+        }
+
+            .header h2 {
+                margin: 0;
+                color: #333;
+                font-size: 18px;
+            }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .control-badge {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f5f5f5;
+            border: 2px solid #e0e0e0;
+            padding: 8px 15px;
+            border-radius: 30px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+        }
+
+        .retention-box {
+            font-size: 13px;
+            font-weight: bold;
+            color: #1565c0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .retention-box select {
+                padding: 4px 8px;
+                border-radius: 20px;
+                border: 1px solid #90caf9;
+                outline: none;
+                cursor: pointer;
+                background: white;
+                color: #1565c0;
+                font-weight: bold;
+            }
+
+        .switch-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .switch-container {
+            font-weight: bold;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 16px;
+                width: 16px;
+                left: 4px;
+                bottom: 4px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked + .slider {
+            background-color: #d32f2f;
+        }
+            /* 작동 시 눈에 띄는 빨간색 */
+            input:checked + .slider:before {
+                transform: translateX(20px);
+            }
+
+        /* 좌우 분할 레이아웃 */
+        .main-layout {
+            flex: 1;
+            display: flex;
+            gap: 15px;
+            overflow: hidden;
+        }
+
+        /* 왼쪽: 최근 목록 (그리드) */
+        .left-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            overflow: hidden;
+        }
+
+        .pane-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #eee;
+        }
+
+            .pane-header h3 {
+                margin: 0;
+                font-size: 15px;
+                color: #217346;
+            }
+
+        .clipboard-list {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 12px;
+            align-content: start;
+        }
+
+            .clipboard-list::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            .clipboard-list::-webkit-scrollbar-thumb {
+                background: #bbb;
+                border-radius: 3px;
+            }
+
+        /* 오른쪽: 영구 보관함 (1열) */
+        .right-pane {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            background: #fffde7;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            overflow: hidden;
+            border: 1px solid #fff59d;
+        }
+
+            .right-pane .pane-header h3 {
+                color: #f57f17;
+            }
+
+        .permanent-list {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+            .permanent-list::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            .permanent-list::-webkit-scrollbar-thumb {
+                background: #fbc02d;
+                border-radius: 3px;
+            }
+
+        /* 공통 아이템 스타일 */
+        .clip-item {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 12px;
+            background: #fafafa;
+            display: flex;
+            flex-direction: column;
+            transition: 0.2s;
+            height: 140px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+            .clip-item:hover {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                border-color: #217346;
+            }
+
+        .clip-content {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 버튼 영역을 우측 하단 플로팅 메뉴로 변경 */
+        .clip-actions {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            display: flex;
+            gap: 5px;
+            opacity: 0;
+            visibility: hidden; /* 기본적으로 숨김 */
+            transition: all 0.2s ease-in-out;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 5px;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            border: 1px solid #eee;
+        }
+        /* 마우스 오버 시에만 나타남 */
+        .clip-item:hover .clip-actions {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .img-container {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .clip-image {
+            max-width: 100%;
+            max-height: 70px;
+            object-fit: contain;
+            border-radius: 4px;
+            border: 1px solid #eee;
+            background: white;
+        }
+
+        .clip-complex {
+            font-size: 12px;
+            color: #5e35b1;
+            font-weight: bold;
+            padding: 8px;
+            background: #ede7f6;
+            border-radius: 4px;
+            border: 1px dashed #b39ddb;
+            display: inline-block;
+            word-break: break-all;
+        }
+
+        /* ---------------- [추가/수정] 검색창, 체크박스, 버튼 최소화 ---------------- */
+        .search-box {
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid #ccc;
+            outline: none;
+            font-size: 12px;
+            width: 140px;
+            transition: border-color 0.2s;
+        }
+
+            .search-box:focus {
+                border-color: #217346;
+            }
+
+        .merge-checkbox {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 2px solid #ccc;
+            background: rgba(255,255,255,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            z-index: 10;
+        }
+
+            .merge-checkbox.checked {
+                background: #217346;
+                border-color: #217346;
+            }
+
+            .merge-checkbox:hover {
+                border-color: #217346;
+            }
+
+        .clip-actions {
+            position: absolute;
+            bottom: 4px;
+            right: 4px; /* 바닥과 우측에 최대한 밀착 */
+            display: flex;
+            gap: 3px; /* 버튼 사이 여백 최소화 */
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s ease-in-out;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 3px;
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            border: 1px solid #eee;
+        }
+
+        .clip-item:hover .clip-actions {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .btn {
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: 0.2s;
+            background: white;
+            padding: 3px 6px; /* 버튼 패딩을 최소화하여 공간 절약 */
+        }
+
+            .btn:hover {
+                background-color: #f1f1f1;
+            }
+
+        .btn-copy {
+            color: #0d47a1;
+            border-color: #90caf9;
+            background: #e3f2fd;
+        }
+
+            .btn-copy:hover {
+                background: #bbdefb;
+            }
+
+        .btn-del {
+            color: #c62828;
+            border-color: #ef9a9a;
+            background: #ffebee;
+        }
+
+            .btn-del:hover {
+                background: #ffcdd2;
+            }
+
+        .btn-pin {
+            color: #f57f17;
+            border-color: #ffe082;
+            background: #fff8e1;
+        }
+
+            .btn-pin:hover {
+                background: #ffecb3;
+            }
+
+        .btn-text {
+            color: #5e35b1;
+            border-color: #b39ddb;
+            background: #ede7f6;
+        }
+
+            .btn-text:hover {
+                background: #d1c4e9;
+            }
+
+        /* 시간 카테고리 헤더 텍스트 (그리드 전체 칸 차지) */
+        .time-category {
+            grid-column: 1 / -1;
+            font-size: 13px;
+            font-weight: bold;
+            color: #217346;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 5px;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+            .time-category:first-child {
+                margin-top: 0;
+            }
+
+        .empty-msg {
+            text-align: center;
+            color: #999;
+            padding: 50px 0;
+            font-size: 13px;
+            grid-column: 1 / -1;
+        }
+
+        /* 토스트 팝업 */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            text-align: center;
+            border-radius: 30px;
+            padding: 12px 24px;
+            position: fixed;
+            z-index: 9999;
+            left: 50%;
+            bottom: 30px;
+            font-size: 13px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s;
+            color: white;
+            font-weight: bold;
+        }
+
+            #toast.show {
+                visibility: visible;
+                opacity: 1;
+                bottom: 50px;
+            }
+
+            #toast.success {
+                background-color: #217346;
+            }
+
+            #toast.error {
+                background-color: #d32f2f;
+            }
+
+            #toast.warning {
+                background-color: #f57c00;
+            }
+        /* ---------------- [추가] 커스텀 모달 팝업 ---------------- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.4);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s ease-in-out;
+        }
+
+            .modal-overlay.show {
+                opacity: 1;
+                visibility: visible;
+            }
+
+        .modal-content {
+            background: white;
+            padding: 25px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            text-align: center;
+            min-width: 280px;
+            transform: translateY(-20px);
+            transition: all 0.2s ease-in-out;
+            border-top: 4px solid #217346;
+        }
+
+        .modal-overlay.show .modal-content {
+            transform: translateY(0);
+        }
+
+        .modal-text {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 20px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            font-weight: bold;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .modal-btn {
+            padding: 8px 20px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: 0.2s;
+            flex: 1;
+        }
+
+        .modal-btn-cancel {
+            background-color: #f1f1f1;
+            color: #555;
+        }
+
+            .modal-btn-cancel:hover {
+                background-color: #e0e0e0;
+            }
+
+        .modal-btn-confirm {
+            background-color: #217346;
+            color: white;
+        }
+
+            .modal-btn-confirm:hover {
+                background-color: #1a5c38;
+            }
+        /* ---------------- [추가] 상세 보기 모달 ---------------- */
+        .clip-content {
+            cursor: pointer;
+        }
+        /* 클릭 가능하다는 표시 */
+
+        #viewer-modal .modal-content {
+            width: 85%;
+            max-width: 900px;
+            height: 80vh;
+            max-height: 800px;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .viewer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #217346;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+            .viewer-header h3 {
+                margin: 0;
+                color: #217346;
+                font-size: 16px;
+            }
+
+        #viewer-content {
+            flex: 1;
+            overflow-y: auto;
+            text-align: left;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: #333;
+        }
+            /* 상세 보기 내 이미지 전용 스타일 */
+            #viewer-content img {
+                max-width: 100%;
+                height: auto;
+                display: block;
+                margin: 0 auto;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                background: white;
+            }
+
+            #viewer-content::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            #viewer-content::-webkit-scrollbar-thumb {
+                background: #bbb;
+                border-radius: 4px;
+            }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>📋 다중 클립보드</h2>
+        <div class="header-controls">
+            <div class="control-badge">
+                <div class="retention-box">
+                    ⏳ 자동 삭제:
+                    <select id="retention-select" onchange="changeRetention()">
+                        <option value="1">1일 (24시간) 후</option>
+                        <option value="3">3일 후</option>
+                        <option value="7">7일 후</option>
+                    </select>
+                </div>
+            </div>
+            <div class="control-badge" id="monitor-badge">
+                <div class="switch-container">
+                    <span id="status-text" style="color:#757575;">⚪ 정지됨</span>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-switch" onchange="toggleMonitoring()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <div class="left-pane">
+            <div class="pane-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h3>⏱️ 최근 복사 기록</h3>
+                    <input type="text" id="search-input" class="search-box" placeholder="🔍 검색어 입력..." oninput="filterItems()">
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <button class="btn" id="merge-copy-btn" style="display:none; background:#e8f5e9; color:#2e7d32; border-color:#a5d6a7;" onclick="executeMergeCopy()">➕ 합쳐서 복사</button>
+                    <button class="btn" style="padding: 4px 10px;" onclick="loadHistory()">🔄 새로고침</button>
+                    <button class="btn btn-del" style="padding: 4px 10px;" onclick="clearRecent()">🗑️ 전체 지우기</button>
+                </div>
+            </div>
+            <div class="clipboard-list" id="clipboard-list">
+                <div class="empty-msg">로딩 중...</div>
+            </div>
+        </div>
+
+        <div class="right-pane">
+            <div class="pane-header">
+                <h3>📌 영구 보관함</h3>
+            </div>
+            <div class="permanent-list" id="permanent-list">
+                <div class="empty-msg">로딩 중...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+
+    <div class="modal-overlay" id="custom-modal">
+        <div class="modal-content">
+            <div class="modal-text" id="modal-message"></div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" id="modal-cancel">취소</button>
+                <button class="modal-btn modal-btn-confirm" id="modal-confirm">확인</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="viewer-modal">
+        <div class="modal-content">
+            <div class="viewer-header">
+                <h3>🔍 상세 보기</h3>
+                <span id="viewer-time" style="font-size:12px; color:#888;"></span>
+            </div>
+            <div id="viewer-content"></div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" onclick="closeViewer()">닫기</button>
+                <button class="modal-btn modal-btn-confirm" id="viewer-copy-btn">이 항목 복사하기</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        let lastHistoryDataStr = ""; // 화면 깜빡임 방지용 데이터 해시
+        let globalHistory = [];
+        let selectedForMerge = [];
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById("toast");
+            toast.innerHTML = message.replace(/\n/g, "<br>");
+            toast.className = "show " + type;
+            setTimeout(function () { toast.className = toast.className.replace("show " + type, ""); }, type === 'error' ? 4000 : 2000);
+        }
+
+        // --- [추가] 커스텀 Confirm (확인/취소) ---
+        function showCustomConfirm(message, onConfirm) {
+            const overlay = document.getElementById('custom-modal');
+            const msgEl = document.getElementById('modal-message');
+            const btnConfirm = document.getElementById('modal-confirm');
+            const btnCancel = document.getElementById('modal-cancel');
+
+            msgEl.innerText = message;
+            btnCancel.style.display = 'inline-block'; // 취소 버튼 보이기
+            overlay.classList.add('show');
+
+            btnConfirm.onclick = function () {
+                overlay.classList.remove('show');
+                if (onConfirm) onConfirm();
+            };
+            btnCancel.onclick = function () {
+                overlay.classList.remove('show');
+            };
+        }
+
+        // --- [추가] 커스텀 Alert (확인 전용) ---
+        function showCustomAlert(message) {
+            const overlay = document.getElementById('custom-modal');
+            const msgEl = document.getElementById('modal-message');
+            const btnConfirm = document.getElementById('modal-confirm');
+            const btnCancel = document.getElementById('modal-cancel');
+
+            msgEl.innerText = message;
+            btnCancel.style.display = 'none'; // Alert는 취소 버튼 숨기기
+            overlay.classList.add('show');
+
+            btnConfirm.onclick = function () {
+                overlay.classList.remove('show');
+            };
+        }
+
+        function pywebviewCall(method, payload = null) {
+            return new Promise((resolve, reject) => {
+                const id = Math.random().toString(36).substr(2, 9);
+                const handler = (e) => {
+                    if (e.data && e.data.id === id) {
+                        window.removeEventListener('message', handler);
+                        if (e.data.status === 'success') resolve(e.data.response);
+                        else reject(e.data.error);
+                    }
+                };
+                window.addEventListener('message', handler);
+                window.parent.postMessage({ type: 'pywebview-call', method: method, payload: payload, id: id }, '*');
+            });
+        }
+
+        window.onload = async function () {
+            try {
+                const status = await pywebviewCall('cb_get_status');
+                document.getElementById('toggle-switch').checked = status.enabled;
+                document.getElementById('retention-select').value = status.retention_days || 1;
+                updateStatusText(status.enabled);
+                loadHistory();
+            } catch (e) { showToast("초기화 오류 발생", "error"); }
+        };
+
+        function updateStatusText(isEnabled) {
+            const txt = document.getElementById('status-text');
+            const badge = document.getElementById('monitor-badge');
+
+            txt.innerText = isEnabled ? "🔴 작동 중" : "⚪ 정지됨";
+            txt.style.color = isEnabled ? "#c62828" : "#757575"; // 빨간색 or 회색
+
+            if (badge) {
+                badge.style.borderColor = isEnabled ? "#ef9a9a" : "#e0e0e0";
+                badge.style.background = isEnabled ? "#ffebee" : "#f5f5f5";
+            }
+        }
+
+        async function toggleMonitoring() {
+            const isChecked = document.getElementById('toggle-switch').checked;
+            try {
+                const res = await pywebviewCall('cb_toggle', isChecked);
+                if (res.success) {
+                    updateStatusText(res.enabled);
+                    showToast(res.enabled ? "✅ 모니터링이 시작되었습니다." : "⏸️ 모니터링이 중지되었습니다.");
+                }
+            } catch (e) { showToast("상태 변경 오류", "error"); }
+        }
+
+        async function changeRetention() {
+            const days = document.getElementById('retention-select').value;
+            try {
+                await pywebviewCall('cb_set_retention', days);
+                showToast(`✅ 보관 기간이 ${days}일로 변경되었습니다.`);
+                loadHistory(); // 기간 변경 후 만료된 항목 즉시 반영
+            } catch (e) { showToast("설정 저장 오류", "error"); }
+        }
+
+        async function loadHistory() {
+            const recentList = document.getElementById('clipboard-list');
+            const permList = document.getElementById('permanent-list');
+
+            try {
+                const history = await pywebviewCall('cb_get_history');
+                const currentDataStr = JSON.stringify(history);
+                if (currentDataStr === lastHistoryDataStr) return;
+                lastHistoryDataStr = currentDataStr;
+
+                globalHistory = history;
+
+                recentList.innerHTML = '';
+                permList.innerHTML = '';
+
+                // 시간 계산용 기준점
+                const now = new Date();
+                const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
+                const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+                // 그룹화할 배열 준비
+                let groups = { '2h': [], 'today': [], 'older': [] };
+                let permCount = 0;
+
+                // 1. 데이터 분류
+                history.forEach(item => {
+                    if (item.is_permanent) {
+                        permCount++;
+                        permList.appendChild(createItemDiv(item, true));
+                    } else {
+                        // 사파리 등 크로스 브라우징을 위해 날짜 포맷(-)을 (/)로 변경하여 파싱
+                        const itemDate = new Date(item.timestamp.replace(/-/g, '/'));
+                        if (itemDate >= twoHoursAgo) groups['2h'].push(item);
+                        else if (itemDate >= startOfToday) groups['today'].push(item);
+                        else groups['older'].push(item);
+                    }
+                });
+
+                // 2. 분류된 데이터를 순서대로 화면에 출력 (최근 리스트)
+                let recentCount = 0;
+
+                if (groups['2h'].length > 0) {
+                    recentList.innerHTML += `<div class="time-category">🟢 최근 2시간</div>`;
+                    groups['2h'].forEach(item => { recentList.appendChild(createItemDiv(item, false)); recentCount++; });
+                }
+                if (groups['today'].length > 0) {
+                    recentList.innerHTML += `<div class="time-category">🟡 오늘</div>`;
+                    groups['today'].forEach(item => { recentList.appendChild(createItemDiv(item, false)); recentCount++; });
+                }
+                if (groups['older'].length > 0) {
+                    recentList.innerHTML += `<div class="time-category">⚪ 이전 기록</div>`;
+                    groups['older'].forEach(item => { recentList.appendChild(createItemDiv(item, false)); recentCount++; });
+                }
+
+                // 3. 빈 목록 처리
+                if (recentCount === 0) recentList.innerHTML = '<div class="empty-msg">최근 복사된 항목이 없습니다.</div>';
+                if (permCount === 0) permList.innerHTML = '<div class="empty-msg" style="color:#cca000;">⭐ 보관을 누르면 여기에 영구 저장됩니다.</div>';
+
+            } catch (e) {
+                recentList.innerHTML = '<div class="empty-msg" style="color:red;">데이터 로딩 오류</div>';
+            }
+        }
+
+        // 아이템 HTML 생성 헬퍼 함수 (loadHistory 함수 바로 아래에 추가)
+        function createItemDiv(item, isPermanent) {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'clip-item';
+
+            let contentHtml = '';
+            if (item.type === 'text' || item.type === 'file') {
+                contentHtml = `<div class="clip-text">${escapeHtml(item.content)}</div>`;
+            } else if (item.type === 'image') {
+                contentHtml = `<div class="img-container"><img src="${item.content}" class="clip-image"></div>`;
+            } else {
+                contentHtml = `<div class="clip-complex">🧩 ${escapeHtml(item.content)}</div>`;
+            }
+
+            // [추가] 텍스트 타입에만 'T 텍스트' 버튼 추가 (버튼 크기 최소화 적용)
+            let actionsHtml = '';
+            if (item.type === 'text') {
+                actionsHtml += `<button class="btn btn-text" onclick="copyPlainText('${item.id}', event)" title="서식을 제거하고 순수 텍스트만 복사">T 텍스트</button>`;
+            }
+            actionsHtml += `<button class="btn btn-copy" onclick="copyItem('${item.id}', event)" title="다시 복사하기">📋 복사</button>`;
+
+            if (isPermanent) {
+                actionsHtml += `<button class="btn btn-del" onclick="deleteItem('${item.id}', event)" title="삭제">🗑️ 삭제</button>`;
+                itemDiv.style.borderColor = "#ffe082"; itemDiv.style.background = "white";
+            } else {
+                actionsHtml = `<button class="btn btn-pin" onclick="makePermanent('${item.id}', event)" title="영구 보관함으로 이동">⭐ 보관</button>`
+                    + actionsHtml
+                    + `<button class="btn btn-del" onclick="deleteItem('${item.id}', event)" title="삭제">🗑️ 삭제</button>`;
+            }
+
+            // [추가] 텍스트 타입에만 병합용 순서 체크박스 추가
+            let checkboxHtml = '';
+            if (item.type === 'text') {
+                checkboxHtml = `<div class="merge-checkbox" data-id="${item.id}" onclick="toggleMergeSelection('${item.id}', event)"></div>`;
+            }
+
+            // 클릭 시 상세보기(openViewer) 맵핑
+            itemDiv.innerHTML = `
+                ${checkboxHtml}
+                <div class="clip-content" onclick="openViewer('${item.id}')" title="클릭하여 전체 내용 보기">
+                    <div class="clip-time">${item.timestamp}</div>
+                    ${contentHtml}
+                </div>
+                <div class="clip-actions">${actionsHtml}</div>
+            `;
+            return itemDiv;
+        }
+
+        async function makePermanent(id, event) {
+            if (event) event.stopPropagation(); // 카드 클릭 막기
+            try {
+                await pywebviewCall('cb_make_permanent', id);
+                loadHistory();
+                showToast("📌 영구 보관함으로 이동되었습니다.");
+            } catch (e) { showToast("보관 실패", "error"); }
+        }
+
+        async function copyItem(id, event) {
+            if (event) event.stopPropagation(); // 카드 클릭 막기
+            try {
+                const res = await pywebviewCall('cb_copy_item', id);
+                if (res.success) {
+                    if (res.errors && res.errors.length > 0) showToast(res.message, "warning");
+                    else showToast("✅ " + res.message);
+                } else {
+                    showToast("❌ " + res.message, "error");
+                }
+            } catch (e) { showToast("파이썬 통신 오류", "error"); }
+        }
+
+        async function deleteItem(id, event) {
+            if (event) event.stopPropagation(); // 카드 클릭 막기
+            try {
+                await pywebviewCall('cb_delete_item', id);
+                loadHistory();
+            } catch (e) { showToast("항목 삭제 실패", "error"); }
+        }
+
+        function clearRecent() {
+            showCustomConfirm("영구 보관 항목을 제외한\n최근 기록을 모두 삭제하시겠습니까?", async function () {
+                try {
+                    await pywebviewCall('cb_clear_recent');
+                    loadHistory();
+                    showToast("🗑️ 최근 기록이 삭제되었습니다.");
+                } catch (e) { showToast("삭제 실패", "error"); }
+            });
+        }
+
+        function escapeHtml(unsafe) {
+            return (unsafe || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+        function openViewer(id) {
+            const item = globalHistory.find(x => x.id === id);
+            if (!item) return;
+
+            const viewer = document.getElementById('viewer-modal');
+            const contentBox = document.getElementById('viewer-content');
+            const copyBtn = document.getElementById('viewer-copy-btn');
+            const timeSpan = document.getElementById('viewer-time');
+
+            timeSpan.innerText = item.timestamp;
+
+            // 타입별로 출력 방식 다르게 처리
+            if (item.type === 'text' || item.type === 'file') {
+                contentBox.innerHTML = escapeHtml(item.content);
+            } else if (item.type === 'image') {
+                contentBox.innerHTML = `<img src="${item.content}" alt="복사된 이미지">`;
+            } else {
+                contentBox.innerHTML = `<div class="clip-complex" style="display:block; text-align:center; padding: 40px 0; font-size:16px;">🧩<br><br>${escapeHtml(item.content)}<br><br><span style="font-size:12px; color:#888;">(파워포인트 개체 등 복합 서식은 미리보기를 지원하지 않습니다.)</span></div>`;
+            }
+
+            // 모달 안에서도 바로 복사할 수 있도록 버튼 연결
+            copyBtn.onclick = function () {
+                copyItem(id);
+                closeViewer();
+            };
+
+            viewer.classList.add('show');
+        }
+
+        function closeViewer() {
+            document.getElementById('viewer-modal').classList.remove('show');
+        }
+
+        // --------------------------------------------------------
+        // [신규] 텍스트 병합 복사, 순수 텍스트 복사, 검색 필터 로직
+        // --------------------------------------------------------
+
+        function toggleMergeSelection(id, event) {
+            event.stopPropagation();
+            const index = selectedForMerge.indexOf(id);
+            if (index === -1) selectedForMerge.push(id); // 없으면 맨 뒤에 추가
+            else selectedForMerge.splice(index, 1); // 있으면 제거
+            updateMergeUI();
+        }
+
+        function updateMergeUI() {
+            // 체크박스 숫자 순서 업데이트
+            const checkboxes = document.querySelectorAll('.merge-checkbox');
+            checkboxes.forEach(cb => {
+                const id = cb.getAttribute('data-id');
+                const idx = selectedForMerge.indexOf(id);
+                if (idx !== -1) {
+                    cb.classList.add('checked');
+                    cb.innerText = idx + 1; // 1번, 2번, 3번...
+                } else {
+                    cb.classList.remove('checked');
+                    cb.innerText = '';
+                }
+            });
+
+            // 상단 병합 복사 버튼 노출 여부
+            const mergeBtn = document.getElementById('merge-copy-btn');
+            if (selectedForMerge.length > 0) {
+                mergeBtn.style.display = 'inline-block';
+                mergeBtn.innerText = `➕ 합쳐서 복사 (${selectedForMerge.length})`;
+            } else {
+                mergeBtn.style.display = 'none';
+            }
+        }
+
+        function executeMergeCopy() {
+            if (selectedForMerge.length === 0) return;
+            let mergedText = "";
+            // 선택한 순서대로 텍스트 합치기 (엔터 두 번으로 단락 구분)
+            selectedForMerge.forEach(id => {
+                const item = globalHistory.find(x => x.id === id);
+                if (item) mergedText += item.content + "\n\n";
+            });
+
+            fallbackCopyTextToClipboard(mergedText.trim());
+            showToast(`✅ ${selectedForMerge.length}개의 텍스트가 순서대로 합쳐져 복사되었습니다.`);
+
+            // 복사 완료 후 선택 해제
+            selectedForMerge = [];
+            updateMergeUI();
+        }
+
+        function copyPlainText(id, event) {
+            if (event) event.stopPropagation();
+            const item = globalHistory.find(x => x.id === id);
+            if (item) {
+                fallbackCopyTextToClipboard(item.content);
+                showToast("✅ 서식이 제거된 순수 텍스트가 복사되었습니다.");
+            }
+        }
+
+        // 브라우저 내장 기능을 이용한 순수 텍스트 클립보드 복사 (파이썬 통신 없이 즉시 실행)
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try { document.execCommand('copy'); }
+            catch (err) { console.error('복사 실패', err); }
+            document.body.removeChild(textArea);
+        }
+
+        // 실시간 검색어 필터링 (텍스트 항목만 필터링 됨)
+        function filterItems() {
+            const keyword = document.getElementById('search-input').value.toLowerCase();
+            const items = document.querySelectorAll('#clipboard-list .clip-item, #permanent-list .clip-item');
+
+            items.forEach(el => {
+                const textEl = el.querySelector('.clip-text');
+                if (textEl) {
+                    const text = textEl.innerText.toLowerCase();
+                    el.style.display = text.includes(keyword) ? 'flex' : 'none';
+                } else {
+                    // 이미지나 복합 개체는 검색어 입력 시 숨김 처리 (또는 유지)
+                    el.style.display = keyword ? 'none' : 'flex';
+                }
+            });
+
+            // 빈 카테고리(오늘, 어제 등) 제목 숨기기
+            const categories = document.querySelectorAll('.time-category');
+            categories.forEach(cat => {
+                let next = cat.nextElementSibling;
+                let hasVisible = false;
+                while (next && next.classList.contains('clip-item')) {
+                    if (next.style.display !== 'none') { hasVisible = true; break; }
+                    next = next.nextElementSibling;
+                }
+                cat.style.display = (keyword && !hasVisible) ? 'none' : 'flex';
+            });
+        }
+
+
+    </script>
+
+</body>
+</html>

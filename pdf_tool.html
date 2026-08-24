@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+            font-weight: 600;
+            background-color: white;
+        }
+
+        .tab-inactive {
+            color: #6b7280;
+        }
+
+            .tab-inactive:hover {
+                color: #374151;
+                background-color: #f9fafb;
+                border-radius: 4px;
+            }
+
+        .drag-over {
+            border: 2px dashed #3b82f6 !important;
+            background-color: #eff6ff !important;
+        }
+
+        .dragging {
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans h-screen flex flex-col p-4 select-none">
+
+    <!-- Header -->
+    <header class="mb-4 flex justify-between items-end">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">PDF 종합 도구</h1>
+            <p class="text-sm text-gray-500 mt-1">강력한 PDF 편집 기능을 빠르고 간편하게 사용하세요.</p>
+        </div>
+    </header>
+
+    <!-- Tabs -->
+    <div class="flex flex-wrap border-b border-gray-200 mb-4 gap-y-1">
+        <button onclick="switchTab('merge')" id="tab-merge" class="tab-active px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200">합치기</button>
+        <button onclick="switchTab('split')" id="tab-split" class="tab-inactive px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200">추출(자르기)</button>
+        <button onclick="switchTab('split_all')" id="tab-split_all" class="tab-inactive px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200">개별 저장(1장씩)</button>
+        <button onclick="switchTab('delete')" id="tab-delete" class="tab-inactive px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200">페이지 삭제</button>
+        <button onclick="switchTab('rotate')" id="tab-rotate" class="tab-inactive px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200">회전</button>
+        <button onclick="switchTab('watermark')" id="tab-watermark" class="tab-inactive px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200">워터마크</button>
+        <button onclick="switchTab('extract')" id="tab-extract" class="tab-inactive px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200">텍스트 추출</button>
+        <button onclick="switchTab('compress')" id="tab-compress" class="tab-inactive px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200">압축</button>
+        <button onclick="switchTab('security')" id="tab-security" class="tab-inactive px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200">보안(비밀번호)</button>
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-6 overflow-y-auto relative">
+
+        <div id="loading-overlay" class="hidden absolute inset-0 bg-white bg-opacity-80 z-10 flex flex-col items-center justify-center rounded-xl">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-3"></div>
+            <p class="text-gray-600 font-medium" id="loading-text">처리 중입니다...</p>
+        </div>
+
+        <!-- 1. 합치기 Section -->
+        <section id="sec-merge" class="block flex flex-col h-full">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-lg font-semibold">합칠 파일 목록</h2>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="clearFiles('merge')" class="px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 rounded transition-colors">전체 삭제</button>
+                    <button onclick="addFiles('merge', true)" class="px-4 py-1.5 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">+ 파일 추가</button>
+                </div>
+            </div>
+
+            <div id="merge-list" class="bg-gray-50 border border-gray-200 rounded-lg flex-1 min-h-[200px] p-2 space-y-2 overflow-y-auto mb-4">
+                <p class="text-center text-gray-400 mt-20 text-sm empty-msg">우측 상단의 '+ 파일 추가' 버튼을 눌러 파일을 불러오세요.</p>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
+                <div class="flex items-center mb-1">
+                    <span class="text-blue-500 mr-2 text-lg">💡</span>
+                    <h3 class="font-bold text-gray-800 text-sm">이용 안내</h3>
+                </div>
+                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1 ml-1">
+                    <li>여러 개의 PDF 파일을 하나의 파일로 연결하여 병합합니다.</li>
+                    <li>목록에 추가된 파일을 <strong>마우스로 드래그(끌어놓기)</strong>하거나 우측 화살표 버튼을 눌러 문서가 합쳐질 <strong>순서를 변경</strong>할 수 있습니다.</li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="executeAction('merge')" class="px-6 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 shadow-sm transition-colors">PDF 합치기 실행</button>
+            </div>
+        </section>
+
+        <!-- 2. 자르기(추출) Section -->
+        <section id="sec-split" class="hidden flex flex-col h-full">
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-3">원본 파일 선택</h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="addFiles('split', false)" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">파일 찾기</button>
+                    <span id="split-filename" class="text-sm text-gray-600 flex-1 truncate">선택된 파일이 없습니다.</span>
+                </div>
+            </div>
+            <div class="mb-6 flex-1">
+                <h2 class="text-lg font-semibold mb-2">추출할(남길) 페이지 범위</h2>
+                <input type="text" id="split-range" placeholder="예: 1-5, 8, 11-13" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 mt-auto">
+                <div class="flex items-center mb-1">
+                    <span class="text-blue-500 mr-2 text-lg">💡</span>
+                    <h3 class="font-bold text-gray-800 text-sm">이용 안내</h3>
+                </div>
+                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1 ml-1">
+                    <li>원본 문서에서 <strong>필요한 페이지만 골라내어</strong> 새로운 PDF 파일로 추출(저장)합니다.</li>
+                    <li><strong>입력 예시:</strong> <code>1-5</code> (1~5페이지만), <code>3, 7</code> (3페이지와 7페이지만), <code>1-3, 8</code> (혼합 사용 가능)</li>
+                    <li>입력칸을 비워두면 문서 전체가 선택됩니다.</li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="executeAction('split')" class="px-6 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 shadow-sm transition-colors">PDF 추출 실행</button>
+            </div>
+        </section>
+
+        <!-- 3. 개별 저장(1장씩) Section -->
+        <section id="sec-split_all" class="hidden flex flex-col h-full">
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-3">개별 저장할 파일 선택</h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="addFiles('split_all', false)" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">파일 찾기</button>
+                    <span id="split_all-filename" class="text-sm text-gray-600 flex-1 truncate">선택된 파일이 없습니다.</span>
+                </div>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 mt-auto">
+                <div class="flex items-center mb-1">
+                    <span class="text-blue-600 mr-2 text-lg">💡</span>
+                    <h3 class="font-bold text-blue-800 text-sm">이용 안내</h3>
+                </div>
+                <ul class="list-disc list-inside text-sm text-blue-700 space-y-1 ml-1">
+                    <li>선택한 PDF의 <strong>모든 페이지를 각각 1장짜리 문서로 조각내어</strong> 한꺼번에 저장합니다.</li>
+                    <li>실행 버튼을 누른 후, 수많은 파일들이 안전하게 보관될 <strong>[폴더]</strong>를 하나 지정해 주시면 됩니다.</li>
+                    <li>저장되는 파일명은 <code>원본명_1페이지.pdf</code>, <code>원본명_2페이지.pdf</code> 형식으로 자동 생성됩니다.</li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="executeAction('split_all')" class="px-6 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 shadow-sm transition-colors">저장할 폴더 선택 및 분할 시작</button>
+            </div>
+        </section>
+
+        <!-- 4. 페이지 삭제 Section -->
+        <section id="sec-delete" class="hidden flex flex-col h-full">
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-3">원본 파일 선택</h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="addFiles('delete', false)" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">파일 찾기</button>
+                    <span id="delete-filename" class="text-sm text-gray-600 flex-1 truncate">선택된 파일이 없습니다.</span>
+                </div>
+            </div>
+            <div class="mb-6 flex-1">
+                <h2 class="text-lg font-semibold mb-2 text-red-600">삭제할 페이지 범위</h2>
+                <input type="text" id="delete-range" placeholder="예: 2 또는 4-6" class="w-full px-4 py-2 border border-red-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400">
+            </div>
+
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 mt-auto">
+                <div class="flex items-center mb-1">
+                    <span class="text-red-500 mr-2 text-lg">💡</span>
+                    <h3 class="font-bold text-gray-800 text-sm">이용 안내</h3>
+                </div>
+                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1 ml-1">
+                    <li>원본 문서에서 <strong>불필요한 페이지만 쏙 빼고(삭제하고)</strong> 나머지 페이지들로 PDF를 재구성합니다.</li>
+                    <li><strong>입력 예시:</strong> <code>2</code> (2페이지만 삭제), <code>4-6</code> (4~6페이지 삭제)</li>
+                    <li>실수로 들어간 백지나 불필요한 표지를 제거할 때 매우 유용합니다.</li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="executeAction('delete')" class="px-6 py-2.5 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 shadow-sm transition-colors">페이지 삭제 실행</button>
+            </div>
+        </section>
+
+        <!-- 5. 회전 Section -->
+        <section id="sec-rotate" class="hidden flex flex-col h-full">
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-3">회전할 파일 선택</h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="addFiles('rotate', false)" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">파일 찾기</button>
+                    <span id="rotate-filename" class="text-sm text-gray-600 flex-1 truncate">선택된 파일이 없습니다.</span>
+                </div>
+            </div>
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-2">회전할 페이지 범위</h2>
+                <input type="text" id="rotate-range" placeholder="예: all 또는 1, 3, 5-10 (비워두면 전체)" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 mb-6">
+
+                <h2 class="text-lg font-semibold mb-3">회전 각도 선택</h2>
+                <div class="flex gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50 flex-1 justify-center">
+                        <input type="radio" name="rotate-angle" value="90" checked class="text-blue-500 w-4 h-4">
+                        <span class="text-sm font-medium">90도 (오른쪽)</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50 flex-1 justify-center">
+                        <input type="radio" name="rotate-angle" value="180" class="text-blue-500 w-4 h-4">
+                        <span class="text-sm font-medium">180도 (뒤집기)</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50 flex-1 justify-center">
+                        <input type="radio" name="rotate-angle" value="-90" class="text-blue-500 w-4 h-4">
+                        <span class="text-sm font-medium">270도 (왼쪽)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 mt-auto">
+                <div class="flex items-center mb-1">
+                    <span class="text-blue-500 mr-2 text-lg">💡</span>
+                    <h3 class="font-bold text-gray-800 text-sm">이용 안내</h3>
+                </div>
+                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1 ml-1">
+                    <li>스캔 방향이 거꾸로 되거나 가로/세로가 잘못 섞인 문서의 방향을 바로잡아 줍니다.</li>
+                    <li>범위 칸을 비워두거나 <code>all</code>을 입력하면 <strong>문서 전체</strong>가 일괄 회전됩니다.</li>
+                    <li>특정 페이지만 거꾸로 스캔된 경우 <code>2, 4</code> 처럼 해당 페이지만 지정하여 회전시킬 수 있습니다.</li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="executeAction('rotate')" class="px-6 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 shadow-sm transition-colors">PDF 회전 실행</button>
+            </div>
+        </section>
+
+        <!-- 6. 워터마크 Section -->
+        <section id="sec-watermark" class="hidden flex flex-col h-full">
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-3">대상 문서 (도장 찍힐 파일)</h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="addFiles('watermark_target', false)" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">파일 찾기</button>
+                    <span id="watermark-target-filename" class="text-sm text-gray-600 flex-1 truncate">선택된 파일이 없습니다.</span>
+                </div>
+            </div>
+            <div class="mb-6 flex-1">
+                <h2 class="text-lg font-semibold mb-3">워터마크용 PDF (도장/글귀 파일)</h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="addFiles('watermark_stamp', false)" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">파일 찾기</button>
+                    <span id="watermark-stamp-filename" class="text-sm text-gray-600 flex-1 truncate">선택된 파일이 없습니다.</span>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 mt-auto">
+                <div class="flex items-center mb-1">
+                    <span class="text-blue-500 mr-2 text-lg">💡</span>
+                    <h3 class="font-bold text-gray-800 text-sm">이용 안내</h3>
+                </div>
+                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1 ml-1">
+                    <li>대상 문서의 <strong>모든 페이지 위에 투명한 셀로판지처럼 도장이나 로고</strong>를 겹쳐서 찍어줍니다. (대외비, 초안 표기 등)</li>
+                    <li>워터마크용 파일은 <strong>반드시 1페이지짜리 PDF 파일</strong>이어야 합니다.</li>
+                    <li>그림판이나 한글에서 글귀/도장을 만든 후 'PDF로 저장'한 파일을 사용하시면 편리합니다.</li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="executeAction('watermark')" class="px-6 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 shadow-sm transition-colors">워터마크 삽입 실행</button>
+            </div>
+        </section>
+
+        <!-- 7. 텍스트 추출 Section -->
+        <section id="sec-extract" class="hidden flex flex-col h-full">
+            <div class="mb-6 flex-1">
+                <h2 class="text-lg font-semibold mb-3">텍스트를 추출할 파일 선택</h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="addFiles('extract', false)" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">파일 찾기</button>
+                    <span id="extract-filename" class="text-sm text-gray-600 flex-1 truncate">선택된 파일이 없습니다.</span>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 mt-auto">
+                <div class="flex items-center mb-1">
+                    <span class="text-blue-500 mr-2 text-lg">💡</span>
+                    <h3 class="font-bold text-gray-800 text-sm">이용 안내</h3>
+                </div>
+                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1 ml-1">
+                    <li>PDF 문서 내부에 포함된 <strong>텍스트(글자)만 쫙 뽑아내어 메모장(.txt) 파일로 저장</strong>해 줍니다.</li>
+                    <li>다른 기관에서 온 복사 불가능한 PDF 공문 등의 내용을 참고할 때 유용합니다.</li>
+                    <li class="text-red-500">주의: 마우스로 글자가 드래그(선택)되는 정상적인 PDF만 가능하며, <strong>이미지(사진) 형태로 스캔된 문서의 글자는 추출할 수 없습니다.</strong></li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="executeAction('extract')" class="px-6 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 shadow-sm transition-colors">메모장(.txt)으로 저장</button>
+            </div>
+        </section>
+
+        <!-- 8. 압축 Section -->
+        <section id="sec-compress" class="hidden flex flex-col h-full">
+            <div class="mb-6 flex-1">
+                <h2 class="text-lg font-semibold mb-3">압축할 파일 선택</h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="addFiles('compress', false)" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">파일 찾기</button>
+                    <span id="compress-filename" class="text-sm text-gray-600 flex-1 truncate">선택된 파일이 없습니다.</span>
+                </div>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-5 shadow-sm mb-4 mt-auto">
+                <div class="flex items-center mb-2">
+                    <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <h3 class="text-sm font-bold text-blue-800">압축 기능 이용 안내</h3>
+                </div>
+                <ul class="list-disc list-inside text-sm text-blue-700 leading-relaxed ml-1 space-y-1">
+                    <li>현재 펜통에서 제공하는 압축은 화질 손상이 전혀 없는 <strong>'기본 무손실 압축(메타데이터 및 구조 정리)'</strong>입니다.</li>
+                    <li>따라서 <strong>스캔본이나 고화질 이미지가 포함된 문서의 경우 용량 감소 효과가 거의 없을 수 있습니다.</strong></li>
+                    <li>강력한 고비율 압축이 필요하신 경우, 당분간 다른 전문 압축 도구(웹사이트 등)를 활용해 주시기를 권장합니다.</li>
+                    <li class="mt-3 list-none text-blue-800 font-semibold bg-blue-100 p-2 rounded inline-block">🚀 차후 이미지 압축에 특화된 강력한 전용 프로그램 <strong>'PenPDF'</strong>를 별도로 개발하여 제공할 계획입니다!</li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="executeAction('compress')" class="px-6 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 shadow-sm transition-colors">기본 압축 실행</button>
+            </div>
+        </section>
+
+        <!-- 9. 보안(비밀번호) Section -->
+        <section id="sec-security" class="hidden flex flex-col h-full">
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold mb-3">파일 선택</h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="addFiles('security', false)" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors shadow-sm">파일 찾기</button>
+                    <span id="security-filename" class="text-sm text-gray-600 flex-1 truncate">선택된 파일이 없습니다.</span>
+                </div>
+            </div>
+            <div class="mb-6 flex-1">
+                <h2 class="text-lg font-semibold mb-3">작업 선택</h2>
+                <div class="flex items-center gap-6 mb-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="security-mode" value="protect" checked class="text-blue-500 focus:ring-blue-400 w-4 h-4">
+                        <span class="text-sm text-gray-700 font-medium">비밀번호 설정 (암호화)</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="security-mode" value="unlock" class="text-blue-500 focus:ring-blue-400 w-4 h-4">
+                        <span class="text-sm text-gray-700 font-medium">비밀번호 해제 (복호화)</span>
+                    </label>
+                </div>
+                <input type="password" id="security-password" placeholder="비밀번호를 입력하세요" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent">
+            </div>
+
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 mt-auto">
+                <div class="flex items-center mb-1">
+                    <span class="text-blue-500 mr-2 text-lg">💡</span>
+                    <h3 class="font-bold text-gray-800 text-sm">이용 안내</h3>
+                </div>
+                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1 ml-1">
+                    <li><strong>비밀번호 설정:</strong> 민감한 개인정보 문서 등에 <strong>새로운 열기 암호</strong>를 걸어 안전하게 보호합니다.</li>
+                    <li><strong>비밀번호 해제:</strong> 암호가 걸려있는 문서의 기존 암호를 입력하여, <strong>영구적으로 암호가 풀린 새로운 파일</strong>을 만듭니다. (자주 여는 문서에 매번 암호를 치기 번거로울 때 유용합니다.)</li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="executeAction('security')" class="px-6 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 shadow-sm transition-colors">보안 설정 실행</button>
+            </div>
+        </section>
+
+    </main>
+    <div id="dragOverlay" class="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm bg-blue-500 bg-opacity-10 border-4 border-dashed border-blue-500 m-4 rounded-2xl pointer-events-none hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-xl text-center">
+            <div class="w-20 h-20 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">여기에 PDF 파일을 놓으세요</h2>
+            <p class="text-gray-500">현재 열려있는 기능 탭에 맞게 파일이 자동 적용됩니다.</p>
+        </div>
+    </div>
+    <!-- Custom Popup -->
+    <div id="custom-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-80 transform scale-95 transition-transform" id="modal-content">
+            <h3 id="modal-title" class="text-lg font-bold mb-2 text-gray-800">알림</h3>
+            <p id="modal-message" class="text-sm text-gray-600 mb-6 leading-relaxed whitespace-pre-line"></p>
+            <div class="flex justify-end">
+                <button onclick="closeModal()" class="px-5 py-2 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const getPyApi = () => {
+            if (window.pywebview && window.pywebview.api) return window.pywebview.api;
+            if (window.parent && window.parent.pywebview && window.parent.pywebview.api) return window.parent.pywebview.api;
+            return null;
+        };
+
+        const state = {
+            merge: [], split: null, split_all: null, compress: null, security: null,
+            delete: null, rotate: null, extract: null,
+            watermark: { target: null, stamp: null }
+        };
+
+        const TABS = ['merge', 'split', 'split_all', 'delete', 'rotate', 'watermark', 'extract', 'compress', 'security'];
+
+        function showModal(message, title = "알림") {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = message;
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('modal-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => { content.classList.remove('scale-95'); content.classList.add('scale-100'); }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('modal-content');
+            content.classList.remove('scale-100'); content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 150);
+        }
+
+        function setLoading(isLoading, text = "처리 중입니다...") {
+            const overlay = document.getElementById('loading-overlay');
+            document.getElementById('loading-text').innerText = text;
+            if (isLoading) overlay.classList.remove('hidden'); else overlay.classList.add('hidden');
+        }
+
+        function switchTab(tabId) {
+            TABS.forEach(id => {
+                document.getElementById(`sec-${id}`).classList.add('hidden');
+                document.getElementById(`tab-${id}`).className = 'tab-inactive px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200';
+            });
+            document.getElementById(`sec-${tabId}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabId}`).className = 'tab-active px-5 py-2.5 text-sm focus:outline-none transition-colors duration-200';
+        }
+
+        async function addFiles(mode, isMultiple) {
+            const api = getPyApi();
+            if (!api) return showModal("파이썬 백엔드와 연결되지 않았습니다.");
+            try {
+                const files = await api.select_pdf_files(isMultiple);
+                if (!files || files.length === 0) return;
+
+                if (mode === 'merge') {
+                    files.forEach(f => state.merge.push(f));
+                    renderMergeList();
+                } else if (mode === 'watermark_target') {
+                    state.watermark.target = files[0];
+                    document.getElementById(`watermark-target-filename`).innerText = files[0].name;
+                } else if (mode === 'watermark_stamp') {
+                    state.watermark.stamp = files[0];
+                    document.getElementById(`watermark-stamp-filename`).innerText = files[0].name;
+                } else {
+                    state[mode] = files[0];
+                    document.getElementById(`${mode}-filename`).innerText = files[0].name;
+                }
+            } catch (err) { showModal("파일을 불러오는 중 오류가 발생했습니다."); }
+        }
+
+        /* --- Drag & Drop --- */
+        let dragSrcEl = null;
+        function renderMergeList() {
+            const listEl = document.getElementById('merge-list');
+            listEl.innerHTML = '';
+            if (state.merge.length === 0) {
+                listEl.innerHTML = '<p class="text-center text-gray-400 mt-20 text-sm empty-msg">우측 상단의 \'+ 파일 추가\' 버튼을 눌러 파일을 불러오세요.</p>';
+                return;
+            }
+            state.merge.forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center p-3 bg-white border border-gray-100 rounded shadow-sm cursor-move';
+                item.draggable = true; item.setAttribute('data-index', index);
+                item.addEventListener('dragstart', function (e) { dragSrcEl = this; e.dataTransfer.effectAllowed = 'move'; this.classList.add('dragging'); });
+                item.addEventListener('dragover', function (e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; });
+                item.addEventListener('dragenter', function (e) { if (this !== dragSrcEl) this.classList.add('drag-over'); });
+                item.addEventListener('dragleave', function (e) { this.classList.remove('drag-over'); });
+                item.addEventListener('drop', function (e) { e.stopPropagation(); if (dragSrcEl !== this) { const f = parseInt(dragSrcEl.getAttribute('data-index')); const t = parseInt(this.getAttribute('data-index')); const i = state.merge.splice(f, 1)[0]; state.merge.splice(t, 0, i); renderMergeList(); } return false; });
+                item.addEventListener('dragend', function (e) { this.classList.remove('dragging'); document.querySelectorAll('#merge-list>div').forEach(i => i.classList.remove('drag-over')); });
+
+                item.innerHTML = `
+                            <div class="flex items-center overflow-hidden flex-1 pointer-events-none">
+                                <svg class="w-4 h-4 text-gray-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>
+                                <span class="text-xs font-bold text-gray-400 w-6">${index + 1}.</span>
+                                <span class="text-sm text-gray-700 truncate">${file.name}</span>
+                            </div>
+                            <div class="flex items-center ml-2 space-x-1">
+                                <button onclick="moveMergeItem(${index}, -1)" class="p-1 rounded text-gray-400 hover:text-blue-500" title="위로 올리기"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M5 15l7-7 7 7" /></svg></button>
+                                <button onclick="moveMergeItem(${index}, 1)" class="p-1 rounded text-gray-400 hover:text-blue-500" title="아래로 내리기"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M19 9l-7 7-7-7" /></svg></button>
+                                <button onclick="removeMergeItem(${index})" class="p-1 text-gray-400 hover:text-red-500" title="삭제"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M6 18L18 6M6 6l12 12" /></svg></button>
+                            </div>`;
+                listEl.appendChild(item);
+            });
+        }
+        function moveMergeItem(idx, dir) { const n = idx + dir; if (n < 0 || n >= state.merge.length) return; const t = state.merge[idx]; state.merge[idx] = state.merge[n]; state.merge[n] = t; renderMergeList(); }
+        function removeMergeItem(idx) { state.merge.splice(idx, 1); renderMergeList(); }
+        function clearFiles(mode) { if (mode === 'merge') { state.merge = []; renderMergeList(); } }
+
+        /* --- Execute Action --- */
+        async function executeAction(mode) {
+            const api = getPyApi();
+            if (!api) return showModal("파이썬 백엔드와 연결되지 않았습니다.");
+
+            try {
+                let result;
+                if (mode === 'merge') {
+                    if (state.merge.length < 2) return showModal("합치려면 2개 이상의 파일을 선택하세요.");
+                    setLoading(true, "병합 중...");
+                    result = await api.process_pdf_merge(state.merge.map(f => f.path));
+                }
+                else if (mode === 'split') {
+                    if (!state.split) return showModal("원본 파일을 선택하세요.");
+                    setLoading(true, "추출 중...");
+                    result = await api.process_pdf_split(state.split.path, document.getElementById('split-range').value);
+                }
+                else if (mode === 'split_all') {
+                    if (!state.split_all) return showModal("개별 저장할 원본 파일을 선택하세요.");
+                    setLoading(true, "폴더를 선택하면 분할 저장이 시작됩니다...");
+                    result = await api.process_pdf_split_all(state.split_all.path);
+                }
+                else if (mode === 'delete') {
+                    if (!state.delete) return showModal("원본 파일을 선택하세요.");
+                    const rng = document.getElementById('delete-range').value.trim();
+                    if (!rng) return showModal("삭제할 페이지 범위를 입력하세요.");
+                    setLoading(true, "페이지 삭제 중...");
+                    result = await api.process_pdf_delete_pages(state.delete.path, rng);
+                }
+                else if (mode === 'rotate') {
+                    if (!state.rotate) return showModal("회전할 파일을 선택하세요.");
+                    const angle = document.querySelector('input[name="rotate-angle"]:checked').value;
+                    setLoading(true, "회전 적용 중...");
+                    result = await api.process_pdf_rotate(state.rotate.path, document.getElementById('rotate-range').value, angle);
+                }
+                else if (mode === 'watermark') {
+                    if (!state.watermark.target || !state.watermark.stamp) return showModal("대상 문서와 도장(워터마크)용 문서를 모두 선택하세요.");
+                    setLoading(true, "워터마크 병합 중...");
+                    result = await api.process_pdf_watermark(state.watermark.target.path, state.watermark.stamp.path);
+                }
+                else if (mode === 'extract') {
+                    if (!state.extract) return showModal("파일을 선택하세요.");
+                    setLoading(true, "텍스트 추출 중...");
+                    result = await api.process_pdf_extract_text(state.extract.path);
+                }
+                else if (mode === 'compress') {
+                    if (!state.compress) return showModal("압축할 파일을 선택하세요.");
+                    setLoading(true, "압축 중...");
+                    result = await api.process_pdf_compress(state.compress.path);
+                }
+                else if (mode === 'security') {
+                    if (!state.security) return showModal("파일을 선택하세요.");
+                    const pwd = document.getElementById('security-password').value;
+                    if (!pwd) return showModal("비밀번호를 입력하세요.");
+                    const secMode = document.querySelector('input[name="security-mode"]:checked').value;
+                    setLoading(true, "보안 적용 중...");
+                    result = secMode === 'protect' ? await api.process_pdf_protect(state.security.path, pwd) : await api.process_pdf_unlock(state.security.path, pwd);
+                    if (result.success) document.getElementById('security-password').value = '';
+                }
+
+                setLoading(false);
+                if (result && result.success) showModal("성공적으로 처리 및 저장되었습니다.", "완료");
+                else if (result && result.error !== "cancelled") showModal("오류 발생:\n" + result.error, "오류");
+
+            } catch (err) {
+                setLoading(false);
+                showModal("알 수 없는 오류가 발생했습니다:\n" + err.message, "오류");
+            }
+        }
+
+        // ==========================================
+        // [추가] 드래그 앤 드롭 프론트엔드 제어
+        // ==========================================
+        const dragOverlay = document.getElementById('dragOverlay');
+
+        document.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            // 부모 창 방패막이 활성화
+            if (window.parent && window.parent.document) {
+                const shield = window.parent.document.getElementById('global-drop-zone');
+                if (shield) shield.classList.add('active');
+            }
+            if (dragOverlay) dragOverlay.classList.remove('hidden');
+        });
+
+        document.addEventListener('dragover', (e) => e.preventDefault());
+
+        document.addEventListener('dragleave', (e) => {
+            if (dragOverlay) dragOverlay.classList.add('hidden');
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (dragOverlay) dragOverlay.classList.add('hidden');
+        });
+
+        // 파이썬 전역 D&D 이벤트가 넘겨주는 파일 경로 수신
+        window.addDroppedFiles = function (paths) {
+            // 1. PDF 파일만 필터링
+            const validPaths = paths.filter(p => p.toLowerCase().endsWith('.pdf'));
+
+            if (validPaths.length === 0) {
+                showModal("PDF 파일만 추가할 수 있습니다.");
+                return;
+            }
+
+            // 2. 현재 활성화된(눈에 보이는) 탭 찾기
+            const activeTabId = TABS.find(id => !document.getElementById(`sec-${id}`).classList.contains('hidden'));
+            if (!activeTabId) return;
+
+            // 3. 파일 경로를 기존 state 포맷({name: '...', path: '...'})으로 변환
+            const getFileName = (path) => path.split(/[\\/]/).pop();
+            const newFiles = validPaths.map(p => ({ name: getFileName(p), path: p }));
+
+            // 4. 활성화된 탭의 특성에 맞게 데이터 분배
+            if (activeTabId === 'merge') {
+                // 합치기 탭: 여러 개를 배열에 누적
+                state.merge.push(...newFiles);
+                renderMergeList();
+
+            } else if (activeTabId === 'watermark') {
+                // 워터마크 탭: 대상 문서 -> 도장 문서 순서로 채워넣기
+                if (!state.watermark.target) {
+                    state.watermark.target = newFiles[0];
+                    document.getElementById('watermark-target-filename').innerText = newFiles[0].name;
+                    // 두 개 이상 동시에 드래그한 경우, 두 번째 파일을 도장으로 지정
+                    if (newFiles.length > 1) {
+                        state.watermark.stamp = newFiles[1];
+                        document.getElementById('watermark-stamp-filename').innerText = newFiles[1].name;
+                    }
+                } else if (!state.watermark.stamp) {
+                    state.watermark.stamp = newFiles[0];
+                    document.getElementById('watermark-stamp-filename').innerText = newFiles[0].name;
+                } else {
+                    // 둘 다 채워져 있으면 대상 문서를 덮어쓰기
+                    state.watermark.target = newFiles[0];
+                    document.getElementById('watermark-target-filename').innerText = newFiles[0].name;
+                }
+            } else {
+                // 나머지 모든 탭 (단일 파일 처리): 첫 번째 파일로 덮어쓰기
+                state[activeTabId] = newFiles[0];
+                document.getElementById(`${activeTabId}-filename`).innerText = newFiles[0].name;
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>펜통(PenTong) - 중복 데이터 찾기</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Jspreadsheet (Jexcel) CE & jSuites -->
+    <script src="https://jsuites.net/v4/jsuites.js"></script>
+    <link rel="stylesheet" href="https://jsuites.net/v4/jsuites.css" type="text/css" />
+    <script src="https://bossanova.uk/jspreadsheet/v4/jexcel.js"></script>
+    <link rel="stylesheet" href="https://bossanova.uk/jspreadsheet/v4/jexcel.css" type="text/css" />
+    
+    <!-- FontAwesome 아이콘 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- 한글 폰트 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f3f4f6; }
+        
+        .jexcel_content { 
+            border-radius: 0 0 8px 8px; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            background-color: white;
+            border: none !important;
+        }
+        
+        /* 헤더 스타일 */
+        .jexcel > thead > tr > td {
+            background-color: #eff6ff;
+            color: #1e40af;
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a0a0a0; }
+        
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .backdrop-blur-sm { backdrop-filter: blur(4px); }
+        
+        /* 현황표 스타일 */
+        .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .summary-table th { background-color: #f3f4f6; border: 1px solid #e5e7eb; padding: 8px; text-align: left; color: #374151; }
+        .summary-table td { border: 1px solid #e5e7eb; padding: 8px; color: #4b5563; }
+        .summary-table tr:nth-child(even) { background-color: #f9fafb; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-gray-800">
+
+    <!-- 상단 헤더 -->
+    <header class="bg-indigo-600 text-white p-3 px-5 shadow-lg flex justify-between items-center z-20 shrink-0 h-14">
+        <div class="flex items-center gap-3">
+            <div class="bg-white text-indigo-600 w-8 h-8 flex items-center justify-center rounded font-bold shadow-sm">
+                <i class="fa-solid fa-pen-nib"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight">중복 데이터 찾기</h1>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden relative">
+        
+        <!-- 커스텀 모달 (알림용) -->
+        <div id="custom-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center">
+            <div class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
+            <div class="bg-white rounded-lg shadow-2xl w-[380px] max-w-[90%] z-10 p-6 transform transition-all scale-100 animate-fade-in relative">
+                <div class="flex items-start gap-4 mb-4">
+                    <div id="modal-icon" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0 text-gray-600">
+                        <i class="fa-solid fa-info text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 id="modal-title" class="text-base font-bold text-gray-800">알림</h3>
+                        <p id="modal-message" class="text-sm text-gray-600 mt-1 leading-relaxed whitespace-pre-line">내용</p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-5">
+                    <button id="modal-cancel-btn" class="hidden px-3 py-1.5 rounded border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 transition" onclick="closeModal()">취소</button>
+                    <button id="modal-ok-btn" class="px-4 py-1.5 rounded text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow transition">확인</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 중복 현황표 모달 -->
+        <div id="summary-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center">
+            <div class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" onclick="closeSummaryModal()"></div>
+            <div class="bg-white rounded-lg shadow-2xl w-[600px] max-w-[95%] h-[80vh] flex flex-col z-10 transform transition-all scale-100 animate-fade-in relative">
+                <!-- 헤더 -->
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
+                    <h3 class="font-bold text-gray-800"><i class="fa-solid fa-chart-simple mr-2 text-indigo-500"></i>중복 유형별 현황</h3>
+                    <button onclick="closeSummaryModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+                <!-- 본문 (스크롤) -->
+                <div class="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    <div id="summary-content" class="bg-white">
+                        <table class="summary-table" id="summary-table-el">
+                            <thead>
+                                <tr>
+                                    <th width="70%">중복 내용 (검사 기준 값)</th>
+                                    <th width="30%">개수 (건)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="summary-tbody">
+                                <!-- 자바스크립트로 데이터 삽입 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- 푸터 -->
+                <div class="p-4 border-t border-gray-200 flex justify-end gap-2 bg-gray-50 rounded-b-lg">
+                    <button onclick="copySummaryTable()" class="px-4 py-2 rounded text-sm font-bold text-white bg-green-600 hover:bg-green-700 shadow transition flex items-center gap-2">
+                        <i class="fa-regular fa-copy"></i> 표 복사하기
+                    </button>
+                    <button onclick="closeSummaryModal()" class="px-4 py-2 rounded text-sm font-medium text-gray-600 border border-gray-300 hover:bg-white transition">닫기</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 로딩 인디케이터 -->
+        <div id="loading-overlay" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm">
+            <div class="bg-white p-4 rounded-lg shadow-xl flex flex-col items-center border border-gray-200">
+                <i class="fa-solid fa-circle-notch fa-spin text-3xl text-indigo-600 mb-2"></i>
+                <span class="text-sm font-medium text-gray-700">처리 중...</span>
+            </div>
+        </div>
+
+        <!-- 왼쪽: 컨트롤 패널 -->
+        <aside class="w-72 bg-white border-r border-gray-200 flex flex-col shadow-xl z-10">
+            <div class="p-4 flex-1 overflow-y-auto custom-scrollbar">
+                
+                <!-- 1. 데이터 입력 -->
+                <div class="mb-5">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">1. 데이터 준비</h3>
+                    <div class="bg-gray-50 border border-gray-200 rounded p-3 mb-2">
+                        <p class="text-xs text-gray-600 leading-relaxed">
+                            우측 시트에 엑셀 데이터를<br>붙여넣기(Ctrl+V) 하세요.
+                        </p>
+                    </div>
+                    <div class="flex gap-2 mb-2">
+                        <button onclick="loadSampleData()" class="flex-1 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 py-1.5 rounded text-xs font-medium transition flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-vial"></i> 샘플 데이터
+                        </button>
+                    </div>
+                    <button onclick="confirmClearGrid()" class="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 py-1.5 rounded text-xs font-medium transition">
+                        <i class="fa-solid fa-trash-can mr-1"></i> 시트 초기화
+                    </button>
+                </div>
+
+                <!-- 2. 중복 설정 -->
+                <div class="mb-5 border-t border-gray-100 pt-5">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">2. 검사 기준</h3>
+                    
+                    <label class="flex items-center p-1.5 rounded hover:bg-gray-50 cursor-pointer mb-1 transition-colors">
+                        <input type="checkbox" id="headerCheck" class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" onchange="toggleHeaderMode()">
+                        <span class="ml-2 text-sm text-gray-700">1행은 제목(Header)</span>
+                    </label>
+                    
+                    <label class="flex items-center p-1.5 rounded hover:bg-gray-50 cursor-pointer mb-2 transition-colors">
+                        <input type="checkbox" id="smartCheck" class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" checked>
+                        <span class="ml-2 text-sm text-gray-700">스마트 검색 (특수문자 무시)</span>
+                    </label>
+
+                    <div class="bg-white rounded border border-gray-300 h-40 overflow-y-auto custom-scrollbar p-1" id="column-selector-container">
+                        <p class="text-xs text-gray-400 text-center py-10">
+                            데이터를 입력하면<br>열 목록이 나타납니다.
+                        </p>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1 text-right">* 선택한 열의 값이 모두 같아야 중복</p>
+                </div>
+
+                <!-- 3. 실행 -->
+                <div class="border-t border-gray-100 pt-5 space-y-2">
+                    <button onclick="safeAnalyzeDuplicates()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded shadow-sm transition font-bold text-sm flex justify-center items-center gap-2">
+                        <i class="fa-solid fa-magnifying-glass"></i> 중복 데이터 찾기
+                    </button>
+
+                    <!-- 결과 액션 패널 -->
+                    <div id="result-actions" class="hidden space-y-2 pt-1 animate-fade-in">
+                        <div class="bg-indigo-50 border border-indigo-100 p-2 rounded flex flex-col gap-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-indigo-800 font-bold"><span id="duplicate-count" class="text-base">0</span>건 중복 발견</span>
+                                <span class="text-[10px] text-indigo-500">알록달록 색상 적용됨</span>
+                            </div>
+                            
+                            <div class="flex gap-1">
+                                <button onclick="showSummaryModal()" class="flex-1 text-[11px] bg-white border border-indigo-200 text-indigo-700 px-2 py-1.5 rounded hover:bg-indigo-100 font-medium">
+                                    <i class="fa-solid fa-list-ol mr-1"></i> 현황표 보기
+                                </button>
+                                <button onclick="toggleFilterDuplicates()" id="filter-btn" class="flex-1 text-[11px] bg-white border border-red-200 text-red-600 px-2 py-1.5 rounded hover:bg-red-50 font-medium">
+                                    중복만 보기
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="confirmRemoveDuplicates('first')" class="bg-white border border-gray-300 text-gray-700 hover:text-red-600 hover:border-red-300 py-2 rounded text-xs transition">
+                                <i class="fa-solid fa-arrow-down-long"></i> 아래 삭제
+                            </button>
+                            <button onclick="confirmRemoveDuplicates('last')" class="bg-white border border-gray-300 text-gray-700 hover:text-red-600 hover:border-red-300 py-2 rounded text-xs transition">
+                                <i class="fa-solid fa-arrow-up-long"></i> 위쪽 삭제
+                            </button>
+                        </div>
+                        
+                        <button onclick="resetStyles()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded text-xs transition">
+                            <i class="fa-solid fa-rotate-left mr-1"></i> 초기화
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 하단: 복사 -->
+            <div class="p-4 border-t border-gray-200 bg-gray-50">
+                <button onclick="copyAllData()" class="w-full bg-green-600 hover:bg-green-700 text-white py-2.5 rounded shadow-sm transition font-bold text-sm flex justify-center items-center gap-2">
+                    <i class="fa-regular fa-copy"></i> 데이터 복사
+                </button>
+            </div>
+        </aside>
+
+        <!-- 오른쪽: 그리드 -->
+        <main class="flex-1 bg-gray-100 p-4 overflow-hidden flex flex-col relative">
+            <div class="bg-white rounded-t border-b border-gray-200 p-2 px-3 flex justify-between items-center shrink-0">
+                <span class="font-bold text-gray-700 text-sm"><i class="fa-solid fa-table mr-2 text-gray-400"></i>데이터 시트</span>
+                <span class="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-200">총 <span id="total-rows" class="font-bold text-gray-600">0</span>행</span>
+            </div>
+            <div id="spreadsheet" class="flex-1 overflow-hidden w-full h-full bg-white"></div>
+        </main>
+    </div>
+
+    <!-- 스크립트 -->
+    <script>
+        let myTable = null;
+        let isHeaderMode = false;
+        let isFiltered = false; 
+        let isBulkOperation = false;
+        let currentModalCallback = null;
+        
+        // 중복 분석 결과 저장용 (현황표를 위해)
+        let summaryData = [];
+
+        // 다채로운 파스텔톤 색상 팔레트 (배경, 텍스트)
+        const palette = [
+            { bg: '#FECACA', text: '#991B1B' }, // 빨강
+            { bg: '#BFDBFE', text: '#1E40AF' }, // 파랑
+            { bg: '#BBF7D0', text: '#166534' }, // 초록
+            { bg: '#FEF08A', text: '#854D0E' }, // 노랑
+            { bg: '#E9D5FF', text: '#6B21A8' }, // 보라
+            { bg: '#FBCFE8', text: '#9D174D' }, // 분홍
+            { bg: '#FED7AA', text: '#9A3412' }, // 주황
+            { bg: '#C7D2FE', text: '#3730A3' }, // 남색
+            { bg: '#A7F3D0', text: '#065F46' }, // 에메랄드
+            { bg: '#DDD6FE', text: '#5B21B6' }  // 바이올렛
+        ];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initGrid();
+        });
+
+        // ============================================================
+        //  UI 유틸리티
+        // ============================================================
+
+        function showModal(type, title, message, callback = null) {
+            const modal = document.getElementById('custom-modal');
+            const titleEl = document.getElementById('modal-title');
+            const msgEl = document.getElementById('modal-message');
+            const iconEl = document.getElementById('modal-icon');
+            const cancelBtn = document.getElementById('modal-cancel-btn');
+            const okBtn = document.getElementById('modal-ok-btn');
+
+            titleEl.innerText = title;
+            msgEl.innerText = message;
+            currentModalCallback = callback;
+
+            if (type === 'error' || type === 'delete') {
+                iconEl.innerHTML = '<i class="fa-solid fa-exclamation text-xl"></i>';
+                iconEl.className = 'w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0 text-red-600';
+                okBtn.className = 'px-4 py-1.5 rounded text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow transition';
+                okBtn.innerText = type === 'delete' ? '삭제' : '확인';
+            } else if (type === 'confirm') {
+                iconEl.innerHTML = '<i class="fa-solid fa-question text-xl"></i>';
+                iconEl.className = 'w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 text-blue-600';
+                okBtn.className = 'px-4 py-1.5 rounded text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow transition';
+                okBtn.innerText = '확인';
+            } else {
+                iconEl.innerHTML = '<i class="fa-solid fa-check text-xl"></i>';
+                iconEl.className = 'w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0 text-green-600';
+                okBtn.className = 'px-4 py-1.5 rounded text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow transition';
+                okBtn.innerText = '확인';
+            }
+
+            if (type === 'confirm' || type === 'delete') {
+                cancelBtn.classList.remove('hidden');
+                okBtn.onclick = function() {
+                    if (currentModalCallback) currentModalCallback();
+                    closeModal();
+                };
+            } else {
+                cancelBtn.classList.add('hidden');
+                okBtn.onclick = closeModal;
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('custom-modal').classList.add('hidden');
+            currentModalCallback = null;
+        }
+
+        // 현황표 모달 제어
+        function showSummaryModal() {
+            if (summaryData.length === 0) {
+                showModal('error', '알림', '분석된 중복 데이터가 없습니다.');
+                return;
+            }
+
+            const tbody = document.getElementById('summary-tbody');
+            tbody.innerHTML = '';
+
+            // 데이터 정렬 (개수 많은 순)
+            summaryData.sort((a, b) => b.count - a.count);
+
+            summaryData.forEach(item => {
+                // 구분자 ||| 를 보기 좋게 쉼표로 변경
+                const displayContent = item.content.split('|||').join(', ');
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${displayContent}</td>
+                    <td class="font-bold text-center">${item.count}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('summary-modal').classList.remove('hidden');
+        }
+
+        function closeSummaryModal() {
+            document.getElementById('summary-modal').classList.add('hidden');
+        }
+
+        // 현황표 복사
+        function copySummaryTable() {
+            const table = document.getElementById('summary-table-el');
+            // 클립보드 복사를 위한 임시 범위 설정
+            const range = document.createRange();
+            range.selectNode(table);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            
+            try {
+                document.execCommand('copy');
+                // 토스트 메시지 대신 모달 재활용 (단, 복사 후 모달이 닫히지 않게)
+                // 버튼 텍스트 변경으로 피드백
+                const btn = event.currentTarget;
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<i class="fa-solid fa-check"></i> 복사 완료!';
+                btn.classList.replace('bg-green-600', 'bg-gray-600');
+                
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.classList.replace('bg-gray-600', 'bg-green-600');
+                    window.getSelection().removeAllRanges();
+                }, 1500);
+            } catch (err) {
+                alert('복사에 실패했습니다.');
+            }
+        }
+
+        function toggleLoading(show) {
+            const overlay = document.getElementById('loading-overlay');
+            if(show) overlay.classList.remove('hidden');
+            else overlay.classList.add('hidden');
+        }
+
+        // ============================================================
+        //  그리드 & 헤더 자동 감지
+        // ============================================================
+
+        function initGrid() {
+            const initialData = Array(50).fill(0).map(() => Array(26).fill(''));
+            const container = document.getElementById('spreadsheet');
+            container.innerHTML = '';
+
+            myTable = jspreadsheet(container, {
+                data: initialData,
+                minDimensions: [10, 50],
+                tableOverflow: true,
+                tableWidth: '100%',
+                tableHeight: '100%',
+                defaultColWidth: 100,
+                allowInsertColumn: true,
+                allowManualInsertColumn: true,
+                allowInsertRow: true,
+                allowManualInsertRow: true,
+                
+                onchange: function() { updateTotalRows(); },
+                onpaste: function() { 
+                    setTimeout(() => {
+                        detectAndSetHeaderMode();
+                        updateTotalRows();
+                        generateColumnSelector(getCheckedColumnIndices());
+                    }, 100);
+                },
+                ondeleterow: function() { updateTotalRows(); }
+            });
+            
+            updateTotalRows();
+            generateColumnSelector();
+        }
+
+        function detectAndSetHeaderMode() {
+            try {
+                const data = myTable.getData();
+                if (!data || data.length < 2) return; 
+
+                const row0 = data[0];
+                const row1 = data[1];
+
+                let isRow0String = 0;
+                let isRow1Number = 0;
+                let nonEmptyCols = 0;
+
+                for (let i = 0; i < Math.min(row0.length, 5); i++) {
+                    const val0 = String(row0[i]).trim();
+                    const val1 = String(row1[i]).trim();
+
+                    if (val0 === '') continue;
+                    nonEmptyCols++;
+
+                    if (isNaN(val0)) isRow0String++;
+                    if (val1 !== '' && !isNaN(val1)) isRow1Number++;
+                }
+
+                let shouldBeHeader = false;
+                if (nonEmptyCols > 0 && isRow0String >= nonEmptyCols / 2) {
+                    shouldBeHeader = true;
+                }
+
+                document.getElementById('headerCheck').checked = shouldBeHeader;
+                toggleHeaderMode();
+
+            } catch (e) {
+                console.log("Auto header detection failed", e);
+            }
+        }
+
+        // 샘플 데이터 로드 함수
+        function loadSampleData() {
+            if (myTable.getData().filter(row => row.some(cell => cell && cell.toString().trim() !== '')).length > 0) {
+                 if (!confirm("기존 데이터가 삭제됩니다. 샘플 데이터를 로드하시겠습니까?")) return;
+            }
+            
+            // 샘플 데이터 (중복 포함)
+            const sampleData = [
+                ['연번', '성명', '전화번호', '비고'],
+                ['1', '김철수', '010-1234-5678', '정상'],
+                ['2', '이영희', '010-9876-5432', '정상'],
+                ['3', '김철수', '010-1234-5678', '중복(완전일치)'],
+                ['4', '박민수', '010-5555-7777', '정상'],
+                ['5', '이영희', '01098765432', '중복(형식다름)'],
+                ['6', '최지우', '010-1111-2222', '정상'],
+                ['7', '김철수', '010 1234 5678', '중복(공백포함)'],
+                ['8', '홍길동', '010-3333-4444', '정상']
+            ];
+
+            // 데이터 채우기 (나머지 빈 행도 유지)
+            // 현재 50행이므로 앞부분만 덮어씀
+            const fullData = Array(50).fill(0).map(() => Array(26).fill(''));
+            for(let i=0; i<sampleData.length; i++) {
+                for(let j=0; j<sampleData[i].length; j++) {
+                    fullData[i][j] = sampleData[i][j];
+                }
+            }
+            
+            myTable.setData(fullData);
+            
+            // UI 업데이트
+            updateTotalRows();
+            document.getElementById('headerCheck').checked = true; // 샘플은 헤더가 있음
+            toggleHeaderMode();
+            
+            // 초기화 후 메시지
+            document.getElementById('result-actions').classList.add('hidden');
+        }
+
+        function getCheckedColumnIndices() {
+            const checkboxes = document.querySelectorAll('input[name="chk-col"]:checked');
+            return Array.from(checkboxes).map(cb => parseInt(cb.value));
+        }
+
+        function getCheckedColumnLabels() {
+            const checkboxes = document.querySelectorAll('input[name="chk-col"]:checked');
+            if(checkboxes.length === 0) return [];
+            return Array.from(checkboxes).map(cb => getColumnName(parseInt(cb.value)));
+        }
+
+        function updateTotalRows() {
+            if(!myTable || isBulkOperation) return;
+            const data = myTable.getData();
+            const filledRows = data.filter(row => row && row.some(cell => cell && cell.toString().trim() !== '')).length;
+            document.getElementById('total-rows').innerText = filledRows > 0 ? filledRows : data.length;
+        }
+
+        function confirmClearGrid() {
+            showModal('delete', '초기화', '데이터를 모두 삭제하시겠습니까?', () => {
+                document.getElementById('result-actions').classList.add('hidden');
+                document.getElementById('headerCheck').checked = false;
+                document.getElementById('smartCheck').checked = true;
+                isHeaderMode = false;
+                isFiltered = false;
+                summaryData = []; // 데이터 초기화
+                initGrid();
+            });
+        }
+
+        function toggleHeaderMode() {
+            isHeaderMode = document.getElementById('headerCheck').checked;
+            const currentChecked = getCheckedColumnIndices();
+            resetStyles(); 
+            generateColumnSelector(currentChecked); 
+        }
+
+        function generateColumnSelector(preservedIndices = []) {
+            const container = document.getElementById('column-selector-container');
+            container.innerHTML = '';
+            if(!myTable) return;
+
+            const colCount = myTable.headers.length; 
+            let previewData = [];
+            try {
+                const data = myTable.getData();
+                if(data && data.length > 0) previewData = data[0];
+            } catch(e) {}
+            
+            const allDiv = document.createElement('div');
+            allDiv.className = 'flex items-center mb-1 pb-1 border-b border-gray-100 sticky top-0 bg-white z-10';
+            allDiv.innerHTML = `
+                <input type="checkbox" id="col-all" class="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer" onchange="toggleAllCols(this)">
+                <label for="col-all" class="ml-2 text-xs font-bold text-gray-700 cursor-pointer select-none">전체 열</label>
+            `;
+            container.appendChild(allDiv);
+
+            for (let i = 0; i < colCount; i++) {
+                let colName = getColumnName(i);
+                let cellValue = (previewData && previewData[i]) ? String(previewData[i]) : '';
+                
+                let previewHtml = cellValue.trim() !== '' 
+                    ? `<span class="text-indigo-600 font-medium ml-1 truncate max-w-[120px]">(${cellValue})</span>` 
+                    : `<span class="text-gray-300 ml-1 text-[10px]">(비어있음)</span>`;
+
+                const div = document.createElement('div');
+                div.className = 'flex items-center mb-0.5 hover:bg-gray-50 rounded px-1 py-0.5 cursor-pointer transition-colors';
+                div.onclick = function(e) {
+                    if (e.target.tagName !== 'INPUT') {
+                        const chk = this.querySelector('input');
+                        chk.checked = !chk.checked;
+                    }
+                };
+
+                const isChecked = preservedIndices.includes(i) ? 'checked' : '';
+
+                div.innerHTML = `
+                    <input type="checkbox" name="chk-col" value="${i}" class="w-3.5 h-3.5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer" ${isChecked}>
+                    <div class="ml-2 text-xs flex-1 truncate select-none flex items-center">
+                        <span class="inline-block w-5 font-bold text-gray-600 bg-gray-100 text-center rounded-sm text-[10px]">${colName}</span>
+                        ${previewHtml}
+                    </div>
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        function toggleAllCols(source) {
+            const checkboxes = document.getElementsByName('chk-col');
+            for(let chk of checkboxes) chk.checked = source.checked;
+        }
+
+        function resetStyles() {
+            if(!myTable) return;
+            if (isFiltered) {
+                const rows = myTable.getData().length;
+                for(let i=0; i<rows; i++) myTable.showRow(i);
+                const btn = document.getElementById('filter-btn');
+                btn.innerText = '중복만 보기';
+                btn.classList.remove('bg-red-50', 'text-red-700', 'border-red-300');
+                isFiltered = false;
+            }
+
+            // 스타일 초기화 (배경색이 있는 모든 셀)
+            const tds = document.querySelectorAll('td[style*="background-color"]');
+            tds.forEach(td => {
+                td.style.backgroundColor = '';
+                td.style.color = '';
+                td.style.fontWeight = '';
+            });
+            document.getElementById('result-actions').classList.add('hidden');
+        }
+
+        function getColumnName(n) {
+            let ordA = 'A'.charCodeAt(0);
+            let ordZ = 'Z'.charCodeAt(0);
+            let len = ordZ - ordA + 1;
+            let s = "";
+            while(n >= 0) {
+                s = String.fromCharCode(n % len + ordA) + s;
+                n = Math.floor(n / len) - 1;
+            }
+            return s;
+        }
+
+        // ============================================================
+        //  중복 검사
+        // ============================================================
+
+        function safeAnalyzeDuplicates() {
+            const checked = getCheckedColumnIndices();
+            if (checked.length === 0) {
+                showModal('error', '기준 열 선택', '검사할 기준 열(성명, 번호 등)을\n왼쪽 목록에서 체크해주세요.');
+                return;
+            }
+
+            toggleLoading(true);
+            setTimeout(() => {
+                try {
+                    analyzeDuplicates();
+                } catch(e) {
+                    showModal('error', '오류', '작업 중 오류가 발생했습니다.\n' + e.message);
+                } finally {
+                    toggleLoading(false);
+                }
+            }, 50);
+        }
+
+        function confirmRemoveDuplicates(mode) {
+             const checked = getCheckedColumnIndices();
+            if (checked.length === 0) {
+                showModal('error', '기준 열 선택', '삭제 기준 열을 먼저 체크해주세요.');
+                return;
+            }
+
+            const msg = mode === 'first' 
+                ? '중복 데이터 중 아래쪽(최신) 데이터를\n모두 삭제하시겠습니까?'
+                : '중복 데이터 중 위쪽(오래된) 데이터를\n모두 삭제하시겠습니까?';
+
+            showModal('delete', '삭제 확인', msg, () => {
+                toggleLoading(true);
+                setTimeout(() => {
+                    try {
+                        removeDuplicates(mode, checked);
+                    } catch(e) {
+                        showModal('error', '오류', '삭제 중 문제가 발생했습니다.\n' + e.message);
+                    } finally {
+                        toggleLoading(false);
+                    }
+                }, 50);
+            });
+        }
+
+        function analyzeDuplicates() {
+            resetStyles();
+            const checkedIndices = getCheckedColumnIndices(); 
+            const selectedCols = checkedIndices;
+            
+            const isSmartMode = document.getElementById('smartCheck').checked;
+            const rawData = myTable.getData();
+            let startRow = isHeaderMode ? 1 : 0;
+
+            const map = new Map(); 
+            let duplicateCount = 0;
+            const duplicateRowIndices = new Set();
+            summaryData = []; // 현황 데이터 초기화
+
+            for (let i = startRow; i < rawData.length; i++) {
+                const row = rawData[i];
+                if (!row) continue;
+
+                let isEmpty = true;
+                for(let colIdx of selectedCols) {
+                    if(row[colIdx] && String(row[colIdx]).trim() !== '') { isEmpty = false; break; }
+                }
+                if(isEmpty) continue;
+
+                const keyParts = selectedCols.map(colIdx => {
+                    let val = (row[colIdx] !== undefined && row[colIdx] !== null) ? String(row[colIdx]).trim() : '';
+                    if (isSmartMode) val = val.replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
+                    return val;
+                });
+                const key = keyParts.join('|||');
+
+                if (map.has(key)) map.get(key).push(i);
+                else map.set(key, [i]);
+            }
+
+            // 중복 그룹에 색상 부여를 위한 인덱스
+            let groupIndex = 0;
+
+            map.forEach((indices, key) => {
+                if (indices.length > 1) {
+                    duplicateCount += indices.length;
+                    
+                    // 현황 데이터 추가
+                    summaryData.push({
+                        content: key,
+                        count: indices.length
+                    });
+
+                    // 그룹 색상 선택 (순환)
+                    const colorSet = palette[groupIndex % palette.length];
+                    groupIndex++;
+
+                    indices.forEach(rowIndex => {
+                        duplicateRowIndices.add(rowIndex);
+                        // 선택한 열의 셀만 하이라이트 (다채로운 색상)
+                        selectedCols.forEach(colIdx => {
+                            const cellName = getColumnName(colIdx) + (rowIndex + 1);
+                            myTable.setStyle(cellName, 'background-color', colorSet.bg);
+                            myTable.setStyle(cellName, 'color', colorSet.text);
+                            myTable.setStyle(cellName, 'font-weight', 'bold');
+                        });
+                    });
+                }
+            });
+
+            if (duplicateCount > 0) {
+                document.getElementById('duplicate-count').innerText = duplicateCount;
+                document.getElementById('result-actions').classList.remove('hidden');
+                window.duplicateIndices = duplicateRowIndices;
+            } else {
+                const colNames = getCheckedColumnLabels().join(', ');
+                showModal('info', '완료', `선택한 열 기준 중복 데이터가 없습니다.\n(기준: ${colNames})`);
+            }
+        }
+
+        function toggleFilterDuplicates() {
+            if (!window.duplicateIndices) return;
+            const btn = document.getElementById('filter-btn');
+
+            if (isFiltered) {
+                const rows = myTable.getData().length;
+                for(let i=0; i<rows; i++) myTable.showRow(i);
+                btn.innerText = '중복만 보기';
+                btn.classList.remove('bg-red-50', 'text-red-700', 'border-red-300');
+                isFiltered = false;
+            } else {
+                const rows = myTable.getData().length;
+                let startRow = isHeaderMode ? 1 : 0;
+                for(let i=startRow; i<rows; i++) {
+                    if (!window.duplicateIndices.has(i)) myTable.hideRow(i);
+                }
+                btn.innerText = '전체 보기';
+                btn.classList.add('bg-red-50', 'text-red-700', 'border-red-300');
+                isFiltered = true;
+            }
+        }
+
+        function removeDuplicates(mode, checkedIndices) {
+            const selectedCols = checkedIndices;
+            const isSmartMode = document.getElementById('smartCheck').checked;
+            
+            const rawData = myTable.getData();
+            let startRow = isHeaderMode ? 1 : 0;
+            const map = new Map();
+            const rowsToDelete = [];
+
+            for (let i = startRow; i < rawData.length; i++) {
+                const row = rawData[i];
+                if (!row) continue;
+
+                let isEmpty = true;
+                for(let colIdx of selectedCols) {
+                    if(row[colIdx] && String(row[colIdx]).trim() !== '') { isEmpty = false; break; }
+                }
+                if(isEmpty) continue;
+
+                const keyParts = selectedCols.map(colIdx => {
+                    let val = (row[colIdx] !== undefined && row[colIdx] !== null) ? String(row[colIdx]).trim() : '';
+                    if (isSmartMode) val = val.replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
+                    return val;
+                });
+                const key = keyParts.join('|||');
+
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push(i);
+            }
+
+            map.forEach(indices => {
+                if (indices.length > 1) {
+                    if (mode === 'first') {
+                        for(let k=1; k<indices.length; k++) rowsToDelete.push(indices[k]);
+                    } else {
+                        for(let k=0; k<indices.length-1; k++) rowsToDelete.push(indices[k]);
+                    }
+                }
+            });
+
+            if (rowsToDelete.length === 0) {
+                showModal('info', '알림', '삭제할 중복 데이터가 없습니다.');
+                return;
+            }
+
+            isBulkOperation = true; 
+            try {
+                rowsToDelete.sort((a,b) => b-a);
+                rowsToDelete.forEach(idx => myTable.deleteRow(idx, 1));
+            } finally {
+                isBulkOperation = false;
+            }
+
+            isFiltered = true; 
+            toggleFilterDuplicates();
+            resetStyles();
+            updateTotalRows(); 
+
+            showModal('info', '삭제 완료', `총 ${rowsToDelete.length}행을 삭제했습니다.`);
+        }
+
+        function copyAllData() {
+            myTable.selectAll();
+            document.execCommand('copy');
+            myTable.resetSelection(true);
+            showModal('info', '복사 완료', '전체 데이터가 클립보드에 복사되었습니다.\n엑셀에 붙여넣기(Ctrl+V) 하세요.');
+        }
+
+    </script>
+</body>
+</html>

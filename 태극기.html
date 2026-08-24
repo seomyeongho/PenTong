@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이미지 기반 정밀 태극기 - 회전 수정</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 10px;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.1);
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <svg width="600" height="400" viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg">
+            <!-- 배경 -->
+            <rect width="900" height="600" fill="#FFFFFF"/>
+
+            <!-- 태극 (중심 450, 300) -->
+            <!-- 
+                수정 사항:
+                이전 각도(-144.69)에서 반시계 방향으로 1도 추가 회전
+                최종 각도: -145.69도
+            -->
+            <g transform="rotate(-145.69, 450, 300)">
+                <!-- 위쪽 빨간색 반원 -->
+                <path d="M 300 300 A 150 150 0 0 0 600 300 Z" fill="#CD2E3A"/>
+                <!-- 아래쪽 파란색 반원 -->
+                <path d="M 300 300 A 150 150 0 0 1 600 300 Z" fill="#0047A0"/>
+                
+                <!-- S자 곡선 -->
+                <circle cx="375" cy="300" r="75" fill="#0047A0"/>
+                <circle cx="525" cy="300" r="75" fill="#CD2E3A"/>
+            </g>
+
+            <!-- 괘(Trigrams) 정의 -->
+            <defs>
+                <rect id="bar-full" width="150" height="25" fill="#000000"/>
+                <g id="bar-split">
+                    <rect width="68.75" height="25" fill="#000000"/>
+                    <rect x="81.25" width="68.75" height="25" fill="#000000"/>
+                </g>
+            </defs>
+
+            <!-- 4괘 배치 (그대로 유지) -->
+            <!-- 건(Geon): 왼쪽 위 (213.69도) -->
+            <g transform="translate(450, 300) rotate(123.69) translate(0, 275)">
+                <use href="#bar-full" x="-75" y="-50"/>
+                <use href="#bar-full" x="-75" y="-12.5"/>
+                <use href="#bar-full" x="-75" y="25"/>
+            </g>
+
+            <!-- 곤(Gon): 오른쪽 아래 (33.69도) -->
+            <g transform="translate(450, 300) rotate(-56.31) translate(0, 275)">
+                <use href="#bar-split" x="-75" y="-50"/>
+                <use href="#bar-split" x="-75" y="-12.5"/>
+                <use href="#bar-split" x="-75" y="25"/>
+            </g>
+
+            <!-- 감(Gam): 오른쪽 위 (-33.69도) -->
+            <g transform="translate(450, 300) rotate(-123.69) translate(0, 275)">
+                <use href="#bar-split" x="-75" y="-50"/>
+                <use href="#bar-full" x="-75" y="-12.5"/>
+                <use href="#bar-split" x="-75" y="25"/>
+            </g>
+
+            <!-- 리(Ri): 왼쪽 아래 (146.31도) -->
+            <g transform="translate(450, 300) rotate(56.31) translate(0, 275)">
+                <use href="#bar-full" x="-75" y="-50"/>
+                <use href="#bar-split" x="-75" y="-12.5"/>
+                <use href="#bar-full" x="-75" y="25"/>
+            </g>
+        </svg>
+    </div>
+
+</body>
+</html>

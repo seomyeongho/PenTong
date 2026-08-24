@@ -1,0 +1,2058 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>특수 도형 생성기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    <style>
+        
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .bg-checkered {
+            background-color: #f3f4f6;
+            background-image: linear-gradient(45deg, #e5e7eb 25%, transparent 25%, transparent 75%, #e5e7eb 75%, #e5e7eb), linear-gradient(45deg, #e5e7eb 25%, transparent 25%, transparent 75%, #e5e7eb 75%, #e5e7eb);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+
+        .category-tab.active {
+            background-color: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        /* 기존 .no-scrollbar는 유지하되 아래 내용을 추가하거나 교체하세요 */
+        #shape-list {
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent; /* 파이어폭스 */
+        }
+            /* 크롬, 에지, 사파리용 스크롤 바 디자인 */
+            #shape-list::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            #shape-list::-webkit-scrollbar-thumb {
+                background-color: #cbd5e1;
+                border-radius: 10px;
+            }
+
+            #shape-list::-webkit-scrollbar-track {
+                background: transparent;
+            }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 h-screen flex flex-col font-sans overflow-hidden">
+
+    <header class="bg-blue-600 text-white px-6 py-4 shadow-md flex justify-between items-center shrink-0">
+        <h1 class="text-xl font-bold flex items-center gap-2">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            특수 도형 생성기
+        </h1>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden">
+        <aside class="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
+            <div class="p-4 border-b border-gray-200 bg-gray-50">
+                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">카테고리</label>
+                <div id="category-list" class="space-y-1">
+                </div>
+            </div>
+            <div class="p-4 border-b border-gray-200">
+                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider block">도형 목록</label>
+            </div>
+            <div class="overflow-y-auto flex-1 p-2 no-scrollbar" id="shape-list">
+            </div>
+        </aside>
+
+        <section class="flex-1 flex flex-col p-4 overflow-hidden">
+            <div class="flex gap-4 h-full">
+                <div class="flex-1 flex flex-col min-w-0">
+                    <div class="mb-2 flex justify-between items-center">
+                        <h2 class="font-semibold text-gray-700" id="current-shape-name">도형 미리보기</h2>
+                    </div>
+                    <div class="flex-1 bg-checkered rounded-xl border-2 border-gray-200 overflow-auto relative" id="preview-area">
+                        <div id="zoom-wrapper" class="w-max h-max min-w-full min-h-full flex items-center justify-center p-12">
+                            <div id="preview-container" class="relative flex items-center justify-center cursor-default">
+                                <div id="selection-overlay" class="absolute pointer-events-none hidden z-10" style="border: 1px dashed #3b82f6; box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);">
+                                    <div class="absolute w-[1px] bg-blue-500 opacity-70" style="height: 30px; top: -30px; left: 50%; transform: translateX(-50%);"></div>
+                                    <div id="handle-rotate" class="absolute w-6 h-6 bg-white border-2 border-blue-600 rounded-full shadow-md cursor-grab pointer-events-auto flex items-center justify-center hover:bg-blue-50 transition-transform hover:scale-110" style="top: -45px; left: 50%; transform: translateX(-50%);">
+                                        <svg class="w-3.5 h-3.5 text-blue-600 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                    </div>
+                                    <div class="absolute w-3 h-3 bg-white border-2 border-blue-600 rounded-sm shadow-sm pointer-events-auto hover:bg-blue-50" id="handle-tl" style="top: -6px; left: -6px; cursor: nwse-resize;"></div>
+                                    <div class="absolute w-3 h-3 bg-white border-2 border-blue-600 rounded-sm shadow-sm pointer-events-auto hover:bg-blue-50" id="handle-t" style="top: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize;"></div>
+                                    <div class="absolute w-3 h-3 bg-white border-2 border-blue-600 rounded-sm shadow-sm pointer-events-auto hover:bg-blue-50" id="handle-tr" style="top: -6px; right: -6px; cursor: nesw-resize;"></div>
+                                    <div class="absolute w-3 h-3 bg-white border-2 border-blue-600 rounded-sm shadow-sm pointer-events-auto hover:bg-blue-50" id="handle-l" style="top: 50%; left: -6px; transform: translateY(-50%); cursor: ew-resize;"></div>
+                                    <div class="absolute w-3 h-3 bg-white border-2 border-blue-600 rounded-sm shadow-sm pointer-events-auto hover:bg-blue-50" id="handle-r" style="top: 50%; right: -6px; transform: translateY(-50%); cursor: ew-resize;"></div>
+                                    <div class="absolute w-3 h-3 bg-white border-2 border-blue-600 rounded-sm shadow-sm pointer-events-auto hover:bg-blue-50" id="handle-bl" style="bottom: -6px; left: -6px; cursor: nesw-resize;"></div>
+                                    <div class="absolute w-3 h-3 bg-white border-2 border-blue-600 rounded-sm shadow-sm pointer-events-auto hover:bg-blue-50" id="handle-b" style="bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize;"></div>
+                                    <div class="absolute w-3 h-3 bg-white border-2 border-blue-600 rounded-sm shadow-sm pointer-events-auto hover:bg-blue-50" id="handle-br" style="bottom: -6px; right: -6px; cursor: nwse-resize;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <canvas id="webgl-canvas" class="w-full h-full absolute top-0 left-0 hidden cursor-move" style="outline: none;"></canvas>
+                    </div>
+                </div>
+
+                <div class="w-80 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col shrink-0 text-sm">
+                    <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 rounded-t-xl flex justify-between items-center">
+                        <h2 class="font-semibold text-gray-700">도형 속성</h2>
+                        <button id="btn-help" class="text-blue-600 hover:text-blue-800 text-xs font-bold px-2 py-1 bg-blue-50 rounded">💡 도움말</button>
+                    </div>
+
+                    <div class="px-4 py-3 space-y-4 flex-1 overflow-y-auto no-scrollbar">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">채우기 색상</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" id="fill-color" value="#3B82F6" class="w-7 h-7 rounded cursor-pointer shrink-0 border border-gray-200 p-0">
+                                    <input type="text" id="fill-color-hex" value="#3B82F6" class="w-full border border-gray-300 rounded px-2 py-1 text-[11px] uppercase font-mono">
+                                </div>
+                            </div>
+                            <div id="prop-stroke-color">
+                                <label class="block text-xs font-bold text-gray-600 mb-1">선 색상</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" id="stroke-color" value="#1E3A8A" class="w-7 h-7 rounded cursor-pointer shrink-0 border border-gray-200 p-0">
+                                    <input type="text" id="stroke-color-hex" value="#1E3A8A" class="w-full border border-gray-300 rounded px-2 py-1 text-[11px] uppercase font-mono">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="prop-stroke-width" class="border-t border-gray-100 pt-3">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-xs font-bold text-gray-600">선 두께</label>
+                                <span id="stroke-width-value" class="text-xs font-mono text-gray-600">1px</span>
+                            </div>
+                            <input type="range" id="stroke-width" min="0" max="20" value="1" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                        </div>
+
+                        <div id="prop-transform" class="border-t border-gray-100 pt-3 space-y-3">
+                            <div class="grid grid-cols-2 gap-3 hidden">
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-600 mb-1">가로 크기 (제한없음)</label>
+                                    <input type="range" id="scale-x-slider" min="0.1" max="50.0" step="0.1" value="1.0" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-600 mb-1">세로 크기 (제한없음)</label>
+                                    <input type="range" id="scale-y-slider" min="0.1" max="50.0" step="0.1" value="1.0" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="block text-xs font-bold text-gray-600">도형 회전</label>
+                                    <div class="flex items-center gap-1">
+                                        <input type="number" id="rotation-number" value="0" class="w-12 h-6 text-right border border-gray-300 rounded text-xs text-blue-600 font-bold focus:outline-none focus:border-blue-500">
+                                        <span class="text-[10px] font-mono text-gray-500">°</span>
+                                    </div>
+                                </div>
+                                <input type="range" id="rotation" min="0" max="360" value="0" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                            </div>
+
+                            <div class="flex gap-2">
+                                <button id="btn-flip-h" class="flex-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 py-1.5 rounded text-xs transition-colors flex items-center justify-center gap-1">좌우 대칭</button>
+                                <button id="btn-flip-v" class="flex-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 py-1.5 rounded text-xs transition-colors flex items-center justify-center gap-1">상하 대칭</button>
+                            </div>
+                            <label id="wrap-hidden-lines" class="flex items-center gap-1.5 text-xs font-medium text-gray-700 cursor-pointer select-none hidden" for="toggle-hidden-lines">
+                                <input type="checkbox" id="toggle-hidden-lines" class="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer">
+                                겨냥도 (숨은 선 표시)
+                            </label>
+                        </div>
+
+                        <div id="prop-math-coords" class="border-t border-gray-100 pt-3 hidden">
+                            <label id="math-coord-title" class="block text-xs font-bold text-gray-600 mb-2">좌표축 범위 설정</label>
+                            <div id="math-prop-grid" class="grid grid-cols-2 gap-2">
+                                <div id="wrap-x-min"><label id="lbl-x-min" class="text-[10px] text-gray-500">X 최소</label><input type="number" id="coord-x-min" value="-5" class="w-full border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"></div>
+                                <div id="wrap-x-max"><label id="lbl-x-max" class="text-[10px] text-gray-500">X 최대</label><input type="number" id="coord-x-max" value="5" class="w-full border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"></div>
+                                <div id="wrap-y-min"><label id="lbl-y-min" class="text-[10px] text-gray-500">Y 최소</label><input type="number" id="coord-y-min" value="-5" class="w-full border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"></div>
+                                <div id="wrap-y-max"><label id="lbl-y-max" class="text-[10px] text-gray-500">Y 최대</label><input type="number" id="coord-y-max" value="5" class="w-full border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"></div>
+                            </div>
+                            <div id="wrap-coord-numbers">
+                                <label class="flex items-center gap-1.5 text-xs font-medium text-gray-700 mt-2 cursor-pointer select-none">
+                                    <input type="checkbox" id="toggle-coord-numbers" checked class="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded cursor-pointer">
+                                    축 숫자 표시
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="prop-light" class="border-t border-gray-100 pt-3 hidden">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-xs font-bold text-gray-600">빛의 강도 (3D)</label>
+                                <span id="light-intensity-value" class="text-xs font-mono text-yellow-600 font-bold">100%</span>
+                            </div>
+                            <input type="range" id="light-intensity" min="0" max="2" step="0.1" value="1" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-yellow-500">
+                        </div>
+                    </div>
+
+                    <div class="px-4 py-3 border-t border-gray-200 bg-gray-50 rounded-b-xl space-y-1.5">
+                        <button id="btn-copy-img" class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 rounded-md flex items-center justify-center gap-1.5 shadow-sm transition-colors text-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            그림으로 복사
+                        </button>
+                        <button id="btn-copy-svg" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 rounded-md flex items-center justify-center gap-1.5 shadow-sm transition-colors text-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            그래픽(SVG)으로 복사
+                        </button>
+                        <button id="btn-save-img-3d" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 rounded-md flex items-center justify-center gap-1.5 shadow-sm transition-colors text-sm hidden">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            그림(PNG)으로 저장
+                        </button>
+                        <button id="btn-download" class="w-full bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 font-medium py-1.5 rounded-md flex items-center justify-center gap-1.5 transition-colors text-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            파일(SVG) 저장
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 도움말 모달 -->
+    <div id="help-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-xl w-[450px] max-w-[90%] p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-800">💡 특수 도형 복사 도움말</h3>
+                <button id="btn-close-help-icon" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <ul class="list-disc pl-5 space-y-3 text-sm text-gray-700">
+                <li>
+                    <b class="text-green-700">그림으로 복사:</b><br>
+                    배경이 투명한 고화질 이미지(PNG)로 복사됩니다. 한글(HWP), 그림판, 메신저 등 거의 모든 프로그램에 바로 붙여넣을 수 있습니다.
+                </li>
+                <li>
+                    <b class="text-blue-700">그래픽(SVG)으로 복사:</b><br>
+                    선과 면을 직접 수정할 수 있는 벡터 그래픽 형태로 복사됩니다. 벡터를 지원하는 오피스 프로그램이나 디자인 툴에서 색상을 바꾸거나 모양을 편집할 때 유용합니다. (붙여넣은 후 '도형으로 변환' 등 지원 기능 활용)
+                </li>
+                <li>
+                    <b class="text-gray-700">파일로 저장:</b><br>
+                    도형을 내 컴퓨터에 SVG 파일로 저장하여 필요할 때 불러와서 사용할 수 있습니다.
+                </li>
+            </ul>
+            <button id="btn-close-help" class="mt-6 w-full bg-gray-100 hover:bg-gray-200 text-gray-800 py-2.5 rounded-lg font-medium transition-colors">닫기</button>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg transition-all duration-300 opacity-0 pointer-events-none translate-y-4 z-50 flex items-center gap-2 text-sm">
+        <span id="toast-message">알림</span>
+    </div>
+
+    <script>
+        // --- 도형 및 카테고리 데이터 ---
+        const categories = [
+            { id: 'arrows', name: '화살표', icon: 'fa-arrow-right' },
+            { id: 'polygons', name: '다각형', icon: 'fa-shapes' },
+            { id: 'circles', name: '원/곡선', icon: 'fa-circle' },
+            { id: '3d_shapes', name: '입체모양 도형', icon: 'fa-cube' },
+            { id: 'science', name: '과학/실험 기구', icon: 'fa-flask' }, // 🌟 과학 카테고리 추가
+            { id: 'math_coords', name: '수학/좌표계', icon: 'fa-subscript' },
+            { id: 'webgl_3d', name: '3D 도형', icon: 'fa-cubes' },
+        ];
+
+        const shapeData = {
+            arrows: [
+                {
+                    id: 'arrow_sleek',
+                    name: '샤프 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,40 H140 V20 L180,50 L140,80 V60 H20 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_ribbon',
+                    name: '리본(꼬리파임) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,20 L40,50 L20,80 H140 V100 L190,50 L140,0 V20 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_swoosh',
+                    name: '상승 곡선 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,90 Q80,90 140,50 V80 L190,35 L130,0 V30 Q60,70 20,70 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_chevron',
+                    name: '삼단 쉐브론 (>>>)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path d="M20,20 L60,50 L20,80 L40,80 L80,50 L40,20 Z"/><path d="M70,20 L110,50 L70,80 L90,80 L130,50 L90,20 Z"/><path d="M120,20 L160,50 L120,80 L140,80 L180,50 L140,20 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_lightning',
+                    name: '지그재그 번개 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,60 L80,20 V45 H130 V20 L190,55 L140,90 V65 H90 V90 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_pixel',
+                    name: '레트로 픽셀 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="miter" d="M20,40 H120 V20 H140 V30 H160 V40 H180 V60 H160 V70 H140 V80 H120 V60 H20 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_double',
+                    name: '양방향 스피드 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M40,50 L70,20 V40 H130 V20 L160,50 L130,80 V60 H70 V80 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_uturn',
+                    name: 'U턴 회전 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M180,30 L140,0 V20 H80 A40,40 0 0,0 80,100 H180 V80 H80 A20,20 0 0,1 80,40 H140 V60 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_wavy',
+                    name: 'S자 물결 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,50 Q50,20 80,50 T140,50 V30 L190,60 L140,90 V70 Q110,100 80,70 T20,70 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_handmade',
+                    name: '손그림(러프) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M22,42 C50,38 100,45 138,41 C137,25 140,20 142,20 C155,30 175,42 185,48 C175,56 155,68 142,78 C140,78 138,70 138,58 C100,55 50,62 22,58 C18,56 18,44 22,42 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_split',
+                    name: '분기(나뉘는) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,40 H80 L140,15 V5 L190,25 L140,45 V35 L90,50 L140,65 V55 L190,75 L140,95 V85 L80,60 H20 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_converge',
+                    name: '융합(합쳐지는) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,15 H80 L130,35 V20 L190,50 L130,80 V65 L80,85 H20 V65 L70,50 L20,35 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_step',
+                    name: '계단형 꺾임 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,70 H100 V40 H140 V20 L190,50 L140,80 V60 H80 V90 H20 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_refresh',
+                    name: '순환(새로고침) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M100,20 A30,30 0 1,1 70,50 H85 A15,15 0 1,0 100,35 V50 L135,27.5 L100,5 V20 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_dashed',
+                    name: '점선(블록) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path d="M20,40 H45 V60 H20 Z"/><path d="M55,40 H80 V60 H55 Z"/><path d="M90,40 H115 V60 H90 Z"/><path d="M125,40 H140 V20 L190,50 L140,80 V60 H125 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_pin',
+                    name: '핀(과녁) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" fill-rule="evenodd" stroke-linejoin="round" d="M50,30 A20,20 0 1,0 50,70 H130 V80 L180,50 L130,20 V30 H50 Z M50,40 A10,10 0 1,1 50,60 A10,10 0 1,1 50,40 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_flare',
+                    name: '가속(나팔) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,42 Q80,42 130,25 V10 L185,50 L130,90 V75 Q80,58 20,58 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_rounded',
+                    name: '소프트 둥근 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M40,35 H130 V15 Q140,15 145,20 L185,45 Q190,50 185,55 L145,80 Q140,85 130,85 V65 H40 Q30,65 30,50 Q30,35 40,35 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_diamond',
+                    name: '다이아몬드 꼬리 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,50 L50,35 H130 V15 L190,50 L130,85 V65 H50 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_fast',
+                    name: '스피드 라인 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path d="M70,40 H140 V20 L190,50 L140,80 V60 H70 Z"/><path d="M40,40 H60 V60 H40 Z"/><path d="M10,40 H30 V60 H10 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_comet',
+                    name: '혜성(꼬리 얇은) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M10,50 Q80,45 130,35 V15 L190,50 L130,85 V65 Q80,55 10,50 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_origami',
+                    name: '종이접기(3D) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" d="M20,60 L60,40 H130 V20 L190,50 L130,80 V60 H60 Z"/><path fill="#000000" opacity="0.2" d="M60,40 L40,80 L60,60 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_fork',
+                    name: 'Y자 양갈래 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,40 H70 V15 H110 V5 L160,25 L110,45 V35 H90 V65 H110 V55 L160,75 L110,95 V85 H70 V60 H20 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_target',
+                    name: '과녁 관통 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><circle cx="150" cy="50" r="25" fill="none" stroke-width="${Number(w) + 2}"/><circle cx="150" cy="50" r="10" fill="none" stroke-width="${Number(w) + 2}"/><path d="M10,55 H120 V65 L170,50 L120,35 V45 H10 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_growth',
+                    name: '우상향 차트 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,80 L60,40 L100,60 L140,20 V0 L190,30 L140,60 V40 L100,80 L60,60 L20,100 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_sync',
+                    name: '양방향 원형 순환',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path d="M50,30 A40,40 0 0,1 150,30 V15 L180,40 L150,65 V50 A20,20 0 0,0 70,50 Z"/><path d="M150,70 A40,40 0 0,1 50,70 V85 L20,60 L50,35 V50 A20,20 0 0,0 130,50 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_callout',
+                    name: '말풍선 지시 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,20 H140 V40 L180,50 L140,60 V80 H60 L30,100 V80 H20 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_cursor',
+                    name: '마우스 커서 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M100,10 L140,55 L120,55 L135,85 L120,90 L105,60 L85,75 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_turnup',
+                    name: '90도 꺾임 상승 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,70 H100 A10,10 0 0,0 110,60 V40 H90 L130,10 L170,40 H150 V60 A30,30 0 0,1 120,90 H20 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_node',
+                    name: '노드(연결점) 화살표',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><circle cx="40" cy="50" r="15"/><circle cx="100" cy="50" r="15"/><path d="M55,50 H85 M115,50 H140 V35 L180,50 L140,65 V50"/></g></svg>`
+                },
+                // --- 여기서부터 복사해서 기존 arrows 배열 끝에 추가 ---
+                // --- 수정할 부분: arrow_3d_block 객체 ---
+                {
+                    id: 'arrow_3d_block',
+                    name: '3D 입체 블록',
+                    generate: (f, s, w) => {
+                        // 원본 윗면 path
+                        const pathTop = "M20,30 H100 V10 L160,40 L100,70 V50 H20 Z";
+
+                        // 블록의 깊이(두께)를 표현하기 위해 윗면을 기준으로 이동된 오프셋 좌표를 사용합니다.
+                        // (예: 오른쪽 아래로 5px 이동)
+
+                        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                                    <g stroke="${s}" stroke-width="${w}" stroke-linejoin="round">
+                                        <g fill="#000" opacity="0.3" stroke="none">
+                                            <path d="M20,50 H100 L105,55 H25 Z" /> <path d="M100,70 L160,40 L165,45 L105,75 Z" /> <path d="M160,40 L100,10 L105,15 L165,45 Z" /> <path d="M100,10 V30 L105,35 V15 Z" /> <path d="M100,30 H20 L25,35 H105 Z" /> </g>
+                                        <path fill="${f}" d="${pathTop}" />
+                                    </g>
+                                </svg>`;
+                    }
+                },
+                // --- 여기까지 ---
+                {
+                    id: 'arrow_circuit',
+                    name: '테크 서킷 (회로도)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-linejoin="round"><path fill="none" stroke-width="${Number(w) + 1.5}" d="M15,50 H45 L65,30 H115 L135,50 H155 M15,70 H65 L85,50"/><circle cx="15" cy="50" r="4" stroke-width="0"/><circle cx="15" cy="70" r="4" stroke-width="0"/><circle cx="115" cy="30" r="4" stroke-width="0"/><path stroke-width="${w}" d="M155,35 L190,50 L155,65 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_layered_motion',
+                    name: '잔상 모션 (겹침)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" opacity="0.2" d="M90,25 L120,50 L90,75 V60 H20 V40 H90 Z"/><path fill="${f}" opacity="0.5" d="M115,25 L145,50 L115,75 V60 H45 V40 H115 Z"/><path fill="${f}" d="M140,25 L170,50 L140,75 V60 H70 V40 H140 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_particle',
+                    name: '파편화 (파티클)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}"><path stroke-linejoin="round" d="M110,20 L180,50 L110,80 V60 H80 V40 H110 Z"/><rect x="55" y="40" width="15" height="15" rx="2"/><rect x="35" y="25" width="10" height="10" rx="1"/><rect x="60" y="65" width="12" height="12" rx="1"/><rect x="20" y="55" width="8" height="8" rx="1"/><rect x="15" y="35" width="6" height="6" rx="1"/></g></svg>`
+                },
+                {
+                    id: 'arrow_radar',
+                    name: '음파 (레이더) 방사',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="none" stroke="${s}" stroke-width="${Number(w) + 2}" stroke-linecap="round"><path d="M60,35 A25,25 0 0,1 60,65 M40,42 A15,15 0 0,1 40,58 M20,48 A5,5 0 0,1 20,52"/></g><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M110,35 L170,50 L110,65 V55 H80 V45 H110 Z"/></svg>`
+                },
+                {
+                    id: 'arrow_blueprint',
+                    name: '설계도 (블루프린트)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="none" stroke="${s}" stroke-width="${Math.max(1, w * 0.8)}"><path stroke-dasharray="4,4" d="M20,20 H140 V80 H20 Z"/><path stroke-linejoin="round" d="M20,50 H140 M140,20 L180,50 L140,80"/><line x1="20" y1="10" x2="20" y2="30"/><line x1="140" y1="10" x2="140" y2="30"/><line x1="180" y1="40" x2="180" y2="60"/><rect x="25" y="25" width="110" height="50" fill="${f}" opacity="0.1" stroke="none"/></g></svg>`
+                },
+                {
+                    id: 'arrow_infinity',
+                    name: '뫼비우스 루프',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g stroke-linejoin="round"><path fill="none" stroke="${f}" opacity="0.4" stroke-width="12" d="M80,50 C50,10 20,20 20,50 C20,80 50,90 80,50 C110,10 140,20 140,50 H160"/><path fill="none" stroke="${s}" stroke-width="${w}" d="M80,50 C50,10 20,20 20,50 C20,80 50,90 80,50 C110,10 140,20 140,50 H160"/><path fill="${f}" stroke="${s}" stroke-width="${w}" d="M150,35 L190,50 L150,65 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_origami_layered',
+                    name: '종이접기 다중 폴딩',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" opacity="0.9" d="M20,40 H70 L50,60 H20 Z"/><path fill="${f}" opacity="0.7" d="M50,60 L70,40 H120 L100,60 Z"/><path fill="${f}" opacity="0.5" d="M100,60 L120,40 V20 L180,50 L120,80 V60 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_ribbon_banner',
+                    name: '회전 리본 배너',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" opacity="0.5" d="M30,30 L10,50 L30,70 V55 H80 V30 Z"/><path fill="#000" opacity="0.3" d="M80,55 L60,75 V55 Z"/><path fill="${f}" d="M60,55 H130 V25 L190,55 L130,85 V75 H60 Z"/></g></svg>`
+                },
+                {
+                    id: 'arrow_puzzle',
+                    name: '퍼즐 결합 (커넥터)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,40 H50 A10,10 0 1,0 70,40 H110 V20 L170,50 L110,80 V60 H70 A10,10 0 1,1 50,60 H20 Z"/></svg>`
+                },
+                // --- 여기서부터 복사해서 기존 arrows 배열 끝에 추가 ---
+                {
+                    id: 'arrow_3way_hub',
+                    name: '3방향 분산 (Y자)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" transform="translate(100,50)"><path transform="rotate(0)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><path transform="rotate(120)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><path transform="rotate(240)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><circle cx="0" cy="0" r="15" /></g></svg>`
+                },
+                {
+                    id: 'arrow_4way_cross',
+                    name: '4방향 십자 (Cross)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" transform="translate(100,50)"><path transform="rotate(0)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><path transform="rotate(90)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><path transform="rotate(180)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><path transform="rotate(270)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><circle cx="0" cy="0" r="15" /></g></svg>`
+                },
+                {
+                    id: 'arrow_4way_diag',
+                    name: '4방향 대각선 (X자)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" transform="translate(100,50)"><path transform="rotate(45)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><path transform="rotate(135)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><path transform="rotate(225)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><path transform="rotate(315)" d="M -8,0 V -25 H -18 L 0,-48 L 18,-25 H 8 V 0 Z" /><circle cx="0" cy="0" r="15" /></g></svg>`
+                },
+                {
+                    id: 'arrow_5way_star',
+                    name: '5방향 방사 (별모양)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" transform="translate(100,50)"><path transform="rotate(0)" d="M -5,0 V -25 H -15 L 0,-48 L 15,-25 H 5 V 0 Z" /><path transform="rotate(72)" d="M -5,0 V -25 H -15 L 0,-48 L 15,-25 H 5 V 0 Z" /><path transform="rotate(144)" d="M -5,0 V -25 H -15 L 0,-48 L 15,-25 H 5 V 0 Z" /><path transform="rotate(216)" d="M -5,0 V -25 H -15 L 0,-48 L 15,-25 H 5 V 0 Z" /><path transform="rotate(288)" d="M -5,0 V -25 H -15 L 0,-48 L 15,-25 H 5 V 0 Z" /><circle cx="0" cy="0" r="14" /></g></svg>`
+                },
+                {
+                    id: 'arrow_6way_hex',
+                    name: '6방향 방사 (눈꽃)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" transform="translate(100,50)"><path transform="rotate(0)" d="M -4,0 V -25 H -12 L 0,-48 L 12,-25 H 4 V 0 Z" /><path transform="rotate(60)" d="M -4,0 V -25 H -12 L 0,-48 L 12,-25 H 4 V 0 Z" /><path transform="rotate(120)" d="M -4,0 V -25 H -12 L 0,-48 L 12,-25 H 4 V 0 Z" /><path transform="rotate(180)" d="M -4,0 V -25 H -12 L 0,-48 L 12,-25 H 4 V 0 Z" /><path transform="rotate(240)" d="M -4,0 V -25 H -12 L 0,-48 L 12,-25 H 4 V 0 Z" /><path transform="rotate(300)" d="M -4,0 V -25 H -12 L 0,-48 L 12,-25 H 4 V 0 Z" /><circle cx="0" cy="0" r="12" /></g></svg>`
+                },
+                {
+                    id: 'arrow_8way_compass',
+                    name: '8방향 방사 (나침반)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" transform="translate(100,50)"><path transform="rotate(0)" d="M -3,0 V -30 H -8 L 0,-48 L 8,-30 H 3 V 0 Z" /><path transform="rotate(45)" d="M -3,0 V -30 H -8 L 0,-48 L 8,-30 H 3 V 0 Z" /><path transform="rotate(90)" d="M -3,0 V -30 H -8 L 0,-48 L 8,-30 H 3 V 0 Z" /><path transform="rotate(135)" d="M -3,0 V -30 H -8 L 0,-48 L 8,-30 H 3 V 0 Z" /><path transform="rotate(180)" d="M -3,0 V -30 H -8 L 0,-48 L 8,-30 H 3 V 0 Z" /><path transform="rotate(225)" d="M -3,0 V -30 H -8 L 0,-48 L 8,-30 H 3 V 0 Z" /><path transform="rotate(270)" d="M -3,0 V -30 H -8 L 0,-48 L 8,-30 H 3 V 0 Z" /><path transform="rotate(315)" d="M -3,0 V -30 H -8 L 0,-48 L 8,-30 H 3 V 0 Z" /><circle cx="0" cy="0" r="10" /></g></svg>`
+                },
+                {
+                    id: 'arrow_3way_cycle',
+                    name: '3방향 순환 (리사이클)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" transform="translate(100,50)"><path transform="rotate(0)" d="M 10,-35 Q 35,-35 35,-15 L 25,-15 L 40,5 L 55,-15 L 45,-15 Q 45,-45 10,-45 Z" /><path transform="rotate(120)" d="M 10,-35 Q 35,-35 35,-15 L 25,-15 L 40,5 L 55,-15 L 45,-15 Q 45,-45 10,-45 Z" /><path transform="rotate(240)" d="M 10,-35 Q 35,-35 35,-15 L 25,-15 L 40,5 L 55,-15 L 45,-15 Q 45,-45 10,-45 Z" /></g></svg>`
+                },
+                {
+                    id: 'arrow_4way_cycle',
+                    name: '4방향 순환 (동기화)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><g fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" transform="translate(100,50)"><path transform="rotate(0)" d="M 10,-30 Q 30,-30 30,-10 L 20,-10 L 35,10 L 50,-10 L 40,-10 Q 40,-40 10,-40 Z" /><path transform="rotate(90)" d="M 10,-30 Q 30,-30 30,-10 L 20,-10 L 35,10 L 50,-10 L 40,-10 Q 40,-40 10,-40 Z" /><path transform="rotate(180)" d="M 10,-30 Q 30,-30 30,-10 L 20,-10 L 35,10 L 50,-10 L 40,-10 Q 40,-40 10,-40 Z" /><path transform="rotate(270)" d="M 10,-30 Q 30,-30 30,-10 L 20,-10 L 35,10 L 50,-10 L 40,-10 Q 40,-40 10,-40 Z" /></g></svg>`
+                },
+                {
+                    id: 'arrow_split_1to3',
+                    name: '1대3 트리 분기 (Timeline)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,45 H60 V25 H130 V15 L170,30 L130,45 V35 H70 V45 H140 V35 L180,50 L140,65 V55 H70 V65 H130 V55 L170,70 L130,85 V75 H60 V55 H20 Z" /></svg>`
+                },
+                {
+                    id: 'arrow_merge_3to1',
+                    name: '3대1 집합 병합 (Merge)',
+                    generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M20,25 H120 V20 H140 L190,50 L140,80 H120 V75 H20 V65 H120 V55 H20 V45 H120 V35 H20 Z" /></svg>`
+                }
+                // --- 여기까지 복사하여 붙여넣기 ---
+                
+            ]
+        };
+
+        // 다각형 카테고리 데이터 생성 (3각형 ~ 64각형)
+        shapeData.polygons = [];
+        for (let n = 3; n <= 64; n++) {
+            shapeData.polygons.push({
+                id: `poly_${n}`,
+                name: `${n}각형`,
+                generate: (f, s, w) => {
+                    const r = 40; // 반지름
+                    const cx = 100, cy = 50; // 중심점
+                    let points = [];
+                    for (let i = 0; i < n; i++) {
+                        // 각 꼭짓점 좌표 계산 (위쪽부터 시작하도록 -Math.PI/2 오프셋)
+                        const angle = (i * 2 * Math.PI / n) - Math.PI / 2;
+                        const x = cx + r * Math.cos(angle);
+                        const y = cy + r * Math.sin(angle);
+                        points.push(`${x},${y}`);
+                    }
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                        <polygon points="${points.join(' ')}" fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" />
+                    </svg>`;
+                }
+            });
+        }
+        // 원/곡선 카테고리 데이터 (교사 실무 맞춤형 10종)
+        shapeData.circles = [
+            {
+                id: 'circle_venn3',
+                name: '벤 다이어그램 (3집합)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><circle cx="85" cy="40" r="28" fill="${f}" opacity="0.4" stroke="${s}" stroke-width="${w}"/><circle cx="115" cy="40" r="28" fill="${f}" opacity="0.4" stroke="${s}" stroke-width="${w}"/><circle cx="100" cy="65" r="28" fill="${f}" opacity="0.4" stroke="${s}" stroke-width="${w}"/></svg>`
+            },
+            {
+                id: 'circle_fraction',
+                name: '분수 파이 (1/3 조각)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><circle cx="100" cy="50" r="40" fill="none" stroke="${s}" stroke-width="${w}"/><path d="M100,50 L100,10 A40,40 0 0,1 134.64,70 Z" fill="${f}" stroke="${s}" stroke-width="${w}"/><path d="M100,50 L65.36,70" stroke="${s}" stroke-width="${w}"/></svg>`
+            },
+            {
+                id: 'circle_atom',
+                name: '과학 원자 궤도',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><ellipse cx="100" cy="50" rx="40" ry="12" fill="none" stroke="${s}" stroke-width="${Math.max(w, 1.5)}" transform="rotate(0 100 50)"/><ellipse cx="100" cy="50" rx="40" ry="12" fill="none" stroke="${s}" stroke-width="${Math.max(w, 1.5)}" transform="rotate(60 100 50)"/><ellipse cx="100" cy="50" rx="40" ry="12" fill="none" stroke="${s}" stroke-width="${Math.max(w, 1.5)}" transform="rotate(120 100 50)"/><circle cx="100" cy="50" r="6" fill="${f}" stroke="${s}" stroke-width="${w}"/></svg>`
+            },
+            {
+                id: 'circle_mindmap',
+                name: '마인드맵 노드',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><line x1="100" y1="50" x2="50" y2="25" stroke="${s}" stroke-width="${Math.max(w, 2)}"/><line x1="100" y1="50" x2="150" y2="30" stroke="${s}" stroke-width="${Math.max(w, 2)}"/><line x1="100" y1="50" x2="120" y2="80" stroke="${s}" stroke-width="${Math.max(w, 2)}"/><circle cx="100" cy="50" r="18" fill="${f}" stroke="${s}" stroke-width="${w}"/><circle cx="50" cy="25" r="8" fill="#fff" stroke="${s}" stroke-width="${w}"/><circle cx="150" cy="30" r="8" fill="#fff" stroke="${s}" stroke-width="${w}"/><circle cx="120" cy="80" r="8" fill="#fff" stroke="${s}" stroke-width="${w}"/></svg>`
+            },
+            {
+                id: 'circle_stamp',
+                name: '칭찬 도장 (인장)',
+                generate: (f, s, w) => {
+                    let pts = [];
+                    for (let i = 0; i < 40; i++) {
+                        let r = i % 2 === 0 ? 40 : 36;
+                        let a = i * Math.PI / 20;
+                        pts.push(`${100 + r * Math.cos(a)},${50 + r * Math.sin(a)}`);
+                    }
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><polygon points="${pts.join(' ')}" fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/><circle cx="100" cy="50" r="28" fill="none" stroke="${s}" stroke-width="${Math.max(w, 1.5)}" stroke-dasharray="3 3"/></svg>`;
+                }
+            },
+            {
+                id: 'circle_magnifier',
+                name: '돋보기 (관찰/검색)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><circle cx="90" cy="40" r="22" fill="${f}" opacity="0.3" stroke="${s}" stroke-width="${Math.max(w, 3)}"/><line x1="106" y1="56" x2="130" y2="80" stroke="${s}" stroke-width="${Math.max(w, 6)}" stroke-linecap="round"/><path d="M78,32 A12,12 0 0,1 98,32" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>`
+            },
+            {
+                id: 'circle_thought',
+                name: '생각 풍선',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path d="M70,30 C50,30 40,45 50,60 C40,75 60,85 80,80 C95,95 125,90 130,75 C150,75 150,45 130,35 C120,15 80,15 70,30 Z" fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/><circle cx="45" cy="78" r="5" fill="${f}" stroke="${s}" stroke-width="${w}"/><circle cx="30" cy="88" r="3" fill="${f}" stroke="${s}" stroke-width="${w}"/></svg>`
+            },
+            {
+                id: 'circle_gauge',
+                name: '진행률 게이지 (반원)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><path d="M50,70 A50,50 0 1,1 150,70" fill="none" stroke="${s}" stroke-width="${Math.max(w, 2)}" opacity="0.2" stroke-linecap="round"/><path d="M50,70 A50,50 0 0,1 135.3,34.6" fill="none" stroke="${f}" stroke-width="${Math.max(w, 8)}" stroke-linecap="round"/><circle cx="100" cy="70" r="5" fill="${s}"/><line x1="100" y1="70" x2="125" y2="45" stroke="${s}" stroke-width="${Math.max(w, 2)}" stroke-linecap="round"/></svg>`
+            },
+            {
+                id: 'circle_gear',
+                name: '톱니바퀴 (설정/과정)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><circle cx="100" cy="50" r="30.5" stroke="${s}" stroke-width="12" stroke-dasharray="12 12" fill="none"/><circle cx="100" cy="50" r="30" fill="${f}" stroke="${s}" stroke-width="${w}"/><circle cx="100" cy="50" r="12" fill="#fff" stroke="${s}" stroke-width="${w}"/></svg>`
+            },
+            {
+                id: 'circle_ripple',
+                name: '동심원 (파문/확산)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%"><circle cx="100" cy="50" r="40" fill="none" stroke="${f}" stroke-width="${Math.max(w, 1.5)}" opacity="0.3"/><circle cx="100" cy="50" r="28" fill="none" stroke="${f}" stroke-width="${Math.max(w, 2)}" opacity="0.6"/><circle cx="100" cy="50" r="16" fill="${f}" stroke="${s}" stroke-width="${w}"/></svg>`
+            }
+        ];
+
+        // 🌟 과학/실험 기구 카테고리 데이터 10종
+        shapeData.science = [
+            {
+                id: 'sci_beaker',
+                name: '비커 (Beaker)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <path d="M70,20 L70,85 A5,5 0 0,0 75,90 H125 A5,5 0 0,0 130,85 L130,20 Z" fill="none" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <path d="M70,20 L65,15 V10 H75" fill="none" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <path d="M70,50 L70,85 A5,5 0 0,0 75,90 H125 A5,5 0 0,0 130,85 L130,50 Z" fill="${f}" opacity="0.6" stroke="none"/>
+                    <line x1="70" y1="40" x2="85" y2="40" stroke="${s}" stroke-width="${Math.max(1, w * 0.8)}"/>
+                    <line x1="70" y1="60" x2="80" y2="60" stroke="${s}" stroke-width="${Math.max(1, w * 0.8)}"/>
+                    <line x1="70" y1="80" x2="85" y2="80" stroke="${s}" stroke-width="${Math.max(1, w * 0.8)}"/>
+                </svg>`
+            },
+            {
+                id: 'sci_erlenmeyer',
+                name: '삼각 플라스크',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <path d="M90,15 V40 L55,85 A5,5 0 0,0 60,95 H140 A5,5 0 0,0 145,85 L110,40 V15" fill="none" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <rect x="85" y="10" width="30" height="5" fill="${s}"/>
+                    <path d="M68.2,68 L55,85 A5,5 0 0,0 60,95 H140 A5,5 0 0,0 145,85 L131.8,68 Z" fill="${f}" opacity="0.6"/>
+                </svg>`
+            },
+            {
+                id: 'sci_round_flask',
+                name: '둥근바닥 플라스크',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <path d="M 92,15 V 41.3 A 25,25 0 1,0 108,41.3 V 15" fill="none" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <rect x="85" y="10" width="30" height="5" fill="${s}"/>
+                    <path d="M 75,65 A 25,25 0 0,0 125,65 Z" fill="${f}" opacity="0.6"/>
+                </svg>`
+            },
+            {
+                id: 'sci_test_tube',
+                name: '시험관 (Test Tube)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <g transform="rotate(45 100 50)">
+                        <path d="M90,10 V75 A10,10 0 0,0 110,75 V10 Z" fill="none" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                        <rect x="85" y="5" width="30" height="5" fill="${s}"/>
+                        <path d="M90,40 V75 A10,10 0 0,0 110,75 V40 Z" fill="${f}" opacity="0.6"/>
+                    </g>
+                </svg>`
+            },
+            {
+                id: 'sci_dropper',
+                name: '스포이트 (Dropper)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <g transform="rotate(-45 100 50)">
+                        <path d="M90,15 C80,15 80,35 90,35 H110 C120,35 120,15 110,15 Z" fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                        <path d="M95,35 V75 L98,90 L102,90 L105,75 V35 Z" fill="none" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                        <path d="M98,80 V90 H102 V80 Z" fill="${f}" opacity="0.6"/>
+                    </g>
+                </svg>`
+            },
+            {
+                id: 'sci_magnet',
+                name: '말굽자석 (U-Magnet)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <path d="M40,20 H120 A30,30 0 0,1 120,80 H40 V55 H120 A5,5 0 0,0 120,45 H40 Z" fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <rect x="40" y="20" width="20" height="25" fill="${s}"/>
+                    <rect x="40" y="55" width="20" height="25" fill="${s}"/>
+                    <text x="45" y="38" fill="#fff" font-size="14" font-family="sans-serif" font-weight="bold">N</text>
+                    <text x="45" y="73" fill="#fff" font-size="14" font-family="sans-serif" font-weight="bold">S</text>
+                </svg>`
+            },
+            {
+                id: 'sci_battery',
+                name: '건전지 (Battery)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <rect x="50" y="25" width="100" height="50" rx="8" fill="${f}" stroke="${s}" stroke-width="${w}" opacity="0.4"/>
+                    <path d="M85,25 V75" stroke="${s}" stroke-width="${w}"/>
+                    <rect x="150" y="40" width="10" height="20" rx="2" fill="${s}"/>
+                    <text x="60" y="55" fill="${s}" font-size="20" font-weight="bold" font-family="sans-serif">-</text>
+                    <text x="120" y="56" fill="${s}" font-size="20" font-weight="bold" font-family="sans-serif">+</text>
+                </svg>`
+            },
+            {
+                id: 'sci_bulb',
+                name: '전구 (Light Bulb)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <path d="M100,15 A25,25 0 0,0 80,55 C80,65 90,70 90,75 H110 C110,70 120,65 120,55 A25,25 0 0,0 100,15 Z" fill="${f}" opacity="0.3" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <path d="M85,75 H115 V85 H85 Z" fill="${s}"/>
+                    <path d="M90,85 H110 V95 A5,5 0 0,1 90,95 Z" fill="${s}" opacity="0.8"/>
+                    <polyline points="90,75 95,50 100,60 105,50 110,75" fill="none" stroke="${s}" stroke-width="${Math.max(1, w * 0.8)}" stroke-linejoin="round"/>
+                </svg>`
+            },
+            
+            {
+                id: 'sci_thermometer',
+                name: '온도계 (Thermometer)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <g transform="rotate(45 100 50)">
+                        <path d="M92,15 V65 A15,15 0 1,0 108,65 V15 A8,8 0 0,0 92,15 Z" fill="none" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                        <path d="M96,40 V68 A10,10 0 1,0 104,68 V40 Z" fill="${f}" stroke="none"/>
+                        <line x1="92" y1="25" x2="85" y2="25" stroke="${s}" stroke-width="${w}"/>
+                        <line x1="92" y1="35" x2="85" y2="35" stroke="${s}" stroke-width="${w}"/>
+                        <line x1="92" y1="45" x2="85" y2="45" stroke="${s}" stroke-width="${w}"/>
+                        <line x1="92" y1="55" x2="85" y2="55" stroke="${s}" stroke-width="${w}"/>
+                    </g>
+                </svg>`
+            }, 
+            {
+                id: 'sci_microscope',
+                name: '현미경 (Microscope)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <path d="M 60,85 H 120 L 110,75 H 70 Z" fill="${s}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <path d="M 105,75 C 140,75 140,15 105,15 H 80" fill="none" stroke="${s}" stroke-width="${Math.max(w, 6)}" stroke-linecap="round"/>
+                    <line x1="70" y1="55" x2="110" y2="55" stroke="${s}" stroke-width="${Math.max(w, 3)}"/>
+                    <rect x="75" y="10" width="20" height="30" fill="${f}" stroke="${s}" stroke-width="${w}"/>
+                    <path d="M 80,40 L 75,50 H 95 L 90,40 Z" fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <circle cx="120" cy="45" r="8" fill="${f}" stroke="${s}" stroke-width="${w}"/>
+                </svg>`
+            },
+            {
+                id: 'sci_alcohol_lamp',
+                name: '알코올 램프 (Alcohol Lamp)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <path d="M 70,80 A 30,10 0 0,0 130,80 L 120,40 A 20,5 0 0,0 80,40 Z" fill="none" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    
+                    <path d="M 75,60 A 25,8 0 0,0 125,60 L 130,80 A 30,10 0 0,1 70,80 Z" fill="${f}" opacity="0.5"/>
+                    
+                    <rect x="90" y="30" width="20" height="10" fill="${s}"/>
+                    <path d="M 100,30 V 20" stroke="${s}" stroke-width="${w}"/>
+                    <path d="M 100,5 C 108,15 105,20 100,20 C 95,20 92,15 100,5 Z" fill="${f}" stroke="${s}" stroke-width="${Math.max(1, w * 0.8)}"/>
+                </svg>`
+            },
+            {
+                id: 'sci_petri_dish',
+                name: '페트리 접시 (Petri Dish)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <ellipse cx="100" cy="65" rx="60" ry="15" fill="${f}" opacity="0.3" stroke="${s}" stroke-width="${w}"/>
+                    <path d="M 40,65 V 45 A 60,15 0 0,1 160,45 V 65" fill="none" stroke="${s}" stroke-width="${w}"/>
+                    <ellipse cx="100" cy="45" rx="60" ry="15" fill="none" stroke="${s}" stroke-width="${w}"/>
+                    <circle cx="80" cy="60" r="3" fill="${s}"/>
+                    <circle cx="110" cy="65" r="4" fill="${s}"/>
+                    <circle cx="130" cy="58" r="2" fill="${s}"/>
+                    <circle cx="95" cy="55" r="5" fill="${s}" opacity="0.6"/>
+                </svg>`
+            },
+            {
+                id: 'sci_spring_scale',
+                name: '용수철 저울 (Spring Scale)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <rect x="85" y="25" width="30" height="50" rx="3" fill="${f}" opacity="0.5" stroke="${s}" stroke-width="${w}"/>
+                    <circle cx="100" cy="15" r="10" fill="none" stroke="${s}" stroke-width="${w}"/>
+                    <polyline points="100,25 90,35 110,45 90,55 110,65 100,75" fill="none" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <path d="M 100,75 V 85 A 8,8 0 1,1 90,80" fill="none" stroke="${s}" stroke-width="${w}" stroke-linecap="round"/>
+                    <line x1="115" y1="35" x2="110" y2="35" stroke="${s}" stroke-width="${w}"/>
+                    <line x1="115" y1="45" x2="110" y2="45" stroke="${s}" stroke-width="${w}"/>
+                    <line x1="115" y1="55" x2="110" y2="55" stroke="${s}" stroke-width="${w}"/>
+                    <line x1="115" y1="65" x2="110" y2="65" stroke="${s}" stroke-width="${w}"/>
+                </svg>`
+            },
+            {
+                id: 'sci_tweezers',
+                name: '핀셋 (Tweezers)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <path d="M 30,45 L 160,40 A 2,2 0 0,1 160,45 L 40,50 L 160,55 A 2,2 0 0,1 160,60 L 30,55 C 20,55 20,45 30,45 Z" fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <line x1="50" y1="47" x2="50" y2="53" stroke="${s}" stroke-width="${w}"/>
+                    <line x1="60" y1="48" x2="60" y2="52" stroke="${s}" stroke-width="${w}"/>
+                </svg>`
+            },
+            {
+                id: 'sci_prism',
+                name: '프리즘과 굴절 (Prism)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <polygon points="100,20 140,80 60,80" fill="${f}" opacity="0.4" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <line x1="20" y1="60" x2="80" y2="50" stroke="${s}" stroke-width="${Math.max(w, 2)}" stroke-dasharray="4 2"/>
+                    <line x1="120" y1="50" x2="180" y2="30" stroke="${s}" stroke-width="${w}"/>
+                    <line x1="115" y1="58" x2="180" y2="45" stroke="${s}" stroke-width="${w}" opacity="0.7"/>
+                    <line x1="110" y1="65" x2="180" y2="60" stroke="${s}" stroke-width="${w}" opacity="0.4"/>
+                </svg>`
+            },
+            {
+                id: 'sci_telescope',
+                name: '망원경 (Telescope)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <line x1="100" y1="50" x2="80" y2="90" stroke="${s}" stroke-width="${Math.max(w, 3)}" stroke-linecap="round"/>
+                    <line x1="100" y1="50" x2="120" y2="90" stroke="${s}" stroke-width="${Math.max(w, 3)}" stroke-linecap="round"/>
+                    <line x1="100" y1="50" x2="100" y2="90" stroke="${s}" stroke-width="${Math.max(w, 2)}" stroke-linecap="round" opacity="0.5"/>
+                    <circle cx="100" cy="45" r="5" fill="${s}"/>
+                    <path d="M 50,55 L 140,25 L 145,40 L 55,70 Z" fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <path d="M 140,25 L 150,22 L 155,37 L 145,40 Z" fill="${s}"/>
+                    <path d="M 40,58 L 50,55 L 55,70 L 45,73 Z" fill="${s}"/>
+                </svg>`
+            },
+            {
+                id: 'sci_molecule',
+                name: '분자 모형 (Molecule)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <line x1="100" y1="50" x2="50" y2="70" stroke="${s}" stroke-width="${Math.max(w, 4)}"/>
+                    <line x1="100" y1="50" x2="150" y2="70" stroke="${s}" stroke-width="${Math.max(w, 4)}"/>
+                    <line x1="100" y1="50" x2="100" y2="20" stroke="${s}" stroke-width="${Math.max(w, 4)}"/>
+                    <circle cx="100" cy="50" r="15" fill="${f}" stroke="${s}" stroke-width="${w}"/>
+                    <circle cx="50" cy="70" r="10" fill="${s}" opacity="0.8"/>
+                    <circle cx="150" cy="70" r="10" fill="${s}" opacity="0.8"/>
+                    <circle cx="100" cy="20" r="10" fill="${s}" opacity="0.8"/>
+                </svg>`
+            },
+            {
+                id: 'sci_cell',
+                name: '식물 세포 구조 (Cell)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <rect x="40" y="20" width="120" height="60" rx="10" fill="${f}" opacity="0.3" stroke="${s}" stroke-width="${Math.max(w, 4)}" stroke-linejoin="round"/>
+                    <rect x="45" y="25" width="110" height="50" rx="8" fill="none" stroke="${s}" stroke-width="${w}"/>
+                    <circle cx="70" cy="50" r="12" fill="${f}" stroke="${s}" stroke-width="${w}"/>
+                    <circle cx="70" cy="50" r="4" fill="${s}"/>
+                    <path d="M 95,45 C 105,25 140,25 140,45 C 140,65 110,75 95,65 C 85,55 85,65 95,45 Z" fill="${f}" opacity="0.6" stroke="${s}" stroke-width="${w}"/>
+                    <ellipse cx="100" cy="35" rx="6" ry="3" fill="${s}" opacity="0.7"/>
+                    <ellipse cx="130" cy="65" rx="6" ry="3" fill="${s}" opacity="0.7"/>
+                    <ellipse cx="70" cy="70" rx="6" ry="3" fill="${s}" opacity="0.7"/>
+                </svg>`
+            },
+            {
+                id: 'sci_weight',
+                name: '분동 / 추 (Weight)',
+                generate: (f, s, w) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="100%" height="100%">
+                    <path d="M 70,80 C 70,85 130,85 130,80 V 50 C 130,45 120,40 105,40 H 95 C 80,40 70,45 70,50 Z" fill="${f}" stroke="${s}" stroke-width="${w}" stroke-linejoin="round"/>
+                    <path d="M 95,40 V 30 H 105 V 40" fill="${f}" stroke="${s}" stroke-width="${w}"/>
+                    <circle cx="100" cy="25" r="5" fill="${s}"/>
+                    <text x="100" y="65" font-size="12" font-family="sans-serif" font-weight="bold" fill="${s}" text-anchor="middle">100g</text>
+                    <ellipse cx="100" cy="80" rx="30" ry="4" fill="#000" opacity="0.2"/>
+                </svg>`
+            }
+        ];
+        
+
+
+        // 🌟 수학/좌표계 카테고리 (크기 400x400 확대 및 스마트 스케일링 적용)
+        shapeData.math_coords = [
+            {
+                id: 'math_coord_4q_dynamic',
+                name: '4사분면 (스마트 동적 범위)',
+                generate: (f, s, w, sx = 1, sy = 1) => {
+                    const width = 400 * sx, height = 400 * sy;
+                    let xSpan = coordXMax - coordXMin; if (xSpan <= 0) xSpan = 1;
+                    let ySpan = coordYMax - coordYMin; if (ySpan <= 0) ySpan = 1;
+
+                    const getX = val => ((val - coordXMin) / xSpan) * width;
+                    const getY = val => height - ((val - coordYMin) / ySpan) * height;
+                    const getStep = span => { if (span <= 10) return 1; if (span <= 25) return 2; if (span <= 50) return 5; return 10; };
+                    let stepX = getStep(xSpan), stepY = getStep(ySpan);
+                    let elements = '';
+
+                    for (let x = Math.ceil(coordXMin / stepX) * stepX; x <= coordXMax; x += stepX) {
+                        let px = getX(x);
+                        elements += `<line x1="${px}" y1="0" x2="${px}" y2="${height}" stroke="${s}" opacity="0.15" stroke-width="${Math.max(0.5, w / 2)}"/>`;
+                        if (x !== 0 && px > 5 && px < width - 5 && showCoordNumbers) elements += `<text x="${px}" y="${Math.min(height - 5, Math.max(15, getY(0) + 16))}" font-size="12" text-anchor="middle" font-family="sans-serif" fill="${s}" opacity="0.8">${x}</text>`;
+                    }
+                    for (let y = Math.ceil(coordYMin / stepY) * stepY; y <= coordYMax; y += stepY) {
+                        let py = getY(y);
+                        elements += `<line x1="0" y1="${py}" x2="${width}" y2="${py}" stroke="${s}" opacity="0.15" stroke-width="${Math.max(0.5, w / 2)}"/>`;
+                        if (y !== 0 && py > 5 && py < height - 5 && showCoordNumbers) elements += `<text x="${Math.min(width - 5, Math.max(10, getX(0) - 8))}" y="${py + 4}" font-size="12" text-anchor="end" font-family="sans-serif" fill="${s}" opacity="0.8">${y}</text>`;
+                    }
+
+                    let xAxisY = getY(0), yAxisX = getX(0);
+                    if (xAxisY >= 0 && xAxisY <= height) {
+                        elements += `<line x1="0" y1="${xAxisY}" x2="${width}" y2="${xAxisY}" stroke="${s}" stroke-width="${w}"/>`;
+                        elements += `<polygon points="${width},${xAxisY} ${width - 6},${xAxisY - 4} ${width - 6},${xAxisY + 4}" fill="${s}"/>`;
+                        elements += `<text x="${width - 12}" y="${xAxisY - 8}" font-size="14" font-style="italic" font-family="serif" fill="${s}">x</text>`;
+                    }
+                    if (yAxisX >= 0 && yAxisX <= width) {
+                        elements += `<line x1="${yAxisX}" y1="0" x2="${yAxisX}" y2="${height}" stroke="${s}" stroke-width="${w}"/>`;
+                        elements += `<polygon points="${yAxisX},0 ${yAxisX - 4},6 ${yAxisX + 4},6" fill="${s}"/>`;
+                        elements += `<text x="${yAxisX + 8}" y="12" font-size="14" font-style="italic" font-family="serif" fill="${s}">y</text>`;
+                    }
+                    if (xAxisY >= 0 && xAxisY <= height && yAxisX >= 0 && yAxisX <= width && showCoordNumbers) {
+                        elements += `<text x="${yAxisX - 8}" y="${xAxisY + 16}" font-size="12" fill="${s}">O</text>`;
+                    }
+
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="100%">${elements}</svg>`;
+                }
+            },
+            {
+                id: 'math_coord_1q_dynamic',
+                name: '1사분면 (스마트 동적 범위)',
+                generate: (f, s, w, sx = 1, sy = 1) => {
+                    const width = 400 * sx, height = 400 * sy;
+                    let xMax = Math.max(1, coordXMax), yMax = Math.max(1, coordYMax);
+                    const getX = val => 30 + (val / xMax) * (width - 50);
+                    const getY = val => (height - 30) - (val / yMax) * (height - 50);
+                    const getStep = span => { if (span <= 10) return 1; if (span <= 25) return 2; if (span <= 50) return 5; return 10; };
+                    let stepX = getStep(xMax), stepY = getStep(yMax);
+                    let elements = '';
+
+                    for (let x = stepX; x <= xMax; x += stepX) {
+                        let px = getX(x);
+                        elements += `<line x1="${px}" y1="20" x2="${px}" y2="${height - 30}" stroke="${s}" opacity="0.15" stroke-width="${Math.max(0.5, w / 2)}"/>`;
+                        if (showCoordNumbers) elements += `<text x="${px}" y="${height - 10}" font-size="12" text-anchor="middle" font-family="sans-serif" fill="${s}">${x}</text>`;
+                    }
+                    for (let y = stepY; y <= yMax; y += stepY) {
+                        let py = getY(y);
+                        elements += `<line x1="30" y1="${py}" x2="${width - 20}" y2="${py}" stroke="${s}" opacity="0.15" stroke-width="${Math.max(0.5, w / 2)}"/>`;
+                        if (showCoordNumbers) elements += `<text x="22" y="${py + 4}" font-size="12" text-anchor="end" font-family="sans-serif" fill="${s}">${y}</text>`;
+                    }
+
+                    elements += `<line x1="30" y1="10" x2="30" y2="${height - 30}" stroke="${s}" stroke-width="${w}"/>`;
+                    elements += `<line x1="30" y1="${height - 30}" x2="${width - 10}" y2="${height - 30}" stroke="${s}" stroke-width="${w}"/>`;
+                    elements += `<polygon points="30,10 26,16 34,16" fill="${s}"/>`;
+                    elements += `<polygon points="${width - 10},${height - 30} ${width - 16},${height - 34} ${width - 16},${height - 26}" fill="${s}"/>`;
+                    if (showCoordNumbers) elements += `<text x="15" y="${height - 10}" font-size="12" fill="${s}">0</text>`;
+                    elements += `<text x="${width - 20}" y="${height - 40}" font-size="14" font-style="italic" font-family="serif" fill="${s}">x</text>`;
+                    elements += `<text x="40" y="20" font-size="14" font-style="italic" font-family="serif" fill="${s}">y</text>`;
+
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="100%">${elements}</svg>`;
+                }
+            },
+            {
+                id: 'math_number_line_dynamic',
+                name: '수직선 (스마트 동적 범위)',
+                generate: (f, s, w, sx = 1, sy = 1) => {
+                    const width = 400 * sx, height = 100 * sy;
+                    let xSpan = coordXMax - coordXMin; if (xSpan <= 0) xSpan = 1;
+                    const getX = val => 30 + ((val - coordXMin) / xSpan) * (width - 60);
+                    const getStep = span => { if (span <= 10) return 1; if (span <= 25) return 2; if (span <= 50) return 5; return 10; };
+                    let stepX = getStep(xSpan);
+                    let cy = height / 2;
+
+                    let elements = `<line x1="20" y1="${cy}" x2="${width - 20}" y2="${cy}" stroke="${s}" stroke-width="${w}"/>`;
+                    elements += `<polygon points="${width - 20},${cy} ${width - 28},${cy - 4} ${width - 28},${cy + 4}" fill="${s}"/>`;
+                    elements += `<polygon points="20,${cy} 28,${cy - 4} 28,${cy + 4}" fill="${s}"/>`;
+
+                    for (let x = Math.ceil(coordXMin / stepX) * stepX; x <= coordXMax; x += stepX) {
+                        let px = getX(x);
+                        elements += `<line x1="${px}" y1="${cy - 10}" x2="${px}" y2="${cy + 10}" stroke="${s}" stroke-width="${Math.max(1, w * 0.8)}"/>`;
+                        if (showCoordNumbers) elements += `<text x="${px}" y="${cy + 25}" font-size="12" text-anchor="middle" font-family="sans-serif" fill="${s}">${x}</text>`;
+                    }
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="100%">${elements}</svg>`;
+                }
+            },
+            {
+                id: 'math_polar_coords',
+                name: '극좌표계 (Polar Grid)',
+                generate: (f, s, w, sx = 1, sy = 1) => {
+                    const size = 400 * Math.max(sx, sy);
+                    const cx = size / 2, cy = size / 2;
+                    let circles = '';
+                    const maxR = (size / 2) - 20;
+                    const stepR = maxR / 5;
+                    for (let r = stepR; r <= maxR; r += stepR) { circles += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s}" opacity="0.3" stroke-width="${Math.max(0.5, w / 2)}"/>`; }
+                    let lines = '';
+                    for (let a = 0; a < 180; a += 30) { lines += `<line x1="${cx - maxR}" y1="${cy}" x2="${cx + maxR}" y2="${cy}" stroke="${s}" opacity="0.3" stroke-width="${Math.max(0.5, w / 2)}" transform="rotate(${a} ${cx} ${cy})"/>`; }
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="100%" height="100%">${circles}${lines}<line x1="${cx - maxR - 10}" y1="${cy}" x2="${cx + maxR + 10}" y2="${cy}" stroke="${s}" stroke-width="${w}"/><line x1="${cx}" y1="${cy - maxR - 10}" x2="${cx}" y2="${cy + maxR + 10}" stroke="${s}" stroke-width="${w}"/><circle cx="${cx}" cy="${cy}" r="3" fill="${s}"/></svg>`;
+                }
+            },
+            {
+                id: 'math_unit_circle',
+                name: '단위원 (삼각함수 설명용)',
+                generate: (f, s, w, sx = 1, sy = 1) => {
+                    const size = 400 * Math.max(sx, sy);
+                    const cx = size / 2, cy = size / 2;
+                    const r = (size / 2) - 40;
+                    const endX = cx + r * Math.cos(Math.PI / 6);
+                    const endY = cy - r * Math.sin(Math.PI / 6);
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="100%" height="100%">
+                        <line x1="${cx - r - 20}" y1="${cy}" x2="${cx + r + 20}" y2="${cy}" stroke="${s}" stroke-width="${Math.max(0.5, w / 2)}"/>
+                        <line x1="${cx}" y1="${cy - r - 20}" x2="${cx}" y2="${cy + r + 20}" stroke="${s}" stroke-width="${Math.max(0.5, w / 2)}"/>
+                        <circle cx="${cx}" cy="${cy}" r="${r}" fill="${f}" opacity="0.15" stroke="${s}" stroke-width="${w}"/>
+                        <line x1="${cx}" y1="${cy}" x2="${endX}" y2="${endY}" stroke="${s}" stroke-width="${Math.max(w, 1.5)}"/>
+                        <path d="M${cx + r * 0.3},${cy} A${r * 0.3},${r * 0.3} 0 0,0 ${cx + r * 0.3 * Math.cos(Math.PI / 6)},${cy - r * 0.3 * Math.sin(Math.PI / 6)}" fill="none" stroke="${s}" stroke-width="${Math.max(0.5, w * 0.8)}"/>
+                        <circle cx="${endX}" cy="${endY}" r="4" fill="${s}"/>
+                        <line x1="${endX}" y1="${endY}" x2="${endX}" y2="${cy}" stroke="${s}" stroke-width="${Math.max(0.5, w / 2)}" stroke-dasharray="4,4"/>
+                        <text x="${cx + r * 0.4}" y="${cy - r * 0.1}" font-size="14" font-family="serif" font-style="italic" fill="${s}">θ</text>
+                    </svg>`;
+                }
+            },
+            {
+                id: 'math_3d_axes',
+                name: '3차원 공간 축 (x,y,z)',
+                generate: (f, s, w, sx = 1, sy = 1) => {
+                    // 💡 드래그하는 배율(sx, sy)에 맞춰서 선의 길이(len)도 유동적으로 늘어나게 수정!
+                    const width = 400 * sx, height = 400 * sy;
+                    const cx = width / 2, cy = height / 2 + (40 * sy);
+                    const lenZ = 160 * sy;
+                    const lenX = 120 * sx;
+                    const lenY = 140 * sx;
+
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="100%">
+                        <line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - lenZ}" stroke="${s}" stroke-width="${w}"/>
+                        <line x1="${cx}" y1="${cy}" x2="${cx - lenX}" y2="${cy + lenX * 0.6}" stroke="${s}" stroke-width="${w}"/>
+                        <line x1="${cx}" y1="${cy}" x2="${cx + lenY}" y2="${cy}" stroke="${s}" stroke-width="${w}"/>
+                        <polygon points="${cx},${cy - lenZ} ${cx - 4},${cy - lenZ + 8} ${cx + 4},${cy - lenZ + 8}" fill="${s}"/>
+                        <polygon points="${cx - lenX},${cy + lenX * 0.6} ${cx - lenX + 8},${cy + lenX * 0.6 - 6} ${cx - lenX + 8},${cy + lenX * 0.6 + 8}" fill="${s}"/>
+                        <polygon points="${cx + lenY},${cy} ${cx + lenY - 10},${cy - 4} ${cx + lenY - 10},${cy + 4}" fill="${s}"/>
+                        <text x="${cx + 10}" y="${cy - lenZ + 12}" font-size="16" fill="${s}" font-style="italic" font-family="serif">z</text>
+                        <text x="${cx - lenX - 15}" y="${cy + lenX * 0.6}" font-size="16" fill="${s}" font-style="italic" font-family="serif">x</text>
+                        <text x="${cx + lenY - 10}" y="${cy - 10}" font-size="16" fill="${s}" font-style="italic" font-family="serif">y</text>
+                    </svg>`;
+                }
+            },
+            {
+                id: 'math_graph_paper',
+                name: '모눈종이 (Graph Paper)',
+                generate: (f, s, w, sx = 1, sy = 1) => {
+                    const width = 400 * sx, height = 400 * sy;
+                    // 💡 입력창의 '최대값' 숫자를 칸의 개수로 활용합니다.
+                    const cols = Math.max(1, Math.round(coordXMax));
+                    const rows = Math.max(1, Math.round(coordYMax));
+                    const stepX = width / cols;
+                    const stepY = height / rows;
+
+                    let grid = '';
+                    for (let i = 0; i <= cols; i++) {
+                        let sw = (i % 5 === 0) ? Math.max(1, w * 0.8) : Math.max(0.5, w * 0.3);
+                        grid += `<line x1="${i * stepX}" y1="0" x2="${i * stepX}" y2="${height}" stroke="${s}" opacity="0.4" stroke-width="${sw}"/>`;
+                    }
+                    for (let i = 0; i <= rows; i++) {
+                        let sw = (i % 5 === 0) ? Math.max(1, w * 0.8) : Math.max(0.5, w * 0.3);
+                        grid += `<line x1="0" y1="${i * stepY}" x2="${width}" y2="${i * stepY}" stroke="${s}" opacity="0.4" stroke-width="${sw}"/>`;
+                    }
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="100%"><rect width="${width}" height="${height}" fill="${f}" opacity="0.05"/>${grid}</svg>`;
+                }
+            },
+            {
+                id: 'math_complex_plane',
+                name: '복소평면 (z = a+bi)',
+                generate: (f, s, w, sx = 1, sy = 1) => {
+                    const width = 400 * sx, height = 400 * sy;
+                    const cx = width / 2, cy = height / 2;
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="100%">
+                        <line x1="${cx}" y1="40" x2="${cx}" y2="${height - 40}" stroke="${s}" stroke-width="${w}"/>
+                        <line x1="40" y1="${cy}" x2="${width - 40}" y2="${cy}" stroke="${s}" stroke-width="${w}"/>
+                        <polygon points="${cx},40 ${cx - 4},48 ${cx + 4},48" fill="${s}"/>
+                        <polygon points="${width - 40},${cy} ${width - 48},${cy - 4} ${width - 48},${cy + 4}" fill="${s}"/>
+                        <text x="${width - 40}" y="${cy - 10}" font-size="14" fill="${s}" font-family="sans-serif">Re</text>
+                        <text x="${cx + 10}" y="50" font-size="14" fill="${s}" font-family="sans-serif">Im</text>
+                        <line x1="${cx}" y1="${cy}" x2="${cx + 80}" y2="${cy - 60}" stroke="${f}" stroke-width="${Math.max(w, 2)}"/>
+                        <circle cx="${cx + 80}" cy="${cy - 60}" r="5" fill="${f}"/>
+                        <text x="${cx + 90}" y="${cy - 60}" font-size="14" font-family="serif" font-style="italic" fill="${s}">z</text>
+                    </svg>`;
+                }
+            },
+            {
+                id: 'math_dot_paper',
+                name: '점종이 (Geoboard)',
+                generate: (f, s, w, sx = 1, sy = 1) => {
+                    const width = 400 * sx, height = 400 * sy;
+                    // 💡 입력창의 숫자를 점의 개수로 활용합니다.
+                    const dotsX = Math.max(2, Math.round(coordXMax));
+                    const dotsY = Math.max(2, Math.round(coordYMax));
+                    const paddingX = width * 0.05;
+                    const paddingY = height * 0.05;
+                    const stepX = (width - paddingX * 2) / (dotsX - 1);
+                    const stepY = (height - paddingY * 2) / (dotsY - 1);
+
+                    let dots = '';
+                    for (let i = 0; i < dotsX; i++) {
+                        for (let j = 0; j < dotsY; j++) {
+                            dots += `<circle cx="${paddingX + i * stepX}" cy="${paddingY + j * stepY}" r="${Math.max(2, w)}" fill="${s}" opacity="0.6"/>`;
+                        }
+                    }
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="100%"><rect width="${width}" height="${height}" fill="${f}" opacity="0.05"/>${dots}</svg>`;
+                }
+            },
+        ];
+
+        // 3D 입체 도형 카테고리 데이터 (완벽한 원근/명암 및 겨냥도 점선 지원)
+        shapeData['3d_shapes'] = [
+            {
+                id: '3d_cube',
+                name: '정육면체',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<path fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" d="M50,125 L100,100 L150,125 M100,100 L100,40" opacity="0.7"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" d="M100,40 L150,65 L100,90 L50,65 Z"/><path fill="${f}" d="M50,65 L100,90 V150 L50,125 Z"/><path fill="#000" opacity="0.1" d="M50,65 L100,90 V150 L50,125 Z"/><path fill="${f}" d="M100,90 L150,65 V125 L100,150 Z"/><path fill="#000" opacity="0.3" d="M100,90 L150,65 V125 L100,150 Z"/>${hLine}</g></svg>`;
+                }
+            },
+            {
+                id: '3d_cylinder',
+                name: '원기둥',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<path fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" d="M140,140 A40,15 0 0,0 60,140" opacity="0.7"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" d="M60,60 V140 A40,15 0 0,0 140,140 V60 Z"/><path fill="#000" opacity="0.15" d="M100,60 V155 A40,15 0 0,0 140,140 V60 Z"/><ellipse cx="100" cy="60" rx="40" ry="15" fill="${f}"/>${hLine}</g></svg>`;
+                }
+            },
+            {
+                id: '3d_cone',
+                name: '원뿔',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<path fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" d="M140,140 A40,15 0 0,0 60,140" opacity="0.7"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" d="M100,30 L60,140 A40,15 0 0,0 140,140 Z"/><path fill="#000" opacity="0.15" d="M100,30 L100,155 A40,15 0 0,0 140,140 Z"/>${hLine}</g></svg>`;
+                }
+            },
+            {
+                id: '3d_pyramid',
+                name: '사각뿔',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<path fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" d="M50,125 L100,100 L150,125 M100,100 L100,40" opacity="0.7"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" d="M100,40 L50,125 L100,150 Z"/><path fill="#000" opacity="0.1" d="M100,40 L50,125 L100,150 Z"/><path fill="${f}" d="M100,40 L100,150 L150,125 Z"/><path fill="#000" opacity="0.25" d="M100,40 L100,150 L150,125 Z"/>${hLine}</g></svg>`;
+                }
+            },
+            {
+                id: '3d_sphere',
+                name: '구 (Sphere)',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<ellipse cx="100" cy="100" rx="50" ry="15" fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" opacity="0.5"/><ellipse cx="100" cy="100" rx="15" ry="50" fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" opacity="0.5"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><radialGradient id="sphereGrad_${currentShapeId}" cx="35%" cy="35%" r="60%"><stop offset="0%" stop-color="#fff" stop-opacity="0.6"/><stop offset="50%" stop-color="${f}" stop-opacity="1"/><stop offset="100%" stop-color="#000" stop-opacity="0.4"/></radialGradient></defs><circle cx="100" cy="100" r="50" fill="url(#sphereGrad_${currentShapeId})" stroke="${s}" stroke-width="${w}"/>${hLine}</svg>`;
+                }
+            },
+            {
+                id: '3d_prism',
+                name: '삼각기둥',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<path fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" d="M70,140 L130,140" opacity="0.7"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" d="M70,50 L130,50 L100,80 Z"/><path fill="${f}" d="M70,50 L100,80 V170 L70,140 Z"/><path fill="#000" opacity="0.1" d="M70,50 L100,80 V170 L70,140 Z"/><path fill="${f}" d="M100,80 L130,50 V140 L100,170 Z"/><path fill="#000" opacity="0.3" d="M100,80 L130,50 V140 L100,170 Z"/>${hLine}</g></svg>`;
+                }
+            },
+            {
+                id: '3d_tube',
+                name: '파이프/관',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<path fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" d="M140,140 A40,15 0 0,0 60,140 M75,60 V140 M125,60 V140 M125,140 A25,9 0 1,1 75,140 A25,9 0 1,1 125,140" opacity="0.7"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" d="M60,60 V140 A40,15 0 0,0 140,140 V60 Z"/><path fill="#000" opacity="0.2" d="M100,60 V155 A40,15 0 0,0 140,140 V60 Z"/><ellipse cx="100" cy="60" rx="40" ry="15" fill="${f}"/><ellipse cx="100" cy="60" rx="25" ry="9" fill="#000" opacity="0.15" stroke="none"/><ellipse cx="100" cy="60" rx="25" ry="9" fill="none" stroke="${s}" stroke-width="${w}"/>${hLine}</g></svg>`;
+                }
+            },
+            {
+                id: '3d_stairs',
+                name: '입체 계단',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<path fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" d="M50,160 L110,130 L150,110 M110,130 L110,40" opacity="0.7"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" d="M50,130 L90,110 L110,100 L70,120 Z"/><path fill="${f}" d="M70,90 L110,70 L130,60 L90,80 Z"/><path fill="${f}" d="M90,50 L130,30 L150,20 L110,40 Z"/><path fill="${f}" d="M50,160 L90,140 L90,110 L50,130 Z"/><path fill="#000" opacity="0.1" d="M50,160 L90,140 L90,110 L50,130 Z"/><path fill="${f}" d="M70,120 L110,100 L110,70 L70,90 Z"/><path fill="#000" opacity="0.1" d="M70,120 L110,100 L110,70 L70,90 Z"/><path fill="${f}" d="M90,80 L130,60 L130,30 L90,50 Z"/><path fill="#000" opacity="0.1" d="M90,80 L130,60 L130,30 L90,50 Z"/><path fill="${f}" d="M90,140 L90,110 L110,100 L110,70 L130,60 L130,30 L150,20 L150,110 Z"/><path fill="#000" opacity="0.25" d="M90,140 L90,110 L110,100 L110,70 L130,60 L130,30 L150,20 L150,110 Z"/>${hLine}</g></svg>`;
+                }
+            },
+            {
+                id: '3d_torus',
+                name: '입체 도넛',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<ellipse cx="100" cy="100" rx="80" ry="25" fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" opacity="0.5"/><ellipse cx="100" cy="100" rx="40" ry="12" fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" opacity="0.5"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><linearGradient id="torusGrad_${currentShapeId}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#fff" stop-opacity="0.3"/><stop offset="50%" stop-color="${f}" stop-opacity="1"/><stop offset="100%" stop-color="#000" stop-opacity="0.3"/></linearGradient></defs><path fill="url(#torusGrad_${currentShapeId})" stroke="${s}" stroke-width="${w}" stroke-linejoin="round" d="M100,40 C160,40 180,80 180,100 C180,120 160,160 100,160 C40,160 20,120 20,100 C20,80 40,40 100,40 Z M100,60 C70,60 60,80 60,100 C60,120 70,140 100,140 C130,140 140,120 140,100 C140,80 130,60 100,60 Z"/>${hLine}</svg>`;
+                }
+            },
+            {
+                id: '3d_hex_prism',
+                name: '육각기둥',
+                generate: (f, s, w) => {
+                    const hLine = showHiddenLines ? `<path fill="none" stroke="${s}" stroke-width="${w}" stroke-dasharray="5,4" d="M65,140 L65,110 L100,90 L135,110 L135,140 M65,110 L65,60 M100,90 L100,40 M135,110 L135,60" opacity="0.7"/>` : '';
+                    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><g stroke="${s}" stroke-width="${w}" stroke-linejoin="round"><path fill="${f}" d="M100,40 L135,60 L135,90 L100,110 L65,90 L65,60 Z"/><path fill="${f}" d="M65,90 L100,110 V160 L65,140 Z"/><path fill="#000" opacity="0.1" d="M65,90 L100,110 V160 L65,140 Z"/><path fill="${f}" d="M100,110 L135,90 V140 L100,160 Z"/><path fill="#000" opacity="0.25" d="M100,110 L135,90 V140 L100,160 Z"/>${hLine}</g></svg>`;
+                }
+            }
+        ];
+
+        // 🌟 [정석 처리] 데이터 물리적 해상도 원천 확장
+        // 2D 도형(화살표, 다각형, 원)은 200x100 -> 600x300
+        // 가짜 3D 도형(입체 도형)은 200x200 -> 600x600 으로 3배 뻥튀기!
+        ['arrows', 'polygons', 'circles', '3d_shapes', 'science'].forEach(category => {
+            shapeData[category].forEach(shape => {
+                const originalGenerate = shape.generate;
+                shape.generate = (f, s, w, sx = 1, sy = 1) => {
+                    let svg = originalGenerate(f, s, w, sx, sy);
+
+                    // 1. 기본 viewBox 확장
+                    svg = svg.replace('viewBox="0 0 200 100"', 'viewBox="0 0 600 300"');
+                    svg = svg.replace('viewBox="0 0 200 200"', 'viewBox="0 0 600 600"');
+
+                    // 2. 기본 속성(cx, cy, r, rx, ry, x, y, x1, y1, x2, y2, width, height) 좌표 3배 변환
+                    // (그라데이션의 35% 같은 % 값은 안전하게 무시됩니다)
+                    const attrs = ['cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'width', 'height'];
+                    attrs.forEach(attr => {
+                        const regex = new RegExp(`\\b${attr}="([-\\d.]+)"`, 'g');
+                        svg = svg.replace(regex, (m, val) => `${attr}="${parseFloat(val) * 3}"`);
+                    });
+
+                    // 3. 점선(겨냥도) 간격 3배 변환 (점선도 해상도에 맞게 굵고 예쁘게!)
+                    svg = svg.replace(/stroke-dasharray="([^"]+)"/g, (match, val) => {
+                        let scaledVals = val.split(/[ ,]+/).map(n => parseFloat(n) * 3).join(',');
+                        return `stroke-dasharray="${scaledVals}"`;
+                    });
+
+                    // 4. 패스(path) 좌표 3배 변환 (곡선 A 명령어 플래그 안전 보호)
+                    svg = svg.replace(/d="([^"]+)"/g, (match, d) => {
+                        const scaledD = d.replace(/([a-zA-Z])([^a-zA-Z]*)/g, (m, cmd, nums) => {
+                            let numbers = nums.trim().split(/[ ,\n]+/).filter(n => n !== '');
+                            if (numbers.length === 0) return cmd;
+
+                            if (cmd.toUpperCase() === 'A') {
+                                let newNums = [];
+                                for (let i = 0; i < numbers.length; i += 7) {
+                                    if (numbers[i + 6] === undefined) break;
+                                    newNums.push(
+                                        parseFloat(numbers[i]) * 3, parseFloat(numbers[i + 1]) * 3,
+                                        numbers[i + 2], numbers[i + 3], numbers[i + 4],
+                                        parseFloat(numbers[i + 5]) * 3, parseFloat(numbers[i + 6]) * 3
+                                    );
+                                }
+                                return cmd + newNums.join(',');
+                            } else {
+                                return cmd + numbers.map(n => parseFloat(n) * 3).join(',');
+                            }
+                        });
+                        return `d="${scaledD}"`;
+                    });
+
+                    // 5. 다각형(polygon) 좌표 3배 변환
+                    svg = svg.replace(/points="([^"]+)"/g, (match, pts) => {
+                        const scaledPts = pts.trim().split(/[ ,\n]+/).map(n => parseFloat(n) * 3).join(',');
+                        return `points="${scaledPts}"`;
+                    });
+
+                    // 6. transform translate 좌표 3배 변환
+                    svg = svg.replace(/translate\(([-\d.]+),([-\d.]+)\)/g, (match, tx, ty) => {
+                        return `translate(${parseFloat(tx) * 3},${parseFloat(ty) * 3})`;
+                    });
+
+                    return svg;
+                };
+            });
+        });
+        // 🌟 진짜 3D (WebGL) 데이터 추가 (총 15종)
+        const dummyGenerate = () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><text x="100" y="60" font-size="30" font-weight="bold" text-anchor="middle" fill="#94a3b8">3D</text></svg>`;
+        shapeData['webgl_3d'] = [
+            { id: 'real_3d_cube', name: '3D 정육면체', type: 'webgl', meshType: 'cube', generate: dummyGenerate },
+            { id: 'real_3d_sphere', name: '3D 매끄러운 구', type: 'webgl', meshType: 'sphere', generate: dummyGenerate },
+            { id: 'real_3d_torus', name: '3D 도넛', type: 'webgl', meshType: 'torus', generate: dummyGenerate },
+            { id: 'real_3d_cone', name: '3D 원뿔', type: 'webgl', meshType: 'cone', generate: dummyGenerate },
+            { id: 'real_3d_cylinder', name: '3D 원기둥', type: 'webgl', meshType: 'cylinder', generate: dummyGenerate },
+            { id: 'real_3d_torusKnot', name: '3D 꼬임 매듭', type: 'webgl', meshType: 'torusKnot', generate: dummyGenerate },
+            { id: 'real_3d_dodecahedron', name: '3D 정12면체', type: 'webgl', meshType: 'dodecahedron', generate: dummyGenerate },
+            { id: 'real_3d_icosahedron', name: '3D 정20면체', type: 'webgl', meshType: 'icosahedron', generate: dummyGenerate },
+            { id: 'real_3d_octahedron', name: '3D 정8면체', type: 'webgl', meshType: 'octahedron', generate: dummyGenerate },
+            { id: 'real_3d_tetrahedron', name: '3D 정4면체', type: 'webgl', meshType: 'tetrahedron', generate: dummyGenerate },
+            { id: 'real_3d_pyramid4', name: '3D 사각뿔', type: 'webgl', meshType: 'pyramid4', generate: dummyGenerate },
+            { id: 'real_3d_prism6', name: '3D 육각기둥', type: 'webgl', meshType: 'prism6', generate: dummyGenerate },
+            { id: 'real_3d_prism3', name: '3D 삼각기둥', type: 'webgl', meshType: 'prism3', generate: dummyGenerate },
+            { id: 'real_3d_diamond', name: '3D 다이아몬드', type: 'webgl', meshType: 'diamond', generate: dummyGenerate },
+            { id: 'real_3d_gem', name: '3D 보석 모양', type: 'webgl', meshType: 'gem', generate: dummyGenerate },
+            
+            { id: 'real_3d_capsule', name: '3D 알약(캡슐)', type: 'webgl', meshType: 'capsule', generate: dummyGenerate },
+            { id: 'real_3d_ring', name: '3D 링(반지)', type: 'webgl', meshType: 'ring', generate: dummyGenerate },
+            { id: 'real_3d_pipe', name: '3D 뚫린 파이프', type: 'webgl', meshType: 'pipe', generate: dummyGenerate },
+            { id: 'real_3d_hourglass', name: '3D 모래시계', type: 'webgl', meshType: 'hourglass', generate: dummyGenerate },
+            { id: 'real_3d_dumbbell', name: '3D 아령', type: 'webgl', meshType: 'dumbbell', generate: dummyGenerate },
+            { id: 'real_3d_snowman', name: '3D 눈사람', type: 'webgl', meshType: 'snowman', generate: dummyGenerate },
+            { id: 'real_3d_mushroom', name: '3D 버섯', type: 'webgl', meshType: 'mushroom', generate: dummyGenerate },
+            { id: 'real_3d_ufo', name: '3D UFO', type: 'webgl', meshType: 'ufo', generate: dummyGenerate },
+            { id: 'real_3d_star3d', name: '3D 입체 별', type: 'webgl', meshType: 'star3d', generate: dummyGenerate },
+            { id: 'real_3d_cross3d', name: '3D 입체 십자가', type: 'webgl', meshType: 'cross3d', generate: dummyGenerate }
+        ];
+        
+        // --- 전역 상태 ---
+        let currentCategory = 'arrows';
+        let currentShapeId = 'arrow_sleek';
+        let currentFill = '#3B82F6';
+        let currentStroke = '#1E3A8A';
+        let currentStrokeWidth = 1;
+        let currentRotation = 0;
+        let flipH = false;
+        let flipV = false;
+        let showHiddenLines = false;
+        let showCoordNumbers = true; // 🌟 축 숫자 표시 여부
+
+        // 크기 무제한!
+        let shapeScaleX = 1.0;
+        let shapeScaleY = 1.0;
+        let viewZoom = 1.0;
+
+        let coordXMin = -5;
+        let coordXMax = 5;
+        let coordYMin = -5;
+        let coordYMax = 5;
+        let isSelected2D = false;
+
+        // --- DOM Elements ---
+        const categoryListEl = document.getElementById('category-list');
+        const shapeListEl = document.getElementById('shape-list');
+        const previewContainer = document.getElementById('preview-container');
+        const currentShapeNameEl = document.getElementById('current-shape-name');
+        const toastEl = document.getElementById('toast');
+        const toastMsgEl = document.getElementById('toast-message');
+        const sidebarShapeList = document.getElementById('shape-list');
+
+        function showToast(msg, isError = false) {
+            toastMsgEl.textContent = msg;
+            if (isError) {
+                toastEl.classList.remove('bg-gray-800');
+                toastEl.classList.add('bg-red-600');
+            } else {
+                toastEl.classList.remove('bg-red-600');
+                toastEl.classList.add('bg-gray-800');
+            }
+            toastEl.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+            setTimeout(() => toastEl.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none'), 2500);
+        }
+
+        function resetTransform() {
+            currentRotation = 0;
+            shapeScaleX = 1.0;
+            shapeScaleY = 1.0;
+            viewZoom = 1.0;
+            flipH = false;
+            flipV = false;
+
+            const rotRange = document.getElementById('rotation');
+            const rotNum = document.getElementById('rotation-number');
+            if (rotRange) rotRange.value = 0;
+            if (rotNum) rotNum.value = 0;
+
+            const scaleXSlider = document.getElementById('scale-x-slider');
+            const scaleYSlider = document.getElementById('scale-y-slider');
+            if (scaleXSlider) scaleXSlider.value = 1.0;
+            if (scaleYSlider) scaleYSlider.value = 1.0;
+
+            const btnH = document.getElementById('btn-flip-h');
+            const btnV = document.getElementById('btn-flip-v');
+            if (btnH) btnH.classList.remove('bg-blue-100', 'border-blue-400', 'text-blue-700');
+            if (btnV) btnV.classList.remove('bg-blue-100', 'border-blue-400', 'text-blue-700');
+        }
+
+        function initUI() {
+            categoryListEl.className = 'grid grid-cols-2 gap-2';
+            categoryListEl.innerHTML = '';
+
+            categories.forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = `w-full text-center px-1 py-2 rounded-md text-xs transition-all border ${currentCategory === cat.id ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`;
+                btn.textContent = cat.name;
+                btn.onclick = () => {
+                    if (currentCategory !== cat.id) {
+                        currentCategory = cat.id;
+                        currentShapeId = shapeData[cat.id][0].id;
+                        isSelected2D = false;
+                        resetTransform();
+                        initUI();
+                    }
+                };
+                categoryListEl.appendChild(btn);
+            });
+
+            shapeListEl.innerHTML = '';
+            shapeData[currentCategory].forEach(shape => {
+                const btn = document.createElement('button');
+                btn.className = `w-full flex items-center gap-3 p-3 rounded-lg mb-2 border transition-all text-left ${currentShapeId === shape.id ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`;
+
+                let iconSvg = shape.generate('#94a3b8', '#64748b', 1);
+                iconSvg = iconSvg.replace('width="100%" height="100%"', 'width="100%" height="100%" viewBox="0 0 200 100"');
+
+                btn.innerHTML = `<div class="w-10 h-6 bg-gray-100 rounded flex items-center justify-center overflow-hidden scale-75">${iconSvg}</div><span class="text-xs truncate">${shape.name}</span>`;
+                btn.onclick = () => {
+                    if (currentShapeId !== shape.id) {
+                        currentShapeId = shape.id;
+                        isSelected2D = false;
+                        resetTransform();
+                        initUI();
+                    }
+                };
+                shapeListEl.appendChild(btn);
+            });
+            renderPreview();
+        }
+
+        document.getElementById('fill-color').addEventListener('input', (e) => {
+            currentFill = e.target.value;
+            document.getElementById('fill-color-hex').value = currentFill.toUpperCase();
+            renderPreview();
+        });
+
+        document.getElementById('stroke-color').addEventListener('input', (e) => {
+            currentStroke = e.target.value;
+            document.getElementById('stroke-color-hex').value = currentStroke.toUpperCase();
+            renderPreview();
+        });
+
+        document.getElementById('stroke-width').addEventListener('input', (e) => {
+            currentStrokeWidth = e.target.value;
+            document.getElementById('stroke-width-value').textContent = currentStrokeWidth + 'px';
+            renderPreview();
+        });
+
+        const helpModal = document.getElementById('help-modal');
+        document.getElementById('btn-help').onclick = () => helpModal.classList.remove('hidden');
+        document.getElementById('btn-close-help').onclick = () => helpModal.classList.add('hidden');
+        document.getElementById('btn-close-help-icon').onclick = () => helpModal.classList.add('hidden');
+
+        // --- 🌟 수학적 패딩 제거: 완벽한 바운딩 박스 계산 엔진 ---
+        // --- 1. 순수하게 변환만 수행하는 applyTransform (타이트한 BBox 적용) ---
+        function applyTransform(svgStr, isPreview = false) {
+            // 1. 진짜 도형이 차지하는 픽셀 영역(BBox)을 DOM으로 즉석 계산!
+            const hiddenDiv = document.createElement('div');
+            hiddenDiv.style.cssText = 'position:absolute; visibility:hidden; pointer-events:none; width:0; height:0; overflow:hidden;';
+            hiddenDiv.innerHTML = svgStr;
+            document.body.appendChild(hiddenDiv);
+
+            const svgEl = hiddenDiv.querySelector('svg');
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            while (svgEl.firstChild) {
+                g.appendChild(svgEl.firstChild);
+            }
+            svgEl.appendChild(g);
+
+            const bbox = g.getBBox();
+            document.body.removeChild(hiddenDiv);
+
+            // 실제 도형의 타이트한 가로/세로 길이와 중심점
+            const tightW = Math.max(1, bbox.width);
+            const tightH = Math.max(1, bbox.height);
+            const tightX = bbox.x;
+            const tightY = bbox.y;
+            const cx = tightX + tightW / 2;
+            const cy = tightY + tightH / 2;
+
+            const isMathCoord = currentCategory === 'math_coords';
+
+            const scaleX = (flipH ? -1 : 1) * (isMathCoord ? 1 : shapeScaleX);
+            const scaleY = (flipV ? -1 : 1) * (isMathCoord ? 1 : shapeScaleY);
+            const rad = currentRotation * Math.PI / 180;
+
+            // 도형을 회전했을 때 잘리지 않도록 타이트한 4개 꼭짓점 회전 계산
+            const corners = [
+                { x: tightX - cx, y: tightY - cy },
+                { x: tightX + tightW - cx, y: tightY - cy },
+                { x: tightX + tightW - cx, y: tightY + tightH - cy },
+                { x: tightX - cx, y: tightY + tightH - cy }
+            ];
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+            corners.forEach(p => {
+                let sx = p.x * (isMathCoord ? 1 : Math.abs(shapeScaleX));
+                let sy = p.y * (isMathCoord ? 1 : Math.abs(shapeScaleY));
+                let rx = sx * Math.cos(rad) - sy * Math.sin(rad);
+                let ry = sx * Math.sin(rad) + sy * Math.cos(rad);
+                rx += cx; ry += cy;
+                minX = Math.min(minX, rx); minY = Math.min(minY, ry);
+                maxX = Math.max(maxX, rx); maxY = Math.max(maxY, ry);
+            });
+
+            // 렌더링 여백 2px 추가 (선 두께 잘림 방지)
+            minX -= 2; minY -= 2; maxX += 2; maxY += 2;
+
+            const newW = Math.max(1, maxX - minX);
+            const newH = Math.max(1, maxY - minY);
+
+            let result = svgStr;
+            // 허허벌판 600x300 viewBox를 지우고 진짜 타이트한 viewBox로 완벽 교체!
+            result = result.replace(/viewBox="[^"]*"/, `viewBox="${minX} ${minY} ${newW} ${newH}"`);
+
+            const displayW = newW * (isPreview ? viewZoom : 1);
+            const displayH = newH * (isPreview ? viewZoom : 1);
+            result = result.replace(/width="[^"]*"/, `width="${displayW}"`);
+            result = result.replace(/height="[^"]*"/, `height="${displayH}"`);
+
+            const transformStr = `transform="translate(${cx}, ${cy}) rotate(${currentRotation}) scale(${scaleX}, ${scaleY}) translate(-${cx}, -${cy})"`;
+
+            // 나중에 선택 박스가 크기를 추적할 수 있도록 data-tight-w, h 값을 심어둡니다.
+            result = result.replace(/(<svg[^>]*>)/i, `$1<g id="svg-inner-group" data-tight-w="${tightW}" data-tight-h="${tightH}" ${transformStr}>`);
+            result = result.replace(/(<\/svg>)/i, '</g>$1');
+            return result;
+        }
+
+        // --- 2. 진짜 해상도를 정확히 추적하는 선택 박스 ---
+        function updateSelectionOverlay() {
+            const selectionOverlay = document.getElementById('selection-overlay');
+            const innerGroup = document.getElementById('svg-inner-group');
+
+            if (!isSelected2D || !selectionOverlay || !innerGroup) {
+                if (selectionOverlay) selectionOverlay.classList.add('hidden');
+                return;
+            }
+
+            selectionOverlay.classList.remove('hidden');
+            const isMathCoord = currentCategory === 'math_coords';
+
+            // applyTransform에서 심어둔 진짜 타이트한 가로/세로 길이 추출
+            const tightW = parseFloat(innerGroup.getAttribute('data-tight-w')) || 200;
+            const tightH = parseFloat(innerGroup.getAttribute('data-tight-h')) || 100;
+
+            let w = tightW * (isMathCoord ? 1 : Math.abs(shapeScaleX)) * viewZoom;
+            let h = tightH * (isMathCoord ? 1 : Math.abs(shapeScaleY)) * viewZoom;
+
+            selectionOverlay.style.width = w + 'px';
+            selectionOverlay.style.height = h + 'px';
+            selectionOverlay.style.left = '50%';
+            selectionOverlay.style.top = '50%';
+            selectionOverlay.style.marginLeft = -(w / 2) + 'px';
+            selectionOverlay.style.marginTop = -(h / 2) + 'px';
+            selectionOverlay.style.transform = `rotate(${currentRotation}deg)`;
+        }
+
+        let scene, camera, renderer, currentMesh, controls;
+        let dirLight, ambLight;
+        let currentLightIntensity = 1.0;
+
+        function render3D(shape) {
+            const canvas = document.getElementById('webgl-canvas');
+
+            if (!scene) {
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
+                camera.position.z = 6;
+
+                renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+                renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+
+                ambLight = new THREE.AmbientLight(0xffffff, 0.6 * currentLightIntensity);
+                scene.add(ambLight);
+                dirLight = new THREE.DirectionalLight(0xffffff, 0.8 * currentLightIntensity);
+                dirLight.position.set(5, 10, 7);
+                scene.add(dirLight);
+
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enablePan = false;
+                controls.addEventListener('change', () => { renderer.render(scene, camera); });
+            }
+
+            camera.position.set(0, 0, 6);
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            ambLight.intensity = 0.6 * currentLightIntensity;
+            dirLight.intensity = 0.8 * currentLightIntensity;
+
+            if (currentMesh) {
+                scene.remove(currentMesh);
+            }
+
+            const material = new THREE.MeshStandardMaterial({ color: currentFill, roughness: 0.3, metalness: 0.2 });
+            currentMesh = new THREE.Group();
+
+            let geom;
+            if (shape.meshType === 'cube') geom = new THREE.BoxGeometry(2.5, 2.5, 2.5);
+            else if (shape.meshType === 'sphere') geom = new THREE.SphereGeometry(1.8, 64, 64);
+            else if (shape.meshType === 'torus') geom = new THREE.TorusGeometry(1.5, 0.6, 32, 64);
+            else if (shape.meshType === 'cone') geom = new THREE.ConeGeometry(1.8, 3.5, 32);
+            else if (shape.meshType === 'cylinder') geom = new THREE.CylinderGeometry(1.5, 1.5, 3.5, 32);
+            else if (shape.meshType === 'torusKnot') geom = new THREE.TorusKnotGeometry(1.2, 0.4, 64, 16);
+            else if (shape.meshType === 'dodecahedron') geom = new THREE.DodecahedronGeometry(1.8);
+            else if (shape.meshType === 'icosahedron') geom = new THREE.IcosahedronGeometry(1.8);
+            else if (shape.meshType === 'octahedron') geom = new THREE.OctahedronGeometry(1.8);
+            else if (shape.meshType === 'tetrahedron') geom = new THREE.TetrahedronGeometry(1.8);
+            else if (shape.meshType === 'pyramid4') geom = new THREE.ConeGeometry(2, 3.5, 4);
+            else if (shape.meshType === 'prism6') geom = new THREE.CylinderGeometry(1.8, 1.8, 3.5, 6);
+            else if (shape.meshType === 'prism3') geom = new THREE.CylinderGeometry(1.8, 1.8, 3.5, 3);
+            else if (shape.meshType === 'diamond') geom = new THREE.OctahedronGeometry(1.5);
+            else if (shape.meshType === 'gem') geom = new THREE.ConeGeometry(1.8, 3.5, 6);
+            else if (shape.meshType === 'capsule') {
+                const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 1.5, 32), material);
+                const topSphere = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 16), material);
+                topSphere.position.y = 0.75;
+                const botSphere = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 16), material);
+                botSphere.position.y = -0.75;
+                const capGroup = new THREE.Group();
+                capGroup.add(cyl, topSphere, botSphere);
+                capGroup.rotation.z = Math.PI / 4;
+                currentMesh.add(capGroup);
+            }
+            else if (shape.meshType === 'ring') { geom = new THREE.TorusGeometry(1.5, 0.4, 32, 64); geom.scale(1, 1, 0.5); }
+            else if (shape.meshType === 'pipe') { geom = new THREE.CylinderGeometry(1.5, 1.5, 3.5, 32, 1, true); material.side = THREE.DoubleSide; }
+            else if (shape.meshType === 'hourglass') {
+                const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.5, 2, 32), material); c1.position.y = 1;
+                const c2 = new THREE.Mesh(new THREE.ConeGeometry(1.5, 2, 32), material); c2.position.y = -1; c2.rotation.x = Math.PI;
+                currentMesh.add(c1, c2);
+            }
+            else if (shape.meshType === 'dumbbell') {
+                const s1 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 32, 32), material); s1.position.x = -2;
+                const s2 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 32, 32), material); s2.position.x = 2;
+                const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 3, 32), material); bar.rotation.z = Math.PI / 2;
+                currentMesh.add(s1, s2, bar);
+            }
+            else if (shape.meshType === 'snowman') {
+                const base = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), material); base.position.y = -0.5;
+                const head = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), material); head.position.y = 1.5;
+                currentMesh.add(base, head);
+            }
+            else if (shape.meshType === 'mushroom') {
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.8, 2, 32), material); stem.position.y = -0.5;
+                const cap = new THREE.Mesh(new THREE.SphereGeometry(1.8, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), material); cap.position.y = 0.5;
+                material.side = THREE.DoubleSide;
+                currentMesh.add(stem, cap);
+            }
+            else if (shape.meshType === 'ufo') {
+                const disk = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.5, 16, 64), material); disk.rotation.x = Math.PI / 2;
+                const dome = new THREE.Mesh(new THREE.SphereGeometry(1.2, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), material);
+                material.side = THREE.DoubleSide;
+                currentMesh.add(disk, dome);
+            }
+            else if (shape.meshType === 'star3d') {
+                const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0, 2, 1, 5, 1), material); p1.rotation.x = Math.PI / 2;
+                const p2 = new THREE.Mesh(new THREE.CylinderGeometry(0, 2, 1, 5, 1), material); p2.rotation.x = -Math.PI / 2;
+                currentMesh.add(p1, p2);
+            }
+            else if (shape.meshType === 'cross3d') {
+                const b1 = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 1), material);
+                const b2 = new THREE.Mesh(new THREE.BoxGeometry(1, 3, 1), material);
+                currentMesh.add(b1, b2);
+            }
+
+            if (geom) {
+                const m = new THREE.Mesh(geom, material);
+                if (shape.meshType === 'diamond') m.scale.set(1, 1.5, 1);
+                currentMesh.add(m);
+            }
+            currentMesh.rotation.x = 0.5;
+            currentMesh.rotation.y = -0.5;
+            scene.add(currentMesh);
+            renderer.render(scene, camera);
+        }
+
+        // --- 메인 렌더링 함수 ---
+        function renderPreview() {
+            const list = shapeData[currentCategory];
+            const shape = list.find(s => s.id === currentShapeId);
+            if (!shape) return;
+            currentShapeNameEl.textContent = shape.name;
+
+            const webglCanvas = document.getElementById('webgl-canvas');
+            const selectionOverlay = document.getElementById('selection-overlay');
+            const propStrokeColor = document.getElementById('prop-stroke-color');
+            const propStrokeWidth = document.getElementById('prop-stroke-width');
+            const propTransform = document.getElementById('prop-transform');
+            const propMathCoords = document.getElementById('prop-math-coords');
+            const propLight = document.getElementById('prop-light');
+            const btnCopySvg = document.getElementById('btn-copy-svg');
+            const btnSaveImg3d = document.getElementById('btn-save-img-3d');
+            const btnDownload = document.getElementById('btn-download');
+
+            if (shape.type === 'webgl') {
+                previewContainer.style.display = 'none';
+                if (selectionOverlay) selectionOverlay.classList.add('hidden');
+                webglCanvas.classList.remove('hidden');
+                if (propStrokeColor) propStrokeColor.classList.add('hidden');
+                if (propStrokeWidth) propStrokeWidth.classList.add('hidden');
+                if (propTransform) propTransform.classList.add('hidden');
+                if (propMathCoords) propMathCoords.classList.add('hidden');
+                if (propLight) propLight.classList.remove('hidden');
+                if (btnCopySvg) btnCopySvg.classList.add('hidden');
+                if (btnSaveImg3d) btnSaveImg3d.classList.remove('hidden');
+                if (btnDownload) btnDownload.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> 개체(GLB) 저장`;
+                render3D(shape);
+            } else {
+                previewContainer.style.display = 'flex';
+                webglCanvas.classList.add('hidden');
+                if (selectionOverlay) {
+                    if (isSelected2D) selectionOverlay.classList.remove('hidden');
+                    else selectionOverlay.classList.add('hidden');
+                }
+                if (propStrokeColor) propStrokeColor.classList.remove('hidden');
+                if (propStrokeWidth) propStrokeWidth.classList.remove('hidden');
+                if (propTransform) propTransform.classList.remove('hidden');
+                if (propLight) propLight.classList.add('hidden');
+                if (propMathCoords) {
+                    if (currentCategory === 'math_coords') {
+                        propMathCoords.classList.remove('hidden');
+                        const mathPropGrid = document.getElementById('math-prop-grid');
+                        const wrapXMin = document.getElementById('wrap-x-min');
+                        const wrapYMin = document.getElementById('wrap-y-min');
+                        const lblXMin = document.getElementById('lbl-x-min');
+                        const lblXMax = document.getElementById('lbl-x-max');
+                        const lblYMin = document.getElementById('lbl-y-min');
+                        const lblYMax = document.getElementById('lbl-y-max');
+                        const wrapCoordNums = document.getElementById('wrap-coord-numbers');
+                        const mathTitle = document.getElementById('math-coord-title');
+
+                        // 1. 일반 좌표계: 상하좌우 최소/최대값 모두 표시
+                        if (['math_coord_4q_dynamic', 'math_coord_1q_dynamic', 'math_number_line_dynamic'].includes(shape.id)) {
+                            mathPropGrid.classList.remove('hidden');
+                            wrapXMin.classList.remove('hidden');
+                            wrapYMin.classList.remove('hidden');
+                            lblXMin.textContent = "X 최소"; lblXMax.textContent = "X 최대";
+                            lblYMin.textContent = "Y 최소"; lblYMax.textContent = "Y 최대";
+                            wrapCoordNums.classList.remove('hidden');
+                            mathTitle.textContent = "좌표축 범위 설정";
+                        }
+                        // 2. 모눈/점종이: 최소값 입력은 숨기고, 최대값 입력을 '칸/점 개수'로 변경
+                        else if (['math_graph_paper', 'math_dot_paper'].includes(shape.id)) {
+                            mathPropGrid.classList.remove('hidden');
+                            wrapXMin.classList.add('hidden');
+                            wrapYMin.classList.add('hidden');
+                            lblXMax.textContent = "가로 (칸/점) 수";
+                            lblYMax.textContent = "세로 (칸/점) 수";
+                            wrapCoordNums.classList.add('hidden');
+                            mathTitle.textContent = "격자 / 점 개수 설정";
+                        }
+                        // 3. 3D축, 단위원 등: 설정창 불필요하므로 전체 숨김
+                        else {
+                            mathPropGrid.classList.add('hidden');
+                            wrapCoordNums.classList.add('hidden');
+                            mathTitle.textContent = "이 도형은 추가 설정이 없습니다.";
+                        }
+                    } else {
+                        propMathCoords.classList.add('hidden');
+                    }
+                }
+                if (btnCopySvg) btnCopySvg.classList.remove('hidden');
+                if (btnSaveImg3d) btnSaveImg3d.classList.add('hidden');
+                if (btnDownload) btnDownload.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> 파일(SVG) 저장`;
+
+                // 도형이 커져도 선 두께가 두꺼워지지 않도록 비례하여 얇게 그려줌
+                const averageScale = (shapeScaleX + shapeScaleY) / 2;
+                const isMathCoord = currentCategory === 'math_coords';
+                const strokeToUse = isMathCoord ? currentStrokeWidth : (currentStrokeWidth / averageScale);
+
+                // 두 번째 인자(true)를 주어 마우스 화면 줌을 반영해서 그립니다.
+                const rawSvg = shape.generate(currentFill, currentStroke, strokeToUse, Math.abs(shapeScaleX), Math.abs(shapeScaleY));
+                // 기존의 복잡한 SVG 구조 교체 (선택 오버레이는 보존)
+                const overlayHTML = selectionOverlay.outerHTML;
+                previewContainer.innerHTML = applyTransform(rawSvg, true) + overlayHTML;
+
+                updateSelectionOverlay();
+            }
+        }
+
+        // --- 공통: 현재 SVG 데이터 가져오기 (여백 없이 완벽 저장!) ---
+        function getCurrentSvg() {
+            const list = shapeData[currentCategory];
+            const shape = list.find(s => s.id === currentShapeId);
+
+            const averageScale = (shapeScaleX + shapeScaleY) / 2;
+            const isMathCoord = currentCategory === 'math_coords';
+            const strokeToUse = isMathCoord ? currentStrokeWidth : (currentStrokeWidth / averageScale);
+
+            let rawSvg = shape.generate(currentFill, currentStroke, strokeToUse, Math.abs(shapeScaleX), Math.abs(shapeScaleY));
+            return applyTransform(rawSvg);
+        }
+
+        const mapCoordEvent = (id, varName) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', (e) => {
+                let val = parseFloat(e.target.value);
+                if (isNaN(val)) return;
+                if (varName === 'xMin') coordXMin = val;
+                if (varName === 'xMax') coordXMax = val;
+                if (varName === 'yMin') coordYMin = val;
+                if (varName === 'yMax') coordYMax = val;
+                renderPreview();
+            });
+        };
+        mapCoordEvent('coord-x-min', 'xMin');
+        mapCoordEvent('coord-x-max', 'xMax');
+        mapCoordEvent('coord-y-min', 'yMin');
+        mapCoordEvent('coord-y-max', 'yMax');
+
+        const toggleCoordNum = document.getElementById('toggle-coord-numbers');
+        if (toggleCoordNum) toggleCoordNum.addEventListener('change', (e) => {
+            showCoordNumbers = e.target.checked;
+            renderPreview();
+        });
+
+        const lightSlider = document.getElementById('light-intensity');
+        if (lightSlider) {
+            lightSlider.addEventListener('input', (e) => {
+                currentLightIntensity = parseFloat(e.target.value);
+                document.getElementById('light-intensity-value').textContent = Math.round(currentLightIntensity * 100) + '%';
+                if (scene && ambLight && dirLight) {
+                    ambLight.intensity = 0.6 * currentLightIntensity;
+                    dirLight.intensity = 0.8 * currentLightIntensity;
+                    renderer.render(scene, camera);
+                }
+            });
+        }
+
+        document.getElementById('btn-copy-img').onclick = () => {
+            const list = shapeData[currentCategory];
+            const shape = list.find(s => s.id === currentShapeId);
+
+            if (shape && shape.type === 'webgl') {
+                const webglCanvas = document.getElementById('webgl-canvas');
+                webglCanvas.toBlob(async (pngBlob) => {
+                    try {
+                        if (navigator.clipboard && window.ClipboardItem) {
+                            const item = new ClipboardItem({ 'image/png': pngBlob });
+                            await navigator.clipboard.write([item]);
+                            showToast("마우스로 돌린 3D 각도 그대로 그림(PNG) 복사 완료!");
+                        } else { throw new Error(); }
+                    } catch (err) { showToast("복사를 지원하지 않는 환경입니다.", true); }
+                }, 'image/png');
+                return;
+            }
+
+            const svgForClipboard = getCurrentSvg();
+            const canvas = document.createElement('canvas');
+            // SVG에 정의된 진짜 크기(새로운 여백없는 크기)를 추출해 PNG 해상도로 씁니다.
+            const wMatch = svgForClipboard.match(/width="([\d.]+)"/);
+            const hMatch = svgForClipboard.match(/height="([\d.]+)"/);
+            canvas.width = wMatch ? parseFloat(wMatch[1]) : 1000;
+            canvas.height = hMatch ? parseFloat(hMatch[1]) : 1000;
+
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+
+            const base64Svg = btoa(unescape(encodeURIComponent(svgForClipboard)));
+            img.src = "data:image/svg+xml;base64," + base64Svg;
+
+            img.onload = async () => {
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob(async (pngBlob) => {
+                    try {
+                        if (navigator.clipboard && window.ClipboardItem) {
+                            const item = new ClipboardItem({ 'image/png': pngBlob });
+                            await navigator.clipboard.write([item]);
+                            showToast("여백 없이 완벽하게 그림으로 복사되었습니다!");
+                        } else { throw new Error(); }
+                    } catch (err) { showToast("복사를 지원하지 않는 환경입니다.", true); }
+                }, 'image/png');
+            };
+            img.onerror = () => showToast("이미지 생성 중 오류가 발생했습니다.", true);
+        };
+
+        document.getElementById('btn-copy-svg').onclick = async () => {
+            const svgForClipboard = getCurrentSvg();
+            try {
+                if (navigator.clipboard && window.ClipboardItem) {
+                    const blobSvg = new Blob([svgForClipboard], { type: 'image/svg+xml' });
+                    const item = new ClipboardItem({ 'image/svg+xml': blobSvg });
+                    await navigator.clipboard.write([item]);
+                    showToast("여백 없는 벡터(SVG) 형식으로 복사되었습니다!");
+                } else { throw new Error(); }
+            } catch {
+                const ta = document.createElement('textarea');
+                ta.value = svgForClipboard;
+                document.body.appendChild(ta); ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast("코드로 복사되었습니다. (파일 저장을 권장합니다)");
+            }
+        };
+
+        document.getElementById('btn-save-img-3d').onclick = async () => {
+            const webglCanvas = document.getElementById('webgl-canvas');
+            const blob = await new Promise(resolve => webglCanvas.toBlob(resolve, 'image/png'));
+            try {
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({ suggestedName: `${currentShapeId}.png`, types: [{ description: 'PNG 이미지', accept: { 'image/png': ['.png'] } }] });
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                    showToast("그림 파일(PNG)이 저장되었습니다.");
+                } else {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = `${currentShapeId}.png`; a.click(); URL.revokeObjectURL(url);
+                }
+            } catch (err) { if (err.name !== 'AbortError') showToast("저장 중 오류가 발생했습니다.", true); }
+        };
+
+        document.getElementById('btn-download').onclick = async () => {
+            const list = shapeData[currentCategory];
+            const shape = list.find(s => s.id === currentShapeId);
+            try {
+                if (shape.type === 'webgl') {
+                    const exporter = new THREE.GLTFExporter();
+                    exporter.parse(currentMesh, async function (gltf) {
+                        const blob = new Blob([gltf], { type: 'application/octet-stream' });
+                        if (window.showSaveFilePicker) {
+                            const handle = await window.showSaveFilePicker({ suggestedName: `${shape.id}.glb`, types: [{ description: '3D 모델 파일 (GLB)', accept: { 'model/gltf-binary': ['.glb'] } }] });
+                            const writable = await handle.createWritable();
+                            await writable.write(blob);
+                            await writable.close();
+                            showToast("파워포인트용 3D 개체(GLB)가 저장되었습니다!");
+                        } else {
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a'); a.href = url; a.download = `${shape.id}.glb`; a.click(); URL.revokeObjectURL(url);
+                        }
+                    }, { binary: true });
+                } else {
+                    const blob = new Blob([getCurrentSvg()], { type: 'image/svg+xml' });
+                    if (window.showSaveFilePicker) {
+                        const handle = await window.showSaveFilePicker({ suggestedName: `${shape.id}.svg`, types: [{ description: 'SVG 벡터 파일', accept: { 'image/svg+xml': ['.svg'] } }] });
+                        const writable = await handle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        showToast("SVG 도형 파일이 저장되었습니다.");
+                    } else {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.href = url; a.download = `${shape.id}.svg`; a.click(); URL.revokeObjectURL(url);
+                    }
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') showToast("저장 중 오류가 발생했습니다.", true);
+            }
+        };
+
+        const rotRange = document.getElementById('rotation');
+        const rotNum = document.getElementById('rotation-number');
+        if (rotRange) rotRange.addEventListener('input', (e) => { currentRotation = e.target.value; if (rotNum) rotNum.value = currentRotation; renderPreview(); });
+        if (rotNum) rotNum.addEventListener('input', (e) => { let val = parseInt(e.target.value) || 0; val = ((val % 360) + 360) % 360; currentRotation = val; if (rotRange) rotRange.value = val; renderPreview(); });
+
+        document.getElementById('btn-flip-h').addEventListener('click', () => { flipH = !flipH; const btn = document.getElementById('btn-flip-h'); btn.classList.toggle('bg-blue-100', flipH); btn.classList.toggle('border-blue-400', flipH); btn.classList.toggle('text-blue-700', flipH); renderPreview(); });
+        document.getElementById('btn-flip-v').addEventListener('click', () => { flipV = !flipV; const btn = document.getElementById('btn-flip-v'); btn.classList.toggle('bg-blue-100', flipV); btn.classList.toggle('border-blue-400', flipV); btn.classList.toggle('text-blue-700', flipV); renderPreview(); });
+        document.getElementById('toggle-hidden-lines').addEventListener('change', (e) => { showHiddenLines = e.target.checked; renderPreview(); });
+
+        const scaleXSlider = document.getElementById('scale-x-slider');
+        if (scaleXSlider) scaleXSlider.addEventListener('input', (e) => { shapeScaleX = parseFloat(e.target.value); renderPreview(); });
+        const scaleYSlider = document.getElementById('scale-y-slider');
+        if (scaleYSlider) scaleYSlider.addEventListener('input', (e) => { shapeScaleY = parseFloat(e.target.value); renderPreview(); });
+
+        // --- 🌟 마우스 조작 (파워포인트식 선택/크기/회전 & 화면 줌 분리) ---
+        let startAngle2D = 0;
+        let startRotation2D = 0;
+        let startShapeScaleX = 1.0;
+        let startShapeScaleY = 1.0;
+        let rotationCenter = { x: 0, y: 0 };
+        let startLocalX = 0;
+        let startLocalY = 0;
+        let dragAction2D = null;
+
+        const previewArea = document.getElementById('preview-area');
+
+        sidebarShapeList.addEventListener('click', (e) => {
+            const button = e.target.closest('button[data-shape-id]');
+            if (button) {
+                isSelected2D = false;
+                resetTransform();
+            }
+        });
+
+        // 🌟 마우스 휠: 오직 돋보기(Zoom) 역할만 하며 스크롤바를 만듭니다!
+        previewArea.addEventListener('wheel', (e) => {
+            const list = shapeData[currentCategory];
+            const shape = list.find(s => s.id === currentShapeId);
+            if (shape && shape.type === 'webgl') return;
+
+            e.preventDefault();
+            if (e.deltaY < 0) viewZoom += 0.05;
+            else viewZoom -= 0.05;
+
+            viewZoom = Math.max(0.1, viewZoom); // 축소 한계만 있고 무한 확대 지원
+            renderPreview();
+        }, { passive: false });
+
+        // 선택 관련 이벤트
+        previewContainer.addEventListener('mousedown', (e) => {
+            const list = shapeData[currentCategory];
+            const shape = list.find(s => s.id === currentShapeId);
+            if (shape && shape.type === 'webgl') return;
+
+            // 추가된 코드: 클릭한 요소가 조절점(핸들)이라면 이벤트를 막지 않고 통과시킵니다.
+            if (e.target.closest('[id^="handle-"]')) return;
+
+            e.stopPropagation();
+            if (!isSelected2D) {
+                isSelected2D = true;
+                renderPreview();
+            }
+        });
+
+        previewArea.addEventListener('mousedown', (e) => {
+            if (e.target === previewArea || e.target === document.getElementById('zoom-wrapper')) {
+                if (isSelected2D) {
+                    isSelected2D = false;
+                    renderPreview();
+                }
+            }
+        });
+
+        // 조절점 이벤트
+        const bindHandleEvent = (id, actionName) => {
+            const handle = document.getElementById(id);
+            // 요동침 제거로 인해 SVG 내부에서 요소를 찾아 바인딩합니다.
+            // 하지만 innerHTML 초기화로 계속 날아가기 때문에 문서 단위 이벤트 위임으로 변경했습니다.
+        };
+
+        // 🌟 렌더링 시마다 요소가 갈아끼워지므로, mousedown 이벤트를 window에서 캐치합니다 (이벤트 위임)
+        window.addEventListener('mousedown', (e) => {
+            const handle = e.target.closest('[id^="handle-"]');
+            if (handle && isSelected2D) {
+                dragAction2D = handle.id.replace('handle-', 'resize-');
+                if (handle.id === 'handle-rotate') dragAction2D = 'rotate';
+
+                startRotation2D = currentRotation;
+                startShapeScaleX = shapeScaleX;
+                startShapeScaleY = shapeScaleY;
+
+                const overlay = document.getElementById('selection-overlay');
+                const rect = overlay.getBoundingClientRect();
+
+                // 회전 중심을 박스의 완벽한 중앙으로 잡습니다.
+                rotationCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+
+                const dx = e.clientX - rotationCenter.x;
+                const dy = e.clientY - rotationCenter.y;
+                startAngle2D = Math.atan2(dy, dx) * (180 / Math.PI);
+
+                const rad = -currentRotation * Math.PI / 180;
+                startLocalX = dx * Math.cos(rad) - dy * Math.sin(rad);
+                startLocalY = dx * Math.sin(rad) + dy * Math.cos(rad);
+
+                document.body.style.cursor = window.getComputedStyle(handle).cursor;
+                e.stopPropagation(); e.preventDefault();
+            }
+        });
+
+        // 드래그 조작
+        window.addEventListener('mousemove', (e) => {
+            if (!dragAction2D) return;
+
+            const dx = e.clientX - rotationCenter.x;
+            const dy = e.clientY - rotationCenter.y;
+
+            if (dragAction2D === 'rotate') {
+                const currentAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+                let deltaAngle = currentAngle - startAngle2D;
+                let newRot = startRotation2D + deltaAngle;
+
+                newRot = ((newRot % 360) + 360) % 360;
+                currentRotation = Math.round(newRot);
+
+                if (rotRange) rotRange.value = currentRotation;
+                if (rotNum) rotNum.value = currentRotation;
+            }
+            else if (dragAction2D.startsWith('resize')) {
+                const rad = -currentRotation * Math.PI / 180;
+                const currentLocalX = dx * Math.cos(rad) - dy * Math.sin(rad);
+                const currentLocalY = dx * Math.sin(rad) + dy * Math.cos(rad);
+
+                if (dragAction2D.includes('l') || dragAction2D.includes('r')) {
+                    if (Math.abs(startLocalX) > 5) {
+                        const ratioX = Math.abs(currentLocalX) / Math.abs(startLocalX);
+                        shapeScaleX = Math.max(0.1, startShapeScaleX * ratioX); // 한계 제거 무제한 확대
+                        if (scaleXSlider) scaleXSlider.value = shapeScaleX;
+                    }
+                }
+
+                if (dragAction2D.includes('t') || dragAction2D.includes('b')) {
+                    if (Math.abs(startLocalY) > 5) {
+                        const ratioY = Math.abs(currentLocalY) / Math.abs(startLocalY);
+                        shapeScaleY = Math.max(0.1, startShapeScaleY * ratioY); // 한계 제거 무제한 확대
+                        if (scaleYSlider) scaleYSlider.value = shapeScaleY;
+                    }
+                }
+            }
+            renderPreview();
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (dragAction2D) {
+                dragAction2D = null;
+                document.body.style.cursor = 'default';
+            }
+        });
+
+        initUI();
+        
+
+
+
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>개인정보 마스킹</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- 1. jSuites (Jspreadsheet의 필수 의존성 라이브러리이므로 반드시 먼저 로드해야 합니다) -->
+    <script src="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.css" type="text/css" />
+
+    <!-- 2. Jspreadsheet CE (엑셀형 그리드 라이브러리) -->
+    <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/index.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/jspreadsheet.min.css" type="text/css" />
+
+    <style>
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f8fafc; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f0f2f5; }
+
+        /* Jspreadsheet 스타일 커스텀 (Tailwind 스타일에 맞게) */
+        .jexcel_container { width: 100% !important; border: none; }
+        .jexcel { width: 100% !important; border-collapse: collapse; }
+        .jexcel > thead > tr > td { background-color: #f8fafc; color: #475569; font-weight: 600; font-size: 0.85rem; padding: 10px; border-color: #e2e8f0; }
+        .jexcel > tbody > tr > td { font-size: 0.9rem; padding: 8px; border-color: #e2e8f0; color: #334155; }
+        .jexcel > tbody > tr > td.readonly { background-color: #f8fafc; color: #64748b; }
+        .jexcel > tbody > tr > td.success-status { color: #16a34a; font-weight: 600; text-align: center; }
+        .jexcel > tbody > tr > td.error-status { color: #dc2626; font-weight: 600; text-align: center; }
+        
+        /* 라디오 칩 스타일 */
+        .chip-radio:checked + label { background-color: #4f46e5; color: white; border-color: #4f46e5; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); }
+        .chip-radio:checked + label i { color: white; }
+        .chip-radio:checked + label .badge { background-color: white; color: #4f46e5; }
+        
+        .format-radio:checked + label { background-color: #eff6ff; border-color: #3b82f6; color: #1d4ed8; font-weight: 600; }
+        .format-radio:checked + label .check-icon { display: inline-block; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- 헤더 -->
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm z-10">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-md">
+                <i class="fas fa-shield-cat text-lg"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-gray-800 tracking-tight">개인정보 마스킹</h1>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="loadSampleData()" class="px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg hover:bg-indigo-100 transition shadow-sm flex items-center gap-2">
+                <i class="fas fa-magic"></i> 샘플 데이터 채우기
+            </button>
+            <button onclick="clearAllData()" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition shadow-sm flex items-center gap-2">
+                <i class="fas fa-rotate-right"></i> 전체 초기화
+            </button>
+        </div>
+    </header>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="flex-1 flex gap-5 p-5 overflow-hidden">
+        
+        <!-- 좌측: 엑셀 그리드 영역 -->
+        <div class="flex-[7] bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center shrink-0">
+                <div>
+                    <h2 class="font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-table text-indigo-500"></i> 데이터 입력 그리드
+                    </h2>
+                    <p class="text-xs text-gray-500 mt-1">A열에 데이터를 붙여넣으세요. (엑셀에서 복사 후 Ctrl+V 완벽 지원)</p>
+                </div>
+            </div>
+            <!-- Jspreadsheet 컨테이너 -->
+            <div class="flex-1 overflow-auto w-full relative" id="spreadsheet-container">
+                <div id="spreadsheet"></div>
+            </div>
+        </div>
+
+        <!-- 우측: 제어 패널 -->
+        <div class="flex-[3] flex flex-col gap-4 overflow-y-auto min-w-[340px] max-w-[420px] pb-4 pr-1">
+            
+            <!-- 1. 대상 선택 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 shrink-0">
+                <h3 class="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <span class="w-6 h-6 rounded bg-indigo-100 text-indigo-600 flex justify-center items-center text-xs">1</span>
+                    무엇을 마스킹할까요?
+                </h3>
+                <div class="grid grid-cols-3 gap-2" id="type-selector">
+                    <!-- JS 렌더링 -->
+                </div>
+            </div>
+
+            <!-- 2. 세부 옵션 패널 (동적 변화) -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 shrink-0 transition-all" id="option-panel">
+                <h3 class="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <span class="w-6 h-6 rounded bg-indigo-100 text-indigo-600 flex justify-center items-center text-xs">2</span>
+                    어떻게 마스킹할까요? <span class="text-xs text-indigo-500 ml-auto font-normal">(실시간 적용)</span>
+                </h3>
+                
+                <!-- 프리셋 방식 라디오 영역 -->
+                <div id="preset-options" class="flex flex-col gap-2"></div>
+                
+                <!-- 사용자 지정 모드 영역 -->
+                <div id="custom-options" class="hidden flex-col gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200 mt-2">
+                    <div class="flex gap-3 items-center">
+                        <div class="flex-1">
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">앞에서부터 남길 글자</label>
+                            <div class="flex items-center bg-white border border-gray-300 rounded overflow-hidden">
+                                <input type="number" id="custom-front" value="1" min="0" class="w-full text-center py-1.5 outline-none text-sm" oninput="recalculateAll()">
+                                <span class="bg-gray-100 px-2 text-xs text-gray-500 py-2 border-l border-gray-300">자</span>
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">뒤에서부터 남길 글자</label>
+                            <div class="flex items-center bg-white border border-gray-300 rounded overflow-hidden">
+                                <input type="number" id="custom-back" value="1" min="0" class="w-full text-center py-1.5 outline-none text-sm" oninput="recalculateAll()">
+                                <span class="bg-gray-100 px-2 text-xs text-gray-500 py-2 border-l border-gray-300">자</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-3 items-center">
+                        <div class="flex-[2]">
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">치환할 기호</label>
+                            <input type="text" id="custom-char" value="*" maxlength="1" class="w-full text-center py-1.5 bg-white border border-gray-300 rounded outline-none text-sm font-bold text-indigo-600" oninput="recalculateAll()">
+                        </div>
+                        <div class="flex-[3] flex items-center pt-5">
+                            <label class="flex items-center cursor-pointer gap-2">
+                                <input type="checkbox" id="custom-keep-special" checked class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" onchange="recalculateAll()">
+                                <span class="text-xs text-gray-700 font-medium whitespace-nowrap">특수기호/공백 유지</span>
+                            </label>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 leading-relaxed bg-white p-2 rounded border border-dashed border-gray-300">
+                        <i class="fas fa-info-circle mr-1 text-indigo-400"></i> 양끝 글자를 제외한 중간 부분을 설정된 기호로 변환합니다. 모든 형식에 대응 가능합니다.
+                    </p>
+                </div>
+            </div>
+
+            <!-- 통계 현황 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 shrink-0 flex justify-between items-center px-6">
+                <div class="text-center">
+                    <div class="text-xs text-gray-500 mb-1 font-medium">총 데이터</div>
+                    <div class="text-xl font-bold text-gray-800" id="stat-total">0</div>
+                </div>
+                <div class="w-px h-10 bg-gray-200"></div>
+                <div class="text-center">
+                    <div class="text-xs text-green-600 mb-1 font-medium">변환 완료</div>
+                    <div class="text-xl font-bold text-green-600" id="stat-success">0</div>
+                </div>
+                <div class="w-px h-10 bg-gray-200"></div>
+                <div class="text-center">
+                    <div class="text-xs text-red-500 mb-1 font-medium">형식 오류</div>
+                    <div class="text-xl font-bold text-red-500" id="stat-fail">0</div>
+                </div>
+            </div>
+
+            <div class="flex-1"></div> <!-- Spacer -->
+
+            <!-- 실행 버튼 -->
+            <div class="shrink-0 pt-2">
+                <button onclick="copyResults()" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-md hover:shadow-lg transition-all flex justify-center items-center gap-2 transform hover:-translate-y-0.5">
+                    <i class="fas fa-copy text-lg"></i> 결과물 전체 복사 (B열)
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 토스트 팝업 컨테이너 -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
+
+    <script>
+        // --- 1. 설정 및 마스킹 로직 ---
+        const maskingConfig = {
+            'name': {
+                label: '이름', icon: 'fa-user',
+                formats: [
+                    { id: 'name_std', label: '가운데 마스킹 (홍*동, 남**수)' },
+                    { id: 'name_last', label: '끝자리 마스킹 (홍길*, 남궁민*)' },
+                    { id: 'name_first_only', label: '성만 남기기 (홍**, 남***)' }
+                ],
+                maskFunc: (val, fmtId) => {
+                    const str = val.replace(/\s+/g, '');
+                    if (str.length < 2) return null;
+                    if (fmtId === 'name_std') {
+                        if (str.length === 2) return str[0] + '*';
+                        return str[0] + '*'.repeat(str.length - 2) + str[str.length - 1];
+                    } else if (fmtId === 'name_last') {
+                        return str.substring(0, str.length - 1) + '*';
+                    } else { // name_first_only
+                        return str[0] + '*'.repeat(str.length - 1);
+                    }
+                }
+            },
+            'phone': {
+                label: '연락처', icon: 'fa-phone',
+                formats: [
+                    { id: 'phone_mid', label: '가운데 마스킹 (010-****-5678)' },
+                    { id: 'phone_end', label: '끝자리 마스킹 (010-1234-****)' },
+                    { id: 'phone_all', label: '뒷 8자리 마스킹 (010-****-****)' }
+                ],
+                maskFunc: (val, fmtId) => {
+                    const clean = val.replace(/[^0-9]/g, '');
+                    let p1, p2, p3;
+                    if (clean.length === 11) { p1 = clean.substring(0,3); p2 = clean.substring(3,7); p3 = clean.substring(7); }
+                    else if (clean.length === 10) { 
+                        if (clean.startsWith('02')) { p1 = clean.substring(0,2); p2 = clean.substring(2,6); p3 = clean.substring(6); }
+                        else { p1 = clean.substring(0,3); p2 = clean.substring(3,6); p3 = clean.substring(6); }
+                    }
+                    else if (clean.length === 9 && clean.startsWith('02')) { p1 = clean.substring(0,2); p2 = clean.substring(2,5); p3 = clean.substring(5); }
+                    else return null;
+
+                    if (fmtId === 'phone_mid') return `${p1}-${'*'.repeat(p2.length)}-${p3}`;
+                    else if (fmtId === 'phone_end') return `${p1}-${p2}-${'*'.repeat(p3.length)}`;
+                    else return `${p1}-${'*'.repeat(p2.length)}-${'*'.repeat(p3.length)}`;
+                }
+            },
+            'jumin': {
+                label: '주민번호', icon: 'fa-id-card',
+                formats: [
+                    { id: 'jumin_std', label: '성별만 표시 (900101-1******)' },
+                    { id: 'jumin_all', label: '뒷자리 전체숨김 (900101-*******)' }
+                ],
+                maskFunc: (val, fmtId) => {
+                    const clean = val.replace(/[^0-9]/g, '');
+                    if (clean.length !== 13) return null;
+                    const front = clean.substring(0, 6);
+                    const gender = clean.substring(6, 7);
+                    if (fmtId === 'jumin_std') return `${front}-${gender}******`;
+                    else return `${front}-*******`;
+                }
+            },
+            'email': {
+                label: '이메일', icon: 'fa-envelope',
+                formats: [
+                    { id: 'email_std', label: '아이디 일부 숨김 (te***@mail.com)' },
+                    { id: 'email_id_all', label: '아이디 전체 숨김 (***@mail.com)' }
+                ],
+                maskFunc: (val, fmtId) => {
+                    const parts = val.split('@');
+                    if (parts.length !== 2) return null;
+                    let id = parts[0], domain = parts[1];
+                    
+                    if (fmtId === 'email_std') {
+                        if (id.length <= 2) id = id[0] + '*';
+                        else {
+                            const vis = Math.ceil(id.length / 3);
+                            id = id.substring(0, vis) + '*'.repeat(id.length - vis);
+                        }
+                    } else { // email_id_all
+                        id = '*'.repeat(id.length);
+                    }
+                    return `${id}@${domain}`;
+                }
+            },
+            'card': {
+                label: '계좌/카드', icon: 'fa-credit-card',
+                formats: [
+                    { id: 'card_mid', label: '중간 부분 숨김 (1234-****-****-5678)' },
+                    { id: 'card_last', label: '끝 4자리만 표시 (****-****-****-5678)' }
+                ],
+                maskFunc: (val, fmtId) => {
+                    const clean = val.replace(/[^0-9]/g, '');
+                    if (clean.length < 10) return null; // 짧은 계좌 처리
+                    
+                    if (clean.length >= 14 && clean.length <= 16) {
+                        const p1 = clean.substring(0, 4);
+                        const p4 = clean.substring(clean.length - 4);
+                        if (fmtId === 'card_mid') return `${p1}-${'*'.repeat(clean.length - 8)}-${p4}`;
+                        else return `${'*'.repeat(4)}-${'*'.repeat(4)}-${'*'.repeat(clean.length - 12)}-${p4}`;
+                    } else { // 일반 계좌
+                        const p1 = clean.substring(0, 3);
+                        const p4 = clean.substring(clean.length - 3);
+                        if (fmtId === 'card_mid') return `${p1}${'*'.repeat(clean.length - 6)}${p4}`;
+                        else return `${'*'.repeat(clean.length - 3)}${p4}`;
+                    }
+                }
+            },
+            'custom': {
+                label: '사용자 지정', icon: 'fa-sliders',
+                isCustom: true,
+                maskFunc: (val) => {
+                    if(!val) return null;
+                    const front = parseInt(document.getElementById('custom-front').value) || 0;
+                    const back = parseInt(document.getElementById('custom-back').value) || 0;
+                    const mChar = document.getElementById('custom-char').value || '*';
+                    const keepSp = document.getElementById('custom-keep-special').checked;
+                    
+                    let result = '';
+                    let chars = val.split('');
+                    
+                    // 글자 길이가 유지할 개수보다 짧으면 원본 반환 (실패 아님)
+                    if (chars.length <= front + back) return val;
+
+                    for(let i=0; i<chars.length; i++) {
+                        if (i < front || i >= chars.length - back) {
+                            result += chars[i];
+                        } else {
+                            if (keepSp && /[^a-zA-Z0-9가-힣]/.test(chars[i])) {
+                                result += chars[i]; // 띄어쓰기, 특수기호 유지
+                            } else {
+                                result += mChar; // 마스킹 문자 삽입
+                            }
+                        }
+                    }
+                    return result;
+                }
+            }
+        };
+
+        let currentType = 'name';
+        let currentFormat = 'name_std';
+        let spreadsheetInstance = null;
+        const INITIAL_ROWS = 100;
+        let isProcessing = false;
+
+        // --- 2. 초기화 및 UI 구성 ---
+        window.onload = () => {
+            renderTypeSelector();
+            updateFormatSelect();
+            initSpreadsheet();
+        };
+
+        function renderTypeSelector() {
+            const container = document.getElementById('type-selector');
+            container.innerHTML = '';
+            
+            Object.keys(maskingConfig).forEach(key => {
+                const conf = maskingConfig[key];
+                const isChecked = key === currentType ? 'checked' : '';
+                const isCustom = conf.isCustom ? '<span class="absolute -top-2 -right-2 bg-pink-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold shadow-sm badge">만능</span>' : '';
+                
+                const html = `
+                    <div class="relative">
+                        <input type="radio" id="type_${key}" name="dataType" value="${key}" class="chip-radio hidden" ${isChecked} onchange="handleTypeChange('${key}')">
+                        <label for="type_${key}" class="relative flex flex-col items-center justify-center p-3 border border-gray-200 rounded-xl cursor-pointer bg-white text-gray-600 hover:bg-gray-50 transition-all h-full">
+                            ${isCustom}
+                            <i class="fas ${conf.icon} text-xl mb-1.5 text-gray-400 transition-colors"></i>
+                            <span class="text-[0.75rem] font-bold text-center">${conf.label}</span>
+                        </label>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        function handleTypeChange(type) {
+            currentType = type;
+            if(!maskingConfig[currentType].isCustom) {
+                currentFormat = maskingConfig[currentType].formats[0].id; // 첫번째 옵션 자동선택
+            }
+            updateFormatSelect();
+            recalculateAll();
+        }
+
+        function updateFormatSelect() {
+            const conf = maskingConfig[currentType];
+            const presetContainer = document.getElementById('preset-options');
+            const customContainer = document.getElementById('custom-options');
+            
+            if (conf.isCustom) {
+                presetContainer.classList.add('hidden');
+                customContainer.classList.remove('hidden');
+                customContainer.classList.add('flex');
+            } else {
+                customContainer.classList.add('hidden');
+                customContainer.classList.remove('flex');
+                presetContainer.classList.remove('hidden');
+                
+                presetContainer.innerHTML = conf.formats.map((fmt, idx) => `
+                    <div class="relative">
+                        <input type="radio" id="fmt_${fmt.id}" name="formatType" value="${fmt.id}" class="format-radio hidden" ${fmt.id === currentFormat ? 'checked' : ''} onchange="currentFormat='${fmt.id}'; recalculateAll();">
+                        <label for="fmt_${fmt.id}" class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer bg-white text-gray-700 hover:bg-gray-50 transition-colors text-sm">
+                            <i class="fas fa-check text-indigo-600 mr-2 hidden check-icon"></i>
+                            <span class="flex-1">${fmt.label}</span>
+                        </label>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // --- 3. Jspreadsheet (엑셀 그리드) 설정 ---
+        function initSpreadsheet() {
+            // Jspreadsheet가 로드되었는지 확인 (jspreadsheet 또는 jexcel로 잡힘)
+            const excelInitObj = window.jspreadsheet || window.jexcel;
+            
+            if (!excelInitObj) {
+                console.error("그리드 라이브러리를 로드하지 못했습니다.");
+                showToast("그리드 모듈 로딩 오류. 페이지를 새로고침 해주세요.", "error");
+                return;
+            }
+
+            // 빈 데이터 100줄 생성
+            const initialData = Array.from({length: INITIAL_ROWS}, () => ['', '', '']);
+
+            spreadsheetInstance = excelInitObj(document.getElementById('spreadsheet'), {
+                data: initialData,
+                columns: [
+                    { type: 'text', title: '원본 데이터 (A열)', width: 250 },
+                    { type: 'text', title: '변환 결과 (B열)', width: 250, readOnly: true },
+                    { type: 'text', title: '상태 (C열)', width: 100, readOnly: true }
+                ],
+                tableOverflow: true,
+                tableWidth: "100%",
+                tableHeight: "calc(100vh - 220px)", // 화면 높이에 맞춤
+                defaultColAlign: 'left',
+                allowInsertColumn: false,
+                allowDeleteColumn: false,
+                allowRenameColumn: false,
+                contextMenu: function(obj, x, y, e) {
+                    return []; // 기본 컨텍스트 메뉴 비활성화 (깔끔하게)
+                },
+                // 값이 변경될 때마다 단일 행 처리 (실시간 반영)
+                onchange: function(instance, cell, col, row, value) {
+                    if (col === "0" && !isProcessing) {
+                        processSingleRow(parseInt(row), value);
+                    }
+                },
+                // 대량의 데이터를 붙여넣기 했을 때 전체 재계산 트리거
+                onpaste: function(instance, data) {
+                    setTimeout(recalculateAll, 100);
+                },
+                // 붙여넣기 등으로 인해 새로운 행이 자동으로 늘어났을 때 트리거
+                oninsertrow: function(instance, rowNumber, numOfRows, rowRecords, insertBefore) {
+                    setTimeout(recalculateAll, 100);
+                }
+            });
+        }
+
+        // --- 4. 마스킹 핵심 로직 (실시간) ---
+
+        // 셀 단위 처리 (입력/붙여넣기 시)
+        function processSingleRow(rowIndex, rawValue) {
+            if (!rawValue || rawValue.trim() === '') {
+                updateCell(rowIndex, '', '');
+                return;
+            }
+
+            const maskFunc = maskingConfig[currentType].maskFunc;
+            const result = maskFunc(rawValue.trim(), currentFormat);
+
+            if (result !== null) {
+                updateCell(rowIndex, result, '성공');
+            } else {
+                updateCell(rowIndex, '', '오류');
+            }
+            updateStats();
+        }
+
+        // 전체 재계산 (옵션 변경 시)
+        function recalculateAll() {
+            if (!spreadsheetInstance) return;
+            
+            isProcessing = true; // onchange 무한루프 방지
+            const data = spreadsheetInstance.getData();
+            const maskFunc = maskingConfig[currentType].maskFunc;
+            
+            let updates = []; // 배치 업데이트용
+
+            for (let i = 0; i < data.length; i++) {
+                const rawVal = data[i][0];
+                if (!rawVal || rawVal.toString().trim() === '') {
+                    if (data[i][1] !== '' || data[i][2] !== '') {
+                        spreadsheetInstance.setValueFromCoords(1, i, '', true);
+                        spreadsheetInstance.setValueFromCoords(2, i, '', true);
+                        spreadsheetInstance.setStyle(`C${i+1}`, 'color', '');
+                    }
+                    continue;
+                }
+
+                const result = maskFunc(rawVal.toString().trim(), currentFormat);
+                
+                if (result !== null) {
+                    spreadsheetInstance.setValueFromCoords(1, i, result, true);
+                    spreadsheetInstance.setValueFromCoords(2, i, '성공', true);
+                    spreadsheetInstance.setStyle(`C${i+1}`, 'color', '#16a34a'); // 성공 녹색
+                    spreadsheetInstance.setStyle(`C${i+1}`, 'font-weight', 'bold');
+                } else {
+                    spreadsheetInstance.setValueFromCoords(1, i, '', true);
+                    spreadsheetInstance.setValueFromCoords(2, i, '형식오류', true);
+                    spreadsheetInstance.setStyle(`C${i+1}`, 'color', '#dc2626'); // 실패 적색
+                    spreadsheetInstance.setStyle(`C${i+1}`, 'font-weight', 'bold');
+                }
+            }
+            
+            isProcessing = false;
+            updateStats();
+        }
+
+        // 셀 UI 업데이트 유틸리티
+        function updateCell(row, bVal, cVal) {
+            isProcessing = true;
+            spreadsheetInstance.setValueFromCoords(1, row, bVal, true);
+            spreadsheetInstance.setValueFromCoords(2, row, cVal, true);
+            
+            if(cVal === '성공') {
+                spreadsheetInstance.setStyle(`C${row+1}`, 'color', '#16a34a');
+                spreadsheetInstance.setStyle(`C${row+1}`, 'font-weight', 'bold');
+            } else if (cVal === '오류' || cVal === '형식오류') {
+                spreadsheetInstance.setStyle(`C${row+1}`, 'color', '#dc2626');
+                spreadsheetInstance.setStyle(`C${row+1}`, 'font-weight', 'bold');
+            } else {
+                spreadsheetInstance.setStyle(`C${row+1}`, 'color', '');
+            }
+            isProcessing = false;
+        }
+
+        // 통계 갱신
+        function updateStats() {
+            if(!spreadsheetInstance) return;
+            const data = spreadsheetInstance.getData();
+            let total = 0, success = 0, fail = 0;
+
+            data.forEach(row => {
+                if (row[0] && row[0].toString().trim() !== '') {
+                    total++;
+                    if (row[2] === '성공') success++;
+                    else if (row[2] === '오류' || row[2] === '형식오류') fail++;
+                }
+            });
+
+            document.getElementById('stat-total').innerText = total;
+            document.getElementById('stat-success').innerText = success;
+            document.getElementById('stat-fail').innerText = fail;
+        }
+
+        // --- 5. 편의 기능 ---
+
+        function copyResults() {
+            if (!spreadsheetInstance) return;
+            
+            const data = spreadsheetInstance.getData();
+            let results = [];
+            let hasData = false;
+            let lastValidRow = -1;
+
+            // 데이터가 있는 마지막 행 찾기
+            for (let i = 0; i < data.length; i++) {
+                if (data[i][0] && data[i][0].toString().trim() !== '') {
+                    lastValidRow = i;
+                }
+            }
+
+            if (lastValidRow === -1) {
+                showToast('복사할 데이터가 없습니다.', 'warning');
+                return;
+            }
+
+            // 마지막 데이터가 있는 행까지만 B열 복사
+            for (let i = 0; i <= lastValidRow; i++) {
+                results.push(data[i][1] || ''); // 결과 없으면 빈칸
+            }
+
+            const copyStr = results.join('\n');
+            const textArea = document.createElement("textarea");
+            textArea.value = copyStr;
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                showToast(`B열 결과물 ${lastValidRow + 1}건이 복사되었습니다! 엑셀에 바로 붙여넣으세요.`, 'success');
+            } catch (err) {
+                showToast('복사에 실패했습니다.', 'error');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function clearAllData() {
+            const emptyData = Array.from({length: INITIAL_ROWS}, () => ['', '', '']);
+            spreadsheetInstance.setData(emptyData);
+            
+            // 스타일 초기화
+            for(let i=0; i<INITIAL_ROWS; i++) {
+                spreadsheetInstance.setStyle(`C${i+1}`, 'color', '');
+                spreadsheetInstance.setStyle(`C${i+1}`, 'font-weight', 'normal');
+            }
+            
+            updateStats();
+            showToast('데이터가 초기화되었습니다.', 'info');
+        }
+
+        function loadSampleData() {
+            const samples = {
+                'name': ['홍길동', '이순신', '강감찬', '남궁민수', '박철', '잘못된데이터입력'],
+                'phone': ['010-1234-5678', '02-123-4567', '0511234567', '01099998888', '010-123'],
+                'jumin': ['900101-1234567', '020505-3456789', '801231-2345678', '990101-1', '가짜주민번호'],
+                'email': ['teacher@korea.kr', 'admin123@school.edu', 'abcd@gmail.com', 'test.user@daum.net'],
+                'card': ['1234-5678-1234-5678', '1111222233334444', '110-123-456789', '020-123456-11'],
+                'custom': ['학교폭력예방교육보고서.pdf', '서울시 강남구 테헤란로 123', '2026년 3월 19일 회의록', '가나다라마바사아자차']
+            };
+
+            const dataToLoad = samples[currentType] || samples['name'];
+            const newData = Array.from({length: INITIAL_ROWS}, () => ['', '', '']);
+            
+            dataToLoad.forEach((val, idx) => {
+                newData[idx][0] = val;
+            });
+
+            isProcessing = true;
+            spreadsheetInstance.setData(newData);
+            isProcessing = false;
+            
+            recalculateAll(); // 로드 후 즉시 계산
+            showToast('샘플 데이터가 로드되었습니다.', 'info');
+        }
+
+        // --- 6. 커스텀 토스트 알림 ---
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgClass = 'bg-gray-800 text-white';
+            let icon = 'fa-info-circle text-blue-400';
+            let borderClass = 'border-gray-700';
+
+            if (type === 'success') { 
+                bgClass = 'bg-white text-gray-800'; 
+                borderClass = 'border-green-500';
+                icon = 'fa-check-circle text-green-500'; 
+            }
+            else if (type === 'error') { 
+                bgClass = 'bg-white text-gray-800'; 
+                borderClass = 'border-red-500';
+                icon = 'fa-exclamation-circle text-red-500'; 
+            }
+            else if (type === 'warning') {
+                bgClass = 'bg-white text-gray-800'; 
+                borderClass = 'border-yellow-500';
+                icon = 'fa-exclamation-triangle text-yellow-500';
+            }
+
+            toast.className = `flex items-center gap-3 px-5 py-4 rounded-xl shadow-xl border-l-4 ${borderClass} ${bgClass} font-medium text-sm transition-all duration-300 transform translate-y-10 opacity-0 min-w-[300px]`;
+            toast.innerHTML = `<i class="fas ${icon} text-xl"></i> <span>${message}</span>`;
+            
+            container.appendChild(toast);
+            
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            });
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

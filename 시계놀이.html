@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>재미있는 시계 놀이</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+        
+        body {
+            font-family: 'Jua', sans-serif;
+            background-color: #f0fdf4; /* 연한 초록색 배경 */
+            user-select: none;
+            transition: background-color 1.5s ease;
+        }
+
+        /* 시계 스타일 */
+        .clock-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background-color: white;
+            border: 12px solid #fbbf24; /* 노란색 테두리 */
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1), inset 0 5px 15px rgba(0,0,0,0.05);
+            margin: 0 auto;
+        }
+
+        .center-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            background-color: #374151;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
+        /* 시계 바늘 */
+        .hand {
+            position: absolute;
+            bottom: 50%;
+            left: 50%;
+            transform-origin: bottom center;
+            border-radius: 10px;
+            z-index: 5;
+            transition: transform 0.3s cubic-bezier(0.4, 2.08, 0.55, 0.44); /* 튕기는 듯한 애니메이션 */
+        }
+
+        .hour-hand {
+            width: 8px;
+            height: 80px;
+            background-color: #ef4444; /* 빨간색 (시) */
+            margin-left: -4px;
+        }
+
+        .minute-hand {
+            width: 6px;
+            height: 110px;
+            background-color: #3b82f6; /* 파란색 (분) */
+            margin-left: -3px;
+        }
+
+        .second-hand {
+            width: 3px;
+            height: 120px;
+            background-color: #22c55e; /* 녹색 (초) */
+            margin-left: -1.5px;
+            z-index: 6;
+        }
+
+        /* 드래그를 쉽게 하기 위한 투명한 클릭 영역 확대 */
+        .hand::after {
+            content: '';
+            position: absolute;
+            top: -20px; bottom: -20px; left: -20px; right: -20px;
+            cursor: grab;
+            background: transparent;
+        }
+        .hand:active::after {
+            cursor: grabbing;
+        }
+
+        /* 시계 숫자 및 눈금 */
+        .clock-number {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #1f2937;
+            pointer-events: none;
+        }
+        
+        .clock-number span {
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .tick {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .tick::after {
+            content: '';
+            display: inline-block;
+            width: 2px;
+            height: 8px;
+            background-color: #cbd5e1;
+            margin-top: 5px;
+        }
+        
+        .tick.thick::after {
+            width: 4px;
+            height: 12px;
+            background-color: #64748b;
+        }
+
+        /* 탭 버튼 스타일 */
+        .tab-btn {
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background-color: #3b82f6;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        /* 입력 폼 스타일 */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-8">
+
+    <!-- 메인 타이틀 -->
+    <header class="text-center mb-6">
+        <h1 class="text-4xl font-bold text-green-600 drop-shadow-sm">⏰ 재미있는 시계 놀이</h1>
+        <p class="text-gray-600 mt-2 text-lg">다 함께 시계를 돌려보고, 시간을 맞춰보며 배워봐요!</p>
+    </header>
+
+    <!-- 탭 메뉴 -->
+    <nav class="flex flex-wrap justify-center gap-4 mb-8 bg-white p-2 rounded-full shadow-md px-6">
+        <button onclick="switchTab('play')" id="tab-play" class="tab-btn active px-6 py-2 rounded-full text-lg font-medium text-gray-500 hover:bg-blue-50">🕹️ 시계 돌려보기</button>
+        <button onclick="switchTab('read')" id="tab-read" class="tab-btn px-6 py-2 rounded-full text-lg font-medium text-gray-500 hover:bg-blue-50">👀 지금은 몇 시일까요?</button>
+        <button onclick="switchTab('calc')" id="tab-calc" class="tab-btn px-6 py-2 rounded-full text-lg font-medium text-gray-500 hover:bg-blue-50">🧠 시간 계산하기</button>
+        <button onclick="switchTab('diff')" id="tab-diff" class="tab-btn px-6 py-2 rounded-full text-lg font-medium text-gray-500 hover:bg-blue-50">⏳ 시간 차이 계산</button>
+        <button onclick="switchTab('ampm')" id="tab-ampm" class="tab-btn px-6 py-2 rounded-full text-lg font-medium text-gray-500 hover:bg-blue-50">🌞 오전/오후</button>
+    </nav>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="bg-white rounded-3xl shadow-xl p-8 w-full max-w-4xl flex flex-col md:flex-row gap-8 items-center justify-center">
+        
+        <!-- 왼쪽: 아날로그 시계 -->
+        <div class="flex-shrink-0">
+            <div class="clock-container" id="clock-face">
+                <div class="center-dot"></div>
+                <div id="hour-hand" class="hand hour-hand"></div>
+                <div id="minute-hand" class="hand minute-hand"></div>
+                <div id="second-hand" class="hand second-hand hidden"></div>
+                <!-- JS에서 숫자와 눈금 생성 -->
+            </div>
+            
+            <!-- 디지털 시간 표시 -->
+            <div class="mt-6 text-center">
+                <div class="inline-block bg-gray-800 text-white text-3xl px-6 py-3 rounded-2xl font-mono tracking-widest shadow-inner">
+                    <span id="digital-ampm" class="text-orange-400 mr-2 text-2xl font-sans">오전</span><span id="digital-hour" class="text-red-400">12</span><span class="animate-pulse">:</span><span id="digital-minute" class="text-blue-400">00</span><span id="digital-second-wrap" class="hidden"><span class="animate-pulse">:</span><span id="digital-second" class="text-green-400">00</span></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 오른쪽: 조작 및 퀴즈 패널 -->
+        <div class="w-full max-w-sm">
+            
+            <!-- 1. 자유롭게 돌려보기 패널 -->
+            <div id="panel-play" class="panel-content block">
+                <h2 class="text-2xl text-blue-600 mb-4 border-b-2 border-blue-200 pb-2">🕹️ 시곗바늘을 돌려볼까요?</h2>
+                
+                <div class="space-y-6">
+                    <div>
+                        <p class="text-lg text-gray-700 mb-2 font-bold flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-red-500"></span> 시(Hour) 버튼
+                        </p>
+                        <div class="flex gap-2 justify-center">
+                            <button onclick="addTime(-1, 0)" class="bg-red-100 text-red-600 px-4 py-3 rounded-xl hover:bg-red-200 active:scale-95 transition-all text-lg font-bold w-full shadow-sm">- 1시간</button>
+                            <button onclick="addTime(1, 0)" class="bg-red-500 text-white px-4 py-3 rounded-xl hover:bg-red-600 active:scale-95 transition-all text-lg font-bold w-full shadow-sm">+ 1시간</button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <p class="text-lg text-gray-700 mb-2 font-bold flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-blue-500"></span> 분(Minute) 버튼
+                        </p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="addTime(0, -10)" class="bg-blue-100 text-blue-600 px-3 py-2 rounded-xl hover:bg-blue-200 active:scale-95 transition-all font-bold shadow-sm">- 10분</button>
+                            <button onclick="addTime(0, -1)" class="bg-blue-100 text-blue-600 px-3 py-2 rounded-xl hover:bg-blue-200 active:scale-95 transition-all font-bold shadow-sm">- 1분</button>
+                            <button onclick="addTime(0, 10)" class="bg-blue-500 text-white px-3 py-2 rounded-xl hover:bg-blue-600 active:scale-95 transition-all font-bold shadow-sm">+ 10분</button>
+                            <button onclick="addTime(0, 1)" class="bg-blue-500 text-white px-3 py-2 rounded-xl hover:bg-blue-600 active:scale-95 transition-all font-bold shadow-sm">+ 1분</button>
+                        </div>
+                    </div>
+
+                    <!-- 초침 설정 및 조작부 -->
+                    <div class="border-t-2 border-dashed border-gray-200 pt-4">
+                        <label class="flex items-center gap-2 cursor-pointer mb-3">
+                            <input type="checkbox" id="toggle-second" onchange="toggleSecondHand()" class="w-6 h-6 text-green-500 rounded">
+                            <span class="text-lg font-bold text-gray-700">초침 보이기</span>
+                        </label>
+                        
+                        <div id="second-buttons" class="hidden">
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="addTime(0, 0, -10)" class="bg-green-100 text-green-600 px-3 py-2 rounded-xl hover:bg-green-200 active:scale-95 transition-all font-bold shadow-sm">- 10초</button>
+                                <button onclick="addTime(0, 0, 10)" class="bg-green-500 text-white px-3 py-2 rounded-xl hover:bg-green-600 active:scale-95 transition-all font-bold shadow-sm">+ 10초</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button onclick="resetToCurrentTime()" class="w-full mt-4 bg-gray-200 text-gray-700 px-4 py-3 rounded-xl hover:bg-gray-300 active:scale-95 transition-all font-bold">
+                        현재 시간으로 맞추기
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. 시계 읽기 퀴즈 패널 -->
+            <div id="panel-read" class="panel-content hidden">
+                <h2 class="text-2xl text-green-600 mb-4 border-b-2 border-green-200 pb-2">👀 다 함께 시계를 읽어볼까요?</h2>
+                <div class="bg-green-50 p-6 rounded-2xl border border-green-100 text-center">
+                    <p class="text-xl mb-6">왼쪽 시계는 지금 <strong class="text-red-500">몇 시</strong> <strong class="text-blue-500">몇 분</strong>일까요?</p>
+                    
+                    <div class="flex justify-center items-center gap-2 mb-6">
+                        <input type="number" id="quiz-read-hour" placeholder="시" class="w-20 text-center text-2xl p-2 rounded-xl border-2 border-gray-300 focus:border-green-500 focus:outline-none">
+                        <span class="text-2xl">시</span>
+                        <input type="number" id="quiz-read-min" placeholder="분" class="w-20 text-center text-2xl p-2 rounded-xl border-2 border-gray-300 focus:border-green-500 focus:outline-none">
+                        <span class="text-2xl">분</span>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="generateReadQuiz()" class="flex-1 bg-gray-400 text-white py-3 rounded-xl hover:bg-gray-500 active:scale-95 transition-all text-lg shadow-sm">새로운 문제</button>
+                        <button onclick="checkReadQuiz()" class="flex-1 bg-green-500 text-white py-3 rounded-xl hover:bg-green-600 active:scale-95 transition-all text-lg shadow-sm">다 함께 정답 확인!</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 시간 계산 퀴즈 패널 -->
+            <div id="panel-calc" class="panel-content hidden">
+                <h2 class="text-2xl text-purple-600 mb-4 border-b-2 border-purple-200 pb-2">🧠 시간 계산 퀴즈!</h2>
+                <div class="bg-purple-50 p-6 rounded-2xl border border-purple-100 text-center">
+                    
+                    <p class="text-lg text-gray-600 mb-2">지금 시계가 가리키는 시간에서...</p>
+                    <div class="bg-white px-4 py-3 rounded-xl border-2 border-purple-200 inline-block mb-4 shadow-sm">
+                        <span id="calc-question" class="text-2xl font-bold text-purple-700">1시간 30분 뒤</span>는?
+                    </div>
+                    
+                    <div class="flex justify-center items-center gap-2 mb-6">
+                        <input type="number" id="quiz-calc-hour" placeholder="시" class="w-20 text-center text-2xl p-2 rounded-xl border-2 border-gray-300 focus:border-purple-500 focus:outline-none">
+                        <span class="text-2xl">시</span>
+                        <input type="number" id="quiz-calc-min" placeholder="분" class="w-20 text-center text-2xl p-2 rounded-xl border-2 border-gray-300 focus:border-purple-500 focus:outline-none">
+                        <span class="text-2xl">분</span>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="generateCalcQuiz()" class="flex-1 bg-gray-400 text-white py-3 rounded-xl hover:bg-gray-500 active:scale-95 transition-all text-lg shadow-sm">새로운 문제</button>
+                        <button onclick="checkCalcQuiz()" class="flex-1 bg-purple-500 text-white py-3 rounded-xl hover:bg-purple-600 active:scale-95 transition-all text-lg shadow-sm">다 함께 정답 확인!</button>
+                    </div>
+                    
+                    <button onclick="visualizeCalc()" class="w-full mt-3 bg-indigo-100 text-indigo-700 py-2 rounded-xl hover:bg-indigo-200 active:scale-95 transition-all font-bold shadow-sm border border-indigo-200">
+                        ✨ 시곗바늘이 어떻게 움직일까요?
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4. 시간 차이 계산 패널 -->
+            <div id="panel-diff" class="panel-content hidden">
+                <h2 class="text-2xl text-orange-600 mb-4 border-b-2 border-orange-200 pb-2">⏳ 시간의 차이는 얼마일까요?</h2>
+                <div class="bg-orange-50 p-6 rounded-2xl border border-orange-100 text-center">
+                    
+                    <div class="flex flex-col gap-3 mb-6">
+                        <div class="bg-white px-4 py-3 rounded-xl border-2 border-orange-200 shadow-sm flex justify-between items-center">
+                            <span class="text-gray-600 font-bold">시작 시간:</span>
+                            <span id="diff-start-time" class="text-xl font-bold text-orange-700">2시 00분</span>
+                        </div>
+                        <div class="bg-white px-4 py-3 rounded-xl border-2 border-orange-200 shadow-sm flex justify-between items-center">
+                            <span class="text-gray-600 font-bold">끝나는 시간:</span>
+                            <span id="diff-end-time" class="text-xl font-bold text-orange-700">3시 30분</span>
+                        </div>
+                    </div>
+                    
+                    <p class="text-lg text-gray-700 mb-3 font-bold">두 시간의 차이는 얼마일까요?</p>
+
+                    <div class="flex justify-center items-center gap-2 mb-6">
+                        <input type="number" id="quiz-diff-hour" placeholder="시간" class="w-20 text-center text-2xl p-2 rounded-xl border-2 border-gray-300 focus:border-orange-500 focus:outline-none">
+                        <span class="text-xl">시간</span>
+                        <input type="number" id="quiz-diff-min" placeholder="분" class="w-20 text-center text-2xl p-2 rounded-xl border-2 border-gray-300 focus:border-orange-500 focus:outline-none">
+                        <span class="text-xl">분</span>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="generateDiffQuiz()" class="flex-1 bg-gray-400 text-white py-3 rounded-xl hover:bg-gray-500 active:scale-95 transition-all text-lg shadow-sm">새로운 문제</button>
+                        <button onclick="checkDiffQuiz()" class="flex-1 bg-orange-500 text-white py-3 rounded-xl hover:bg-orange-600 active:scale-95 transition-all text-lg shadow-sm">다 함께 정답 확인!</button>
+                    </div>
+
+                    <button onclick="visualizeDiff()" class="w-full mt-3 bg-yellow-100 text-yellow-700 py-2 rounded-xl hover:bg-yellow-200 active:scale-95 transition-all font-bold shadow-sm border border-yellow-200">
+                        ✨ 바늘이 얼마나 움직였는지 다 함께 볼까요?
+                    </button>
+                </div>
+            </div>
+
+            <!-- 5. 오전/오후 배우기 패널 -->
+            <div id="panel-ampm" class="panel-content hidden">
+                <h2 class="text-2xl text-teal-600 mb-4 border-b-2 border-teal-200 pb-2">🌞 하루는 24시간 (오전/오후)</h2>
+                <div class="bg-teal-50 p-6 rounded-2xl border border-teal-100 text-center">
+                    <p class="text-lg text-gray-700 mb-4 font-bold">하루는 24시간이에요!<br>시침이 두 바퀴를 돌아야 하루가 지나가요.</p>
+                    
+                    <div class="bg-white p-4 rounded-xl border-2 border-teal-200 shadow-sm mb-6">
+                        <p class="text-gray-500 mb-1 text-sm">24시간으로 표현하면 지금은 몇 시일까요?</p>
+                        <div class="text-4xl font-bold text-teal-800 font-mono tracking-wider" id="ampm-24h-display">
+                            14:30
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <button onclick="addTime(12, 0, 0)" class="w-full bg-teal-500 text-white px-4 py-3 rounded-xl hover:bg-teal-600 active:scale-95 transition-all font-bold text-lg shadow-sm">
+                            + 12시간 (반나절) 돌려보기
+                        </button>
+                        <p class="text-sm text-gray-600">바늘을 돌려보며 배경색(낮과 밤)이 언제 바뀌는지 다 함께 관찰해 볼까요?</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- 사용자 정의 팝업 (Alert 대체) -->
+    <div id="custom-popup" class="fixed inset-0 bg-black bg-opacity-40 hidden flex items-center justify-center z-50 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl transform scale-90 transition-transform duration-300 text-center" id="popup-content">
+            <div id="popup-emoji" class="text-6xl mb-4">🎉</div>
+            <h3 id="popup-title" class="text-3xl font-bold mb-2 text-gray-800">정답입니다!</h3>
+            <p id="popup-message" class="text-lg text-gray-600 mb-6">참 잘했어요!</p>
+            <button onclick="closePopup()" class="w-full bg-blue-500 text-white py-3 rounded-xl font-bold text-xl hover:bg-blue-600 active:scale-95 transition-all shadow-md">
+                확인
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 상태 변수 ---
+        // 누적 초(Total Seconds)로 관리하여 360도에서 0도로 튀는 현상 방지
+        let currentTotalSeconds = 12 * 3600; 
+        let showSeconds = false;
+        
+        // 마우스 드래그 상태
+        let isDragging = false;
+        let dragType = null;
+        let clockRect = null;
+        
+        // 퀴즈 및 애니메이션용 변수
+        let calcStartSeconds = 0;
+        let calcAddH = 0;
+        let calcAddM = 0;
+
+        let diffStartSeconds = 0;
+        let diffEndSeconds = 0;
+        
+        let isAnimating = false; // 애니메이션 실행 중 조작 방지
+
+        // --- 초기화 ---
+        function init() {
+            drawClockTicksAndNumbers();
+            resetToCurrentTime();
+            initDrag();
+            
+            // 숫자 입력창 소수점 방지
+            const inputs = document.querySelectorAll('input[type="number"]');
+            inputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    this.value = this.value.replace(/[^0-9]/g, '');
+                });
+            });
+        }
+
+        function drawClockTicksAndNumbers() {
+            const clock = document.getElementById('clock-face');
+            for (let i = 0; i < 60; i++) {
+                const tick = document.createElement('div');
+                tick.className = `tick ${i % 5 === 0 ? 'thick' : ''}`;
+                tick.style.transform = `rotate(${i * 6}deg)`;
+                clock.appendChild(tick);
+            }
+            for (let i = 1; i <= 12; i++) {
+                const num = document.createElement('div');
+                num.className = 'clock-number';
+                num.style.transform = `rotate(${i * 30}deg)`;
+                const span = document.createElement('span');
+                span.innerText = i;
+                span.style.transform = `rotate(${-i * 30}deg)`;
+                num.appendChild(span);
+                clock.appendChild(num);
+            }
+        }
+
+        // --- 시간 로직 ---
+        function resetToCurrentTime() {
+            const now = new Date();
+            currentTotalSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + (showSeconds ? now.getSeconds() : 0);
+            updateClockDisplay(true);
+        }
+
+        function addTime(hAdd, mAdd, sAdd = 0) {
+            if(isAnimating) return;
+            currentTotalSeconds += (hAdd * 3600) + (mAdd * 60) + sAdd;
+            updateClockDisplay(true);
+        }
+
+        function updateClockDisplay(useTransition = true) {
+            // 시간 계산을 위해 0~86399 (하루) 범위의 양수로 변환
+            let s = Math.floor(currentTotalSeconds);
+            let daySeconds = ((s % 86400) + 86400) % 86400;
+
+            let h24 = Math.floor(daySeconds / 3600);
+            let m = Math.floor((daySeconds % 3600) / 60);
+            let sec = daySeconds % 60;
+
+            let displayH = h24 % 12;
+            displayH = displayH ? displayH : 12;
+
+            // 바늘 각도 (누적 초를 그대로 곱해서 끝없이 회전하게 만듦 => 튀는 현상 해결)
+            const secondAngle = currentTotalSeconds * 6;
+            const minuteAngle = currentTotalSeconds * 0.1;
+            const hourAngle = currentTotalSeconds / 120;
+
+            const sHand = document.getElementById('second-hand');
+            const mHand = document.getElementById('minute-hand');
+            const hHand = document.getElementById('hour-hand');
+
+            const transitionStyle = useTransition && !isDragging ? 'transform 0.3s cubic-bezier(0.4, 2.08, 0.55, 0.44)' : 'none';
+            sHand.style.transition = transitionStyle;
+            mHand.style.transition = transitionStyle;
+            hHand.style.transition = transitionStyle;
+
+            sHand.style.transform = `rotate(${secondAngle}deg)`;
+            mHand.style.transform = `rotate(${minuteAngle}deg)`;
+            hHand.style.transform = `rotate(${hourAngle}deg)`;
+
+            // 디지털 시계 텍스트
+            document.getElementById('digital-hour').innerText = displayH;
+            document.getElementById('digital-minute').innerText = m < 10 ? '0' + m : m;
+            document.getElementById('digital-second').innerText = sec < 10 ? '0' + sec : sec;
+            
+            // 24시간제 표시 업데이트 (오전/오후 탭용)
+            document.getElementById('ampm-24h-display').innerText = 
+                `${h24 < 10 ? '0'+h24 : h24}:${m < 10 ? '0'+m : m}${showSeconds ? ':'+(sec < 10 ? '0'+sec : sec) : ''}`;
+
+            // 오전/오후 및 낮/밤 배경
+            const ampmSpan = document.getElementById('digital-ampm');
+            if (h24 >= 12) {
+                ampmSpan.innerText = '오후';
+                ampmSpan.className = 'text-indigo-400 mr-2 text-2xl font-sans';
+            } else {
+                ampmSpan.innerText = '오전';
+                ampmSpan.className = 'text-orange-400 mr-2 text-2xl font-sans';
+            }
+
+            const isDayTime = (h24 >= 6 && h24 < 18);
+            if(isDayTime) document.body.style.backgroundColor = '#f0fdf4'; // Light green (Day)
+            else document.body.style.backgroundColor = '#1e1b4b'; // Dark blue (Night)
+
+            // 시계 읽기 모드일 땐 정답 가림
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab && activeTab.id === 'tab-read' && !isAnimating) {
+                document.getElementById('digital-hour').innerText = '??';
+                document.getElementById('digital-minute').innerText = '??';
+                document.getElementById('digital-second').innerText = '??';
+                ampmSpan.innerText = '??';
+                ampmSpan.className = 'text-gray-400 mr-2 text-2xl font-sans';
+            }
+        }
+
+        function toggleSecondHand() {
+            showSeconds = document.getElementById('toggle-second').checked;
+            const sHand = document.getElementById('second-hand');
+            const sDigi = document.getElementById('digital-second-wrap');
+            const sBtns = document.getElementById('second-buttons');
+            
+            if(showSeconds) {
+                sHand.classList.remove('hidden');
+                sDigi.classList.remove('hidden');
+                sBtns.classList.remove('hidden');
+            } else {
+                sHand.classList.add('hidden');
+                sDigi.classList.add('hidden');
+                sBtns.classList.add('hidden');
+                currentTotalSeconds -= (currentTotalSeconds % 60); // 초침 끌 때 0초로 맞춤
+                updateClockDisplay(true);
+            }
+        }
+
+        // --- 마우스/터치 드래그 ---
+        function initDrag() {
+            const hHand = document.getElementById('hour-hand');
+            const mHand = document.getElementById('minute-hand');
+            const sHand = document.getElementById('second-hand');
+            
+            const startDrag = (e, type) => {
+                if(isAnimating) return;
+                e.preventDefault();
+                isDragging = true;
+                dragType = type;
+                clockRect = document.getElementById('clock-face').getBoundingClientRect();
+                document.body.style.cursor = 'grabbing';
+            };
+
+            hHand.addEventListener('mousedown', (e) => startDrag(e, 'hour'));
+            mHand.addEventListener('mousedown', (e) => startDrag(e, 'minute'));
+            sHand.addEventListener('mousedown', (e) => startDrag(e, 'second'));
+
+            hHand.addEventListener('touchstart', (e) => startDrag(e.touches[0], 'hour'), {passive: false});
+            mHand.addEventListener('touchstart', (e) => startDrag(e.touches[0], 'minute'), {passive: false});
+            sHand.addEventListener('touchstart', (e) => startDrag(e.touches[0], 'second'), {passive: false});
+
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('touchmove', (e) => {
+                if(isDragging) { e.preventDefault(); handleDrag(e.touches[0]); }
+            }, {passive: false});
+
+            const stopDrag = () => {
+                if(isDragging) {
+                    isDragging = false;
+                    dragType = null;
+                    document.body.style.cursor = 'default';
+                    updateClockDisplay(true); // 트랜지션 복구
+                }
+            };
+            document.addEventListener('mouseup', stopDrag);
+            document.addEventListener('touchend', stopDrag);
+        }
+
+        function handleDrag(e) {
+            if (!isDragging || !clockRect) return;
+
+            const cx = clockRect.left + clockRect.width / 2;
+            const cy = clockRect.top + clockRect.height / 2;
+            let angle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI + 90;
+            if (angle < 0) angle += 360;
+
+            // 변화량(Diff)을 통해 누적 초를 조정
+            if (dragType === 'minute') {
+                let currentMAngle = (currentTotalSeconds * 0.1) % 360;
+                if(currentMAngle < 0) currentMAngle += 360;
+                let diff = angle - currentMAngle;
+                if (diff > 180) diff -= 360;
+                if (diff < -180) diff += 360;
+                currentTotalSeconds += diff * 10;
+            } else if (dragType === 'hour') {
+                let currentHAngle = (currentTotalSeconds / 120) % 360;
+                if(currentHAngle < 0) currentHAngle += 360;
+                let diff = angle - currentHAngle;
+                if (diff > 180) diff -= 360;
+                if (diff < -180) diff += 360;
+                currentTotalSeconds += diff * 120;
+            } else if (dragType === 'second') {
+                let currentSAngle = (currentTotalSeconds * 6) % 360;
+                if(currentSAngle < 0) currentSAngle += 360;
+                let diff = angle - currentSAngle;
+                if (diff > 180) diff -= 360;
+                if (diff < -180) diff += 360;
+                currentTotalSeconds += diff / 6;
+            }
+
+            updateClockDisplay(false);
+        }
+
+        // --- 탭 및 패널 제어 ---
+        function switchTab(tabId) {
+            if(isAnimating) return;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active', 'bg-blue-500', 'text-white'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.add('text-gray-500'));
+            
+            const activeBtn = document.getElementById(`tab-${tabId}`);
+            activeBtn.classList.remove('text-gray-500');
+            activeBtn.classList.add('active', 'bg-blue-500', 'text-white');
+
+            document.querySelectorAll('.panel-content').forEach(panel => panel.classList.add('hidden'));
+            document.getElementById(`panel-${tabId}`).classList.remove('hidden');
+
+            if (tabId === 'read') generateReadQuiz();
+            else if (tabId === 'calc') generateCalcQuiz();
+            else if (tabId === 'diff') generateDiffQuiz();
+            else updateClockDisplay(true);
+        }
+
+        // --- 퀴즈 로직 ---
+        function getH12_M() {
+            let s = Math.floor(currentTotalSeconds);
+            let daySec = ((s % 86400) + 86400) % 86400;
+            let h = Math.floor(daySec / 3600) % 12 || 12;
+            let m = Math.floor((daySec % 3600) / 60);
+            return {h, m};
+        }
+
+        function generateReadQuiz() {
+            let h = Math.floor(Math.random() * 12) + 1;
+            let m = Math.random() > 0.5 ? Math.floor(Math.random() * 12) * 5 : Math.floor(Math.random() * 60);
+            currentTotalSeconds = (h * 3600) + (m * 60);
+            updateClockDisplay(true);
+            
+            document.getElementById('quiz-read-hour').value = '';
+            document.getElementById('quiz-read-min').value = '';
+            document.getElementById('quiz-read-hour').focus();
+        }
+
+        function checkReadQuiz() {
+            const userH = parseInt(document.getElementById('quiz-read-hour').value);
+            const userM = parseInt(document.getElementById('quiz-read-min').value);
+            if (isNaN(userH) || isNaN(userM)) return showPopup('앗!', '시간과 분을 모두 입력해 주세요.', '🤔');
+
+            let {h, m} = getH12_M();
+            let isCorrectH = (userH === h) || (userH === 0 && h === 12);
+            let isCorrectM = (userM === m);
+
+            if (isCorrectH && isCorrectM) {
+                showPopup('정답입니다!', '우리 반 친구들, 참 잘했어요!', '🎉', true);
+                setTimeout(generateReadQuiz, 2000);
+            } else showPopup('다시 생각해 볼까요?', '시곗바늘을 조금 더 자세히 살펴봐요!', '💪', false);
+        }
+
+        function generateCalcQuiz() {
+            calcStartSeconds = currentTotalSeconds - (currentTotalSeconds % 60); // 초는 0으로
+            currentTotalSeconds = calcStartSeconds;
+            
+            calcAddH = Math.floor(Math.random() * 3);
+            calcAddM = (Math.floor(Math.random() * 5) + 1) * 10;
+
+            let qText = calcAddH > 0 ? `${calcAddH}시간 ` : '';
+            qText += `${calcAddM}분 뒤`;
+            document.getElementById('calc-question').innerText = qText;
+            
+            document.getElementById('quiz-calc-hour').value = '';
+            document.getElementById('quiz-calc-min').value = '';
+            updateClockDisplay(true);
+        }
+
+        function checkCalcQuiz() {
+            const userH = parseInt(document.getElementById('quiz-calc-hour').value);
+            const userM = parseInt(document.getElementById('quiz-calc-min').value);
+            if (isNaN(userH) || isNaN(userM)) return showPopup('앗!', '시간과 분을 모두 입력해 주세요.', '🤔');
+
+            let targetSec = calcStartSeconds + (calcAddH * 3600) + (calcAddM * 60);
+            let daySec = ((targetSec % 86400) + 86400) % 86400;
+            let ansH = Math.floor(daySec / 3600) % 12 || 12;
+            let ansM = Math.floor((daySec % 3600) / 60);
+
+            if ((userH === ansH || (userH === 0 && ansH === 12)) && userM === ansM) {
+                showPopup('정확해요!', '우리 반 친구들, 완벽하게 맞췄어요!', '🧙‍♂️', true);
+                currentTotalSeconds = targetSec;
+                updateClockDisplay(true);
+                setTimeout(generateCalcQuiz, 2000);
+            } else showPopup('거의 다 왔어요!', `다 함께 천천히 다시 계산해 봐요!`, '✍️', false);
+        }
+
+        // --- 시각적 풀이 애니메이션 ---
+        async function visualizeCalc() {
+            if(isAnimating) return;
+            isAnimating = true;
+
+            // 원본 시간으로 세팅
+            currentTotalSeconds = calcStartSeconds;
+            updateClockDisplay(true);
+            await new Promise(r => setTimeout(r, 600)); // 잠깐 멈춤
+
+            let targetSec = calcStartSeconds + (calcAddH * 3600) + (calcAddM * 60);
+            let step = 60; // 1분 단위로 틱
+
+            let interval = setInterval(() => {
+                currentTotalSeconds += step;
+                updateClockDisplay(false); // 부드러운 트랜지션 끄고 즉각 반영
+
+                if(currentTotalSeconds >= targetSec) {
+                    currentTotalSeconds = targetSec;
+                    updateClockDisplay(true);
+                    clearInterval(interval);
+                    isAnimating = false;
+                    showPopup('짜잔!', '시곗바늘이 이렇게 움직여서 정답이 된답니다.', '💡', true);
+                }
+            }, 30); // 애니메이션 속도
+        }
+
+        function generateDiffQuiz() {
+            let h1 = Math.floor(Math.random() * 11) + 1;
+            let m1 = Math.floor(Math.random() * 12) * 5;
+            diffStartSeconds = (h1 * 3600) + (m1 * 60);
+
+            let addMins = Math.floor(Math.random() * 21 + 6) * 5; 
+            diffEndSeconds = diffStartSeconds + (addMins * 60);
+
+            let endDaySec = diffEndSeconds % 86400;
+            let endH = Math.floor(endDaySec / 3600) % 12 || 12;
+            let endM = Math.floor((endDaySec % 3600) / 60);
+            
+            document.getElementById('diff-start-time').innerText = `${h1}시 ${m1 < 10 ? '0'+m1 : m1}분`;
+            document.getElementById('diff-end-time').innerText = `${endH}시 ${endM < 10 ? '0'+endM : endM}분`;
+            
+            document.getElementById('quiz-diff-hour').value = '';
+            document.getElementById('quiz-diff-min').value = '';
+            
+            currentTotalSeconds = diffStartSeconds;
+            updateClockDisplay(true);
+        }
+
+        function checkDiffQuiz() {
+            const userH = parseInt(document.getElementById('quiz-diff-hour').value) || 0;
+            const userM = parseInt(document.getElementById('quiz-diff-min').value) || 0;
+            
+            let actualDiffMins = (diffEndSeconds - diffStartSeconds) / 60;
+            let ansH = Math.floor(actualDiffMins / 60);
+            let ansM = actualDiffMins % 60;
+            
+            if (userH === ansH && userM === ansM) {
+                showPopup('훌륭해요!', '두 시간의 차이를 정확하게 계산했네요!', '🌟', true);
+                currentTotalSeconds = diffEndSeconds;
+                updateClockDisplay(true);
+                setTimeout(generateDiffQuiz, 2000);
+            } else showPopup('다시 계산해 볼까요?', `선생님과 함께 천천히 다시 계산해 봐요!`, '🤔', false);
+        }
+
+        async function visualizeDiff() {
+            if(isAnimating) return;
+            isAnimating = true;
+
+            currentTotalSeconds = diffStartSeconds;
+            updateClockDisplay(true);
+            await new Promise(r => setTimeout(r, 600));
+
+            let step = 60;
+            let countedMins = 0;
+
+            let interval = setInterval(() => {
+                currentTotalSeconds += step;
+                countedMins++;
+                updateClockDisplay(false);
+
+                if(currentTotalSeconds >= diffEndSeconds) {
+                    currentTotalSeconds = diffEndSeconds;
+                    updateClockDisplay(true);
+                    clearInterval(interval);
+                    isAnimating = false;
+
+                    let h = Math.floor(countedMins / 60);
+                    let m = countedMins % 60;
+                    let msg = h > 0 ? `${h}시간 ${m}분` : `${m}분`;
+                    showPopup('확인해봐요!', `총 ${msg}만큼 바늘이 움직였어요!`, '✨', true);
+                }
+            }, 30);
+        }
+
+        // --- 팝업 UI ---
+        function showPopup(title, message, emoji, isSuccess = true) {
+            const popup = document.getElementById('custom-popup');
+            const content = document.getElementById('popup-content');
+            
+            document.getElementById('popup-title').innerText = title;
+            document.getElementById('popup-message').innerText = message;
+            document.getElementById('popup-emoji').innerText = emoji;
+
+            document.getElementById('popup-title').className = isSuccess 
+                ? "text-3xl font-bold mb-2 text-blue-600" 
+                : "text-3xl font-bold mb-2 text-red-500";
+
+            popup.classList.remove('hidden');
+            setTimeout(() => {
+                popup.classList.remove('opacity-0');
+                content.classList.remove('scale-90');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closePopup() {
+            const popup = document.getElementById('custom-popup');
+            const content = document.getElementById('popup-content');
+            
+            popup.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-90');
+            setTimeout(() => popup.classList.add('hidden'), 300);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>펜통(PenTong) 정보</title>
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f9fafb;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.6s ease-out forwards;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .keep-all {
+            word-break: keep-all;
+        }
+
+        /* 이스터에그용 화려한 애니메이션 */
+        @keyframes popInAndGlow {
+            0% {
+                transform: scale(0) rotate(-720deg);
+                opacity: 0;
+            }
+
+            80% {
+                transform: scale(1.2) rotate(10deg);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1) rotate(0deg);
+                opacity: 1;
+                filter: drop-shadow(0 0 8px rgba(255, 105, 180, 0.6));
+            }
+        }
+
+        @keyframes rainbowText {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .easter-egg-active {
+            /* 무지개 그라데이션 텍스트 */
+            background: linear-gradient(270deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+            background-size: 400% 400%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            /* 팝업 회전 등장 후 무지개 색상 순환 */
+            animation: popInAndGlow 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards, rainbowText 2s ease infinite;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4 m-0 overflow-hidden">
+    
+    <!-- 정보 카드 메인 컨테이너 -->
+    <div class="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-8 sm:p-10 max-w-md w-full text-center fade-in">
+
+        <!-- 프로그램 아이콘 -->
+        <div class="mx-auto mb-4 flex justify-center items-center h-20 relative select-none">
+            <img id="pentong-icon" src="PenTongIcon.ico" alt="Program Icon" class="h-20 w-20 object-contain" />
+            <div id="easter-egg-text" class="hidden absolute text-xl font-black tracking-wider whitespace-nowrap">made by 서명호</div>
+        </div>
+
+        <!-- 프로그램 제목 -->
+        <h1 class="text-2xl font-bold text-gray-800 mb-3 tracking-tight">펜통(PenTong) 정보</h1>
+
+        <!-- 버전 표시 영역 추가 -->
+        <div class="text-sm font-medium text-gray-400 mb-6" id="version-display"></div>
+
+        <!-- 프로그램 설명 -->
+        <p class="text-gray-500 text-sm leading-relaxed mb-8 keep-all">
+            교육청, 학교 교사 및 행정실 교직원들의 원활한 업무 처리를 위해 다양한 편의 기능을 하나로 모아 제공하는 통합 업무 지원 프로그램입니다.
+        </p>
+
+        <!-- 구분선 -->
+        <div class="h-px bg-gray-100 w-full my-6"></div>
+
+        <!-- 개발 정보 박스 -->
+        <div class="text-left bg-gray-50 rounded-xl p-5 mb-8 border border-gray-100">
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center">
+                    <span class="text-gray-400 font-medium text-xs w-12 shrink-0">개발</span>
+                    <span class="text-gray-800 font-medium text-sm">부산광역시교육청 AI·데이터연구팀</span>
+                </div>
+                <div class="flex items-start mt-1">
+                    <span class="text-gray-400 font-medium text-xs w-12 shrink-0 mt-0.5">목적</span>
+                    <span class="text-gray-600 text-sm keep-all leading-snug">교직원 행정 및 교무업무 편의성 향상 및 자동화 지원</span>
+                </div>
+            </div>
+        </div>
+        <!-- ▼▼▼ 오픈소스 링크 버튼 추가 ▼▼▼ -->
+        <button onclick="window.parent.postMessage({type: 'pywebview-call', method: 'open_github', id: 'open_github_req'}, '*');" class="w-full flex items-center justify-center space-x-2 px-4 py-3 mb-8 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-bold transition-all border border-gray-200 shadow-sm group">
+            <svg class="w-5 h-5 text-gray-500 group-hover:text-gray-800 transition-colors" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path></svg>
+            <span>오픈소스 & 라이선스 안내</span>
+        </button>
+        <!-- ▲▲▲ 추가 끝 ▲▲▲ -->
+        <!-- 저작권 정보 -->
+        <p class="text-[11px] text-gray-400 font-light tracking-wide leading-relaxed">
+            Copyrightⓒ 2026, Busan Metropolitan City office of Education.<br>
+            All rights reserved.
+        </p>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+
+            // --- 1. 버전 정보 가져오기 (iframe 통신) ---
+            const callId = 'version_req_' + Date.now();
+            window.parent.postMessage({
+                type: 'pywebview-call',
+                method: 'get_app_version',
+                id: callId
+            }, '*');
+
+            window.addEventListener('message', function (event) {
+                const data = event.data;
+                if (data && data.id === callId) {
+                    if (data.status === 'success') {
+                        const versionEl = document.getElementById('version-display');
+                        if (versionEl && data.response) {
+                            versionEl.innerText =  data.response;
+                        }
+                    } else {
+                        console.error("버전 정보 가져오기 실패:", data.error);
+                    }
+                }
+            });
+
+            // --- 2. 이스터에그 로직 (더블클릭 이벤트) ---
+            const iconImg = document.getElementById('pentong-icon');
+            const easterEggText = document.getElementById('easter-egg-text');
+
+            iconImg.addEventListener('dblclick', function () {
+                // 이미 실행 중이 아닐 때만 작동
+                if (!iconImg.classList.contains('hidden')) {
+                    // 아이콘 숨기고 텍스트 표시 및 애니메이션 활성화
+                    iconImg.classList.add('hidden');
+                    easterEggText.classList.remove('hidden');
+                    easterEggText.classList.add('easter-egg-active');
+
+                    // 3초 후 원상복구
+                    setTimeout(() => {
+                        easterEggText.classList.remove('easter-egg-active');
+                        easterEggText.classList.add('hidden');
+                        iconImg.classList.remove('hidden');
+                    }, 3000);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

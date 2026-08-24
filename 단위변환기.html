@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>만능 단위 변환기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f8fafc;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-lg glass-card rounded-3xl p-8 space-y-8">
+        <!-- 헤더 -->
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-gray-800 tracking-tight">단위 변환기</h1>
+            <p class="text-gray-500 mt-2">변환할 단위를 선택하고 값을 입력하세요.</p>
+        </div>
+
+        <!-- 카테고리 선택 -->
+        <div class="grid grid-cols-5 gap-2 bg-gray-100 p-1 rounded-2xl">
+            <button onclick="changeCategory('length')" id="btn-length" class="cat-btn flex flex-col items-center justify-center p-3 rounded-xl transition-all bg-white shadow-sm text-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 12h12l3-12H3z" /></svg>
+                <span class="text-xs font-semibold">길이</span>
+            </button>
+            <button onclick="changeCategory('weight')" id="btn-weight" class="cat-btn flex flex-col items-center justify-center p-3 rounded-xl transition-all hover:bg-white/50 text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M7 7l3 9m7-9l3 9a5.002 5.002 0 01-6.001 0M17 7l-3 9m0 0l-3-9m0 0h5m-9 0H5" /></svg>
+                <span class="text-xs font-semibold">무게</span>
+            </button>
+            <button onclick="changeCategory('temp')" id="btn-temp" class="cat-btn flex flex-col items-center justify-center p-3 rounded-xl transition-all hover:bg-white/50 text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <span class="text-xs font-semibold">온도</span>
+            </button>
+            <button onclick="changeCategory('area')" id="btn-area" class="cat-btn flex flex-col items-center justify-center p-3 rounded-xl transition-all hover:bg-white/50 text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" /></svg>
+                <span class="text-xs font-semibold">넓이</span>
+            </button>
+            <button onclick="changeCategory('volume')" id="btn-volume" class="cat-btn flex flex-col items-center justify-center p-3 rounded-xl transition-all hover:bg-white/50 text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.691.387a2 2 0 01-1.132.252l-4-.39a9 9 0 00-6.232 1.255L3 18.277l.214 2.14A1 1 0 004.208 21c3.085 0 5.673-1.42 7.027-3.111l.732-.916a2 2 0 011.53-.775l2.42-.08a2 2 0 001.53-.775l.732-.916a2 2 0 00-.775-3.111l-.214-.214z" /></svg>
+                <span class="text-xs font-semibold">부피</span>
+            </button>
+        </div>
+
+        <!-- 변환 폼 -->
+        <div class="space-y-6">
+            <!-- 입력값 -->
+            <div class="space-y-2">
+                <label class="text-sm font-semibold text-gray-600 ml-1">입력</label>
+                <div class="flex space-x-2">
+                    <input type="number" id="input-val" value="1" step="any" oninput="convert()" 
+                        class="w-2/3 p-4 rounded-2xl border-none bg-gray-50 focus:ring-2 focus:ring-blue-500 text-lg font-medium outline-none transition-all">
+                    <select id="from-unit" onchange="convert()" 
+                        class="w-1/3 p-4 rounded-2xl border-none bg-gray-100 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold">
+                        <!-- 단위가 여기에 동적으로 생성됨 -->
+                    </select>
+                </div>
+            </div>
+
+            <!-- 화살표 아이콘 -->
+            <div class="flex justify-center -my-2 relative z-10">
+                <div class="bg-white p-2 rounded-full shadow-md border border-gray-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- 결과값 -->
+            <div class="space-y-2">
+                <label class="text-sm font-semibold text-gray-600 ml-1">결과</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="result-val" readonly 
+                        class="w-2/3 p-4 rounded-2xl border-none bg-blue-50 text-blue-700 text-lg font-bold outline-none cursor-default">
+                    <select id="to-unit" onchange="convert()" 
+                        class="w-1/3 p-4 rounded-2xl border-none bg-gray-100 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-semibold">
+                        <!-- 단위가 여기에 동적으로 생성됨 -->
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- 하단 정보 -->
+        <div id="unit-info" class="p-4 bg-gray-50 rounded-2xl text-xs text-gray-500 leading-relaxed text-center">
+            정확한 계산을 위해 소수점 4자리까지 표시됩니다.
+        </div>
+    </div>
+
+    <script>
+        // 단위 데이터 정의
+        const units = {
+            length: {
+                units: {
+                    mm: { name: "mm (밀리미터)", factor: 0.001 },
+                    cm: { name: "cm (센티미터)", factor: 0.01 },
+                    m: { name: "m (미터)", factor: 1 },
+                    km: { name: "km (킬로미터)", factor: 1000 },
+                    in: { name: "in (인치)", factor: 0.0254 },
+                    ft: { name: "ft (피트)", factor: 0.3048 },
+                    yd: { name: "yd (야드)", factor: 0.9144 },
+                    mile: { name: "mile (마일)", factor: 1609.34 }
+                },
+                defaultFrom: 'm',
+                defaultTo: 'cm'
+            },
+            weight: {
+                units: {
+                    mg: { name: "mg (밀리그램)", factor: 0.001 },
+                    g: { name: "g (그램)", factor: 1 },
+                    kg: { name: "kg (킬로그램)", factor: 1000 },
+                    t: { name: "t (톤)", factor: 1000000 },
+                    oz: { name: "oz (온스)", factor: 28.3495 },
+                    lb: { name: "lb (파운드)", factor: 453.592 }
+                },
+                defaultFrom: 'kg',
+                defaultTo: 'g'
+            },
+            temp: {
+                units: {
+                    C: { name: "°C (섭씨)", isTemp: true },
+                    F: { name: "°F (화씨)", isTemp: true },
+                    K: { name: "K (켈빈)", isTemp: true }
+                },
+                defaultFrom: 'C',
+                defaultTo: 'F'
+            },
+            area: {
+                units: {
+                    m2: { name: "m² (제곱미터)", factor: 1 },
+                    km2: { name: "km² (제곱킬로미터)", factor: 1000000 },
+                    ft2: { name: "ft² (제곱피트)", factor: 0.092903 },
+                    ac: { name: "ac (에이커)", factor: 4046.86 },
+                    ha: { name: "ha (헥타르)", factor: 10000 },
+                    pyeong: { name: "평 (Pyeong)", factor: 3.305785 }
+                },
+                defaultFrom: 'pyeong',
+                defaultTo: 'm2'
+            },
+            volume: {
+                units: {
+                    ml: { name: "ml (밀리리터)", factor: 0.001 },
+                    l: { name: "l (리터)", factor: 1 },
+                    m3: { name: "m³ (세제곱미터)", factor: 1000 },
+                    gal: { name: "gal (갤런)", factor: 3.78541 },
+                    qt: { name: "qt (쿼트)", factor: 0.946353 },
+                    pt: { name: "pt (파인트)", factor: 0.473176 },
+                    cup: { name: "cup (컵)", factor: 0.24 }
+                },
+                defaultFrom: 'l',
+                defaultTo: 'ml'
+            }
+        };
+
+        let currentCategory = 'length';
+
+        // 카테고리 변경 함수
+        function changeCategory(cat) {
+            currentCategory = cat;
+            
+            // 버튼 스타일 업데이트
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.classList.remove('bg-white', 'shadow-sm', 'text-blue-600');
+                btn.classList.add('text-gray-500', 'hover:bg-white/50');
+            });
+            const activeBtn = document.getElementById(`btn-${cat}`);
+            activeBtn.classList.add('bg-white', 'shadow-sm', 'text-blue-600');
+            activeBtn.classList.remove('text-gray-500', 'hover:bg-white/50');
+
+            // 셀렉트 박스 업데이트
+            updateSelects();
+            convert();
+        }
+
+        // 셀렉트 박스 내용 채우기
+        function updateSelects() {
+            const fromSelect = document.getElementById('from-unit');
+            const toSelect = document.getElementById('to-unit');
+            const data = units[currentCategory];
+            
+            fromSelect.innerHTML = '';
+            toSelect.innerHTML = '';
+
+            for (const [key, val] of Object.entries(data.units)) {
+                fromSelect.innerHTML += `<option value="${key}">${val.name}</option>`;
+                toSelect.innerHTML += `<option value="${key}">${val.name}</option>`;
+            }
+
+            fromSelect.value = data.defaultFrom;
+            toSelect.value = data.defaultTo;
+        }
+
+        // 온도 변환 로직
+        function convertTemperature(value, from, to) {
+            let celsius;
+            if (from === 'C') celsius = value;
+            else if (from === 'F') celsius = (value - 32) * 5/9;
+            else if (from === 'K') celsius = value - 273.15;
+
+            if (to === 'C') return celsius;
+            else if (to === 'F') return (celsius * 9/5) + 32;
+            else if (to === 'K') return celsius + 273.15;
+            return value;
+        }
+
+        // 실제 변환 실행
+        function convert() {
+            const inputVal = parseFloat(document.getElementById('input-val').value);
+            const fromUnit = document.getElementById('from-unit').value;
+            const toUnit = document.getElementById('to-unit').value;
+            const resultEl = document.getElementById('result-val');
+
+            if (isNaN(inputVal)) {
+                resultEl.value = "";
+                return;
+            }
+
+            const data = units[currentCategory];
+            let result;
+
+            if (currentCategory === 'temp') {
+                result = convertTemperature(inputVal, fromUnit, toUnit);
+            } else {
+                const fromFactor = data.units[fromUnit].factor;
+                const toFactor = data.units[toUnit].factor;
+                // 기준 단위로 변환 후 목표 단위로 변환
+                result = (inputVal * fromFactor) / toFactor;
+            }
+
+            // 소수점 처리 (너무 길면 지수 표기법으로 전환되기도 함)
+            if (result === 0) {
+                resultEl.value = "0";
+            } else if (Math.abs(result) < 0.0001 || Math.abs(result) > 10000000) {
+                resultEl.value = result.toExponential(4);
+            } else {
+                // 불필요한 0 제거
+                resultEl.value = parseFloat(result.toFixed(6)).toString();
+            }
+        }
+
+        // 초기 실행
+        window.onload = () => {
+            updateSelects();
+            convert();
+        };
+    </script>
+</body>
+</html>

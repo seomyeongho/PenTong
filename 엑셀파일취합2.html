@@ -1,0 +1,2977 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>엑셀 자동 취합 프로그램</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+            border: 2px solid #f1f5f9;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+            }
+
+        .fade-in {
+            animation: fadeIn 0.2s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .draggable-item {
+            cursor: grab;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+
+            .draggable-item:active {
+                cursor: grabbing;
+            }
+
+        .dragging {
+            opacity: 0.4;
+            border: 2px dashed #3b82f6 !important;
+            background-color: #eff6ff !important;
+            transform: scale(0.95);
+        }
+
+        .drag-over-left {
+            border-left: 4px solid #3b82f6 !important;
+        }
+
+        .drag-over-right {
+            border-right: 4px solid #3b82f6 !important;
+        }
+
+        .custom-checkbox:checked {
+            background-color: #2563eb;
+            border-color: #2563eb;
+        }
+
+        th, td {
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen overflow-hidden flex flex-col font-sans select-none">
+
+    <header class="bg-white border-b border-slate-200 px-6 py-2.5 flex justify-between items-center shrink-0 shadow-sm z-30 h-14">
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+                <div class="bg-blue-600 text-white p-1.5 rounded-md shadow-sm"><i data-lucide="layers" class="w-4 h-4"></i></div>
+                <h1 class="text-lg font-bold text-slate-800 tracking-tight">엑셀 고급 취합</h1>
+            </div>
+
+            <div id="header-divider" class="hidden h-4 w-[1px] bg-slate-300 mx-2"></div>
+
+            <div id="workspace-header-title" class="hidden flex items-center gap-3">
+                <button onclick="showDashboard()" class="text-slate-400 hover:text-slate-800 p-1 rounded transition-colors" title="대시보드로 돌아가기"><i data-lucide="arrow-left" class="w-4 h-4"></i></button>
+                <div class="flex items-center gap-1.5 bg-slate-50 px-3 py-1 rounded-md border border-slate-200">
+                    <i data-lucide="folder-kanban" class="w-3.5 h-3.5 text-blue-500"></i>
+                    <span id="current-project-name" class="font-bold text-slate-700 text-sm">새 취합 작업</span>
+                </div>
+                <span id="unsaved-badge" class="hidden flex items-center gap-1 bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full text-xs font-bold border border-orange-200 tracking-tight">
+                    <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>저장 필요
+                </span>
+            </div>
+        </div>
+
+        <div id="header-actions" class="hidden flex items-center gap-2">
+            <button onclick="exportSettings()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-md text-sm font-bold transition-colors flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="download" class="w-4 h-4"></i> 취합 설정 내보내기
+            </button>
+            <button onclick="saveProject()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-md text-sm font-bold transition-colors flex items-center gap-1.5 border border-transparent shadow-sm">
+                <i data-lucide="save" class="w-4 h-4"></i> 설정 저장
+            </button>
+            <button onclick="showDashboard()" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-md text-sm font-bold transition-colors flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="log-out" class="w-4 h-4"></i> 나가기
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-hidden relative">
+        <div id="view-dashboard" class="flex-1 bg-slate-50 flex flex-col items-center pt-16 px-4 pb-10 overflow-y-auto">
+            <div class="w-full max-w-5xl">
+                <div class="flex justify-between items-end mb-8">
+                    <div>
+                        <h1 class="text-3xl font-black text-slate-800 tracking-tight">작업 공간 (Workspace)</h1>
+                        <p class="text-sm text-slate-500 mt-2 font-medium">이전에 진행했던 취합 작업들을 관리하고 이어서 진행할 수 있습니다.</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="importSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md flex items-center gap-2">
+                            <i data-lucide="upload" class="w-5 h-5"></i> 취합 설정 불러오기
+                        </button>
+                        <button onclick="createNewProject()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-md flex items-center gap-2">
+                            <i data-lucide="folder-plus" class="w-5 h-5"></i> 새 작업 만들기
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <ul class="divide-y divide-slate-100" id="project-list"></ul>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-workspace" class="absolute inset-0 hidden flex flex-col fade-in bg-slate-50">
+            <div class="bg-white border-b border-slate-200 px-4 pt-2 flex flex-col shrink-0 shadow-sm relative z-10">
+                <!--<div class="flex items-center gap-4 mb-2 px-2">
+                    <button onclick="showDashboard()" class="text-slate-500 hover:text-slate-800 p-1 rounded transition-colors" title="뒤로 가기"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+                    <span class="font-semibold text-slate-700 flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-md border border-slate-200">
+                        <i data-lucide="folder-open" class="w-4 h-4 text-blue-500"></i><span id="current-project-name">새 작업</span>
+                    </span>
+                </div>-->
+                <div class="bg-white border-b border-slate-200 px-4 pt-2 flex gap-1 shrink-0 z-10 relative">
+                    <button onclick="switchTab('design')" id="tab-btn-design" class="px-6 py-2.5 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 transition-colors flex items-center gap-2 bg-white"><i data-lucide="paint-roller" class="w-4 h-4"></i> 1. 취합 디자인</button>
+                    <button onclick="switchTab('files')" id="tab-btn-files" class="px-6 py-2.5 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-2"><i data-lucide="files" class="w-4 h-4"></i> 2. 파일 취합</button>
+                    <button onclick="switchTab('preview')" id="tab-btn-preview" class="px-6 py-2.5 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-2"><i data-lucide="table-properties" class="w-4 h-4"></i> 3. 취합 결과</button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-hidden relative">
+                <div id="tab-content-design" class="absolute inset-0 flex flex-col p-4 fade-in">
+                    <div class="w-full h-full flex flex-col gap-3">
+                        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-3 shrink-0 flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2"><span class="bg-slate-100 text-slate-500 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span> 기준 양식 파일</h3>
+                                <button onclick="selectReferenceFile()" class="bg-white border border-slate-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 text-slate-700 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"><i data-lucide="file-search" class="w-4 h-4"></i> 파일 선택</button>
+                                <div id="ref-file-info" class="text-sm text-slate-500 hidden flex items-center gap-2">
+                                    <div class="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-md border border-emerald-100">
+                                        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500"></i><span id="ref-file-text" class="font-bold text-emerald-800"></span>
+                                    </div>
+                                    <button id="btn-refresh-ref-file" onclick="refreshReferenceFile()" class="bg-white border border-slate-300 hover:bg-blue-50 hover:text-blue-600 text-slate-700 px-3 py-1.5 rounded-md font-bold transition-all flex items-center gap-1.5 shadow-sm text-xs ml-1" title="파일의 시트와 이름 정의를 다시 읽어옵니다">
+                                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> 양식 새로고침
+                                    </button>
+                                    <button onclick="exportReferenceFile()" class="bg-white border border-slate-300 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 px-3 py-1.5 rounded-md font-bold transition-all flex items-center gap-1.5 shadow-sm text-xs" title="현재 기준 양식 파일을 다른 위치로 저장하여 편집할 수 있습니다.">
+                                        <i data-lucide="save" class="w-3.5 h-3.5"></i> 양식 파일 저장
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+                            <div class="p-3 border-b border-slate-100 bg-slate-50/80 shrink-0 flex justify-between items-center">
+                                <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2"><span class="bg-slate-100 text-slate-500 w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span> 시트별 취합 범위 및 열 배치 설정</h3>
+                            </div>
+                            <div class="flex flex-1 overflow-hidden relative">
+                                <div id="sheet-overlay" class="absolute inset-0 bg-white/80 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center text-slate-400">
+                                    <i data-lucide="lock" class="w-8 h-8 mb-2 opacity-50"></i><p class="text-sm font-medium">기준 양식 파일을 먼저 선택해주세요.</p>
+                                </div>
+                                <div class="w-[280px] border-r border-slate-200 bg-slate-50/30 flex flex-col shrink-0">
+                                    <div class="px-4 py-3 border-b border-purple-200 bg-purple-50 text-sm font-bold text-purple-800 flex justify-between items-center shadow-sm cursor-pointer hover:bg-purple-100 transition-colors z-10" onclick="setActiveSheet('summary')" id="summary-sheet-tab">
+                                        <div class="flex items-center gap-2 pointer-events-none">
+                                            <input type="checkbox" id="summary-enable-cb" class="w-4 h-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500 custom-checkbox pointer-events-auto" onclick="toggleSummarySheet(event)">
+                                            <i data-lucide="layout-dashboard" class="w-4 h-4 inline -mt-0.5"></i> 총괄표 (파일당 1행 요약)
+                                        </div>
+                                    </div>
+                                    <div class="px-4 py-2.5 border-b border-slate-200 bg-white text-xs font-bold text-slate-500 flex justify-between items-center shadow-sm z-10">
+                                        <span>대상 시트 목록</span>
+                                        <div class="flex gap-3 items-center">
+                                            <button onclick="addNewVirtualSheet()" class="text-blue-600 hover:text-blue-800 flex items-center gap-1"><i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>시트 추가</button>
+                                            <button onclick="toggleAllSheets()" class="text-slate-400 hover:text-slate-600">전체선택</button>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1 overflow-y-auto p-2 space-y-1" id="sheet-list-container"></div>
+                                </div>
+                                <div class="flex-1 bg-white flex flex-col overflow-hidden min-w-0 hidden" id="summary-detail-container">
+                                    <div class="p-3 border-b border-slate-200 bg-purple-50/50 flex flex-wrap items-center gap-4 shrink-0 shadow-sm z-10">
+                                        <div class="flex items-center gap-2 px-2">
+                                            <i data-lucide="layout-dashboard" class="w-5 h-5 text-purple-600"></i>
+                                            <span class="font-black text-slate-800 text-base">총괄 시트 설정</span>
+                                        </div>
+                                        <div class="flex items-center gap-2 ml-4">
+                                            <span class="text-xs font-bold text-slate-500 tracking-tight">출력 시트명</span>
+                                            <input type="text" id="summary-sheet-name" onchange="summarySheet.sheetName = this.value.trim(); markAsUnsaved();" value="총괄표" class="text-sm font-bold text-slate-800 bg-white border border-slate-300 rounded-lg px-2 py-1.5 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 w-28 shadow-sm transition-all">
+                                        </div>
+
+                                        <div class="h-5 w-[1px] bg-slate-300 hidden md:block"></div>
+
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-xs font-bold text-slate-500 tracking-tight">기본 포함 항목:</span>
+                                            <label class="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700 bg-white px-2 py-1.5 border border-slate-200 rounded shadow-sm hover:bg-purple-50 transition-colors">
+                                                <input type="checkbox" id="sum-inc-fileindex" class="w-3.5 h-3.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500" onchange="summarySheet.includeFileIndex = this.checked; markAsUnsaved();">
+                                                연번 (순번)
+                                            </label>
+                                            <label class="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700 bg-white px-2 py-1.5 border border-slate-200 rounded shadow-sm hover:bg-purple-50 transition-colors">
+                                                <input type="checkbox" id="sum-inc-filename" class="w-3.5 h-3.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500" onchange="summarySheet.includeFileName = this.checked; markAsUnsaved();" checked>
+                                                파일명
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1 p-4 overflow-y-auto bg-slate-50/50 relative">
+                                        <div class="flex justify-between items-center mb-4">
+                                            <p class="text-sm font-bold text-slate-600">각 파일의 데이터에서 요약할 항목들을 출처 그룹별로 묶어 추가하세요.</p>
+                                            <button onclick="addSummaryGroup()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"><i data-lucide="folder-plus" class="w-4 h-4"></i> 출처 그룹 추가</button>
+                                        </div>
+                                        <div id="summary-groups-container" class="space-y-4 pb-10"></div>
+                                    </div>
+                                </div>
+                                <div class="flex-1 bg-white flex flex-col overflow-hidden min-w-0" id="sheet-detail-container">
+                                    <div class="p-2.5 border-b border-slate-200 bg-slate-50/80 flex flex-wrap items-center gap-4 shrink-0 shadow-sm z-10">
+
+                                        <div class="flex items-center gap-2 px-2">
+                                            <i data-lucide="sheet" class="w-5 h-5 text-blue-600"></i>
+                                            <span id="active-sheet-title" class="font-black text-slate-800 text-base">시트 선택</span>
+                                        </div>
+
+                                        <div id="target-name-container" class="hidden flex items-center gap-2">
+                                            <span class="text-xs font-bold text-slate-500 tracking-tight">출력 시트명</span>
+                                            <input type="text" id="target-sheet-name-input" onchange="updateTargetSheetName(this.value)" class="text-sm font-bold text-slate-800 bg-white border border-slate-300 rounded-lg px-2 py-1 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-32 shadow-sm transition-all">
+                                        </div>
+
+                                        <div class="h-5 w-[1px] bg-slate-300 hidden xl:block"></div>
+
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-bold text-slate-500 tracking-tight mr-1">취합 범위</span>
+                                            <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+                                                <label class="flex items-center px-2 py-1 rounded-md cursor-pointer transition-colors" id="label-manual">
+                                                    <input type="radio" name="range-type" value="manual" class="hidden" onchange="updateActiveSheetSetting()">
+                                                    <span class="text-[11px] font-bold whitespace-nowrap">주소입력</span>
+                                                </label>
+                                                <label class="flex items-center px-2 py-1 rounded-md cursor-pointer transition-colors" id="label-named">
+                                                    <input type="radio" name="range-type" value="named" class="hidden" onchange="updateActiveSheetSetting()">
+                                                    <span class="text-[11px] font-bold whitespace-nowrap">이름정의</span>
+                                                </label>
+                                            </div>
+
+                                            <div id="range-input-wrapper" class="w-36 relative">
+                                                <input type="text" id="rule-range-manual" placeholder="예: A5:G100" onchange="saveActiveSheetInput()" oninput="validateRangeInput(this)" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-mono font-bold focus:border-blue-500 focus:ring-2 focus:ring-blue-100 shadow-sm outline-none transition-all pr-7">
+                                                <i data-lucide="alert-circle" class="w-4 h-4 text-red-500 absolute right-2 top-2 hidden"></i>
+                                            </div>
+
+                                            <div id="range-select-wrapper" class="hidden w-56">
+                                                <select id="rule-range-named" onchange="saveActiveSheetInput()" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white shadow-sm font-bold focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all">
+                                                    <option value="">범위 선택</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <button onclick="applyToAllSelectedSheets()" class="ml-auto bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
+                                            <i data-lucide="copy-check" class="w-3.5 h-3.5"></i> 체크한 시트에 일괄 반영
+                                        </button>
+                                    </div>
+
+                                    <div class="px-4 py-2.5 bg-amber-50 border-b border-amber-200 flex items-center gap-3 shrink-0 shadow-inner">
+                                        <label class="text-sm font-black text-amber-800 flex items-center gap-1.5 whitespace-nowrap">
+                                            <i data-lucide="eye-off" class="w-4 h-4 text-amber-500"></i> 빈 행 검사 제외 열
+                                            <button onclick="showIgnoreColumnsHelp()" class="ml-0.5 text-amber-500 hover:text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-full w-5 h-5 flex items-center justify-center transition-colors shadow-sm" title="상세 설명 보기">
+                                                <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
+                                            </button>
+                                        </label>
+                                        <input type="text" id="sheet-ignore-columns" onchange="if(activeSheetIndex>-1){sheetsData[activeSheetIndex].ignoreColumns=this.value; markAsUnsaved();}" placeholder="예: 1, 3 (1, 3번째 열은 무시하고 검사)" class="flex-1 max-w-sm text-sm font-bold border border-amber-300 rounded-md bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 px-3 py-1.5 outline-none placeholder-slate-400">
+                                        <span class="text-[11px] font-bold text-amber-600/80">※ 취합 범위 내의 순서(숫자) 입력</span>
+                                    </div>
+
+                                    <div class="flex-1 bg-blue-50/30 p-4 overflow-y-auto flex flex-col relative">
+                                        <div class="flex justify-between items-center mb-3 shrink-0">
+                                            <div class="flex items-center gap-3">
+                                                <h5 class="text-sm font-bold text-blue-900 flex items-center gap-2"><i data-lucide="columns" class="w-4 h-4 text-blue-500"></i> 결과물 열(Column) 배치</h5>
+                                                <span class="text-[11px] text-slate-500 hidden md:inline-block">카드를 드래그하여 실제 엑셀 열(A, B, C...) 순서를 지정하세요.</span>
+                                            </div>
+                                            <button onclick="addColumnField()" class="text-xs bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm">
+                                                <i data-lucide="plus" class="w-3.5 h-3.5"></i> 부가항목 열 추가
+                                            </button>
+                                        </div>
+
+                                        <div class="flex-1 bg-white border border-slate-200 rounded-xl p-4 overflow-x-auto shadow-inner flex items-start min-h-[350px]">
+                                            <div id="column-layout-container" class="flex gap-4 items-stretch h-full pb-2"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-content-files" class="absolute inset-0 flex flex-col hidden fade-in p-4 gap-3">
+                    <div class="w-full h-full bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+                        <div class="p-4 flex flex-col gap-3 border-b border-slate-200 bg-slate-50/50 shrink-0">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-3">
+                                    <div class="flex items-center gap-1.5">
+                                        <button onclick="changeTargetFolder()" class="bg-white border border-slate-300 hover:border-blue-500 hover:text-blue-600 text-slate-700 px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 shadow-sm text-xs" title="취합할 엑셀 파일들이 모여있는 폴더를 선택합니다."><i data-lucide="folder-search" class="w-4 h-4"></i> 폴더 변경</button>
+                                        <button onclick="refreshTargetFolder()" class="bg-white border border-slate-300 hover:border-emerald-500 hover:text-emerald-600 text-slate-700 px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 shadow-sm text-xs" title="현재 폴더 내에 새로 추가되거나 삭제된 파일을 즉시 갱신합니다."><i data-lucide="refresh-cw" class="w-4 h-4"></i> 파일 새로고침</button>
+                                    </div>
+
+                                    <div class="w-[1px] h-5 bg-slate-300"></div>
+
+                                    <div class="flex items-center gap-1.5">
+                                        <button onclick="executeMerge(false)" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-blue-100 text-xs" title="수정일이 변경된 파일만 골라 빠르게 취합합니다."><i data-lucide="zap" class="w-4 h-4 fill-current"></i> 변경사항만 취합</button>
+                                        <button onclick="executeMerge(true)" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-amber-100 text-xs" title="기존 취합 캐시를 모두 지우고 처음부터 전체 파일을 다시 취합합니다."><i data-lucide="refresh-ccw" class="w-4 h-4"></i> 전체 새로 취합</button>
+                                    </div>
+
+                                    <button onclick="showLogsModal()" class="bg-slate-800 hover:bg-black text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 shadow-sm text-xs ml-2"><i data-lucide="terminal" class="w-4 h-4"></i> 로그 보기</button>
+                                </div>
+                                <div class="bg-white px-4 py-2 rounded-full border border-slate-200 shadow-sm flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                    <span class="text-xs font-black text-slate-500 tracking-tighter">활성 / 전체</span>
+                                    <span id="count-pending" class="font-black text-slate-800 text-sm">0 / 0</span>
+                                </div>
+                            </div>
+                            <div class="text-[11px] text-slate-500 flex items-center gap-2 px-1">
+                                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-blue-500"></i>
+                                <span class="font-black text-slate-700">대상 폴더:</span>
+                                <span id="target-folder-path" class="font-mono bg-slate-100 px-2.5 py-1 rounded-md text-slate-600 select-all border border-slate-200">폴더가 스캔되지 않았습니다.</span>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-auto relative">
+                            <table class="w-full text-left text-xs min-w-[900px] border-separate border-spacing-0">
+                                <thead class="bg-slate-50 text-slate-500 font-bold sticky top-0 z-10 shadow-sm border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-4 py-3.5 w-12 text-center border-b border-slate-200"><i data-lucide="move-vertical" class="w-4 h-4 mx-auto text-slate-400"></i></th>
+                                        <th class="px-4 py-3.5 w-12 text-center border-b border-slate-200">번호</th>
+                                        <th id="th-sort-name" class="px-6 py-3.5 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors select-none" onclick="toggleSort('name')" title="클릭하여 파일명 순서로 정렬">
+                                            <div class="flex items-center gap-1.5">파일명 (경로) <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-slate-300"></i></div>
+                                        </th>
+                                        <!-- [신규] 시트 수 헤더 추가 -->
+                                        <th class="px-4 py-3.5 w-20 text-center border-b border-slate-200">시트 수</th>
+                                        <th id="th-sort-date" class="px-6 py-3.5 w-44 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors select-none" onclick="toggleSort('date')" title="클릭하여 수정일 순서로 정렬">
+                                            <div class="flex items-center gap-1.5">최종 수정일 <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-slate-300"></i></div>
+                                        </th>
+                                        <th class="px-6 py-3.5 w-44 text-center border-b border-slate-200">취합 일시</th>
+                                        <th class="px-4 py-3.5 w-20 text-center border-b border-slate-200">제외</th>
+                                        <th class="px-4 py-3.5 w-16 text-center border-b border-slate-200">삭제</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="file-list-body" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 bg-white">
+                                <i data-lucide="package-open" class="w-16 h-16 mb-4 opacity-10"></i>
+                                <p class="font-bold text-slate-400">취합할 엑셀 파일이 없습니다.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-content-preview" class="absolute inset-0 flex flex-col hidden fade-in p-4 gap-3">
+                    <div class="flex-1 bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+                        <div class="p-3 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center shrink-0">
+                            <button onclick="loadMergedData()" class="bg-white border border-slate-300 hover:border-blue-500 hover:text-blue-600 text-slate-700 px-5 py-2 rounded-xl font-bold transition-all flex items-center gap-2 shadow-sm"><i data-lucide="refresh-cw" class="w-4 h-4"></i> 데이터 새로고침</button>
+                            <button onclick="exportExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-2.5 rounded-xl font-black transition-all flex items-center gap-2 shadow-lg shadow-emerald-100 scale-105 active:scale-100"><i data-lucide="download" class="w-5 h-5"></i> 엑셀 파일 내보내기</button>
+                        </div>
+                        <div id="preview-empty" class="flex-1 flex flex-col items-center justify-center text-slate-400 bg-white">
+                            <i data-lucide="database-zap" class="w-16 h-16 mb-4 opacity-10"></i>
+                            <p class="font-bold text-slate-400">미리보기 데이터가 없습니다.</p>
+                        </div>
+                        <div id="preview-content" class="flex-1 flex flex-col hidden min-h-0">
+                            <div class="px-2 pt-2 border-b border-slate-200 bg-slate-100 flex overflow-x-auto gap-0.5 shrink-0" id="preview-sheet-tabs"></div>
+                            <div class="flex-1 overflow-auto bg-white relative min-h-0">
+                                <table class="w-full text-left text-xs min-w-max border-separate border-spacing-0">
+                                    <thead class="bg-slate-50 text-slate-600 font-bold sticky top-0 z-50 shadow-sm" id="preview-thead"></thead>
+                                    <tbody class="divide-y divide-slate-100" id="preview-tbody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="custom-modal" class="fixed inset-0 bg-transparent hidden z-50 flex items-center justify-center fade-in">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-200 border border-slate-200" id="modal-content">
+            <div class="p-8">
+                <h3 id="modal-title" class="text-xl font-black text-slate-900 mb-3 tracking-tighter">알림</h3>
+                <div id="modal-message" class="text-sm text-slate-500 leading-relaxed font-medium">내용</div>
+            </div>
+            <div class="bg-slate-50/80 px-8 py-4 flex justify-end gap-3 border-t border-slate-100" id="modal-buttons"></div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center w-full max-w-md"></div>
+
+    <script>
+        lucide.createIcons();
+
+        let currentProject = null;
+        let files = [];
+        let namedRangesBySheetCache = {};
+        let globalNamedRangesCache = [];
+        let sheetNamesCache = [];
+        let sheetsData = [];
+        let activeSheetIndex = -1;
+        let draggedItemIndex = null;
+        let previewCache = {};
+        let isUnsaved = false;
+        let summarySheet = { enabled: false, sheetName: "총괄표", includeFileIndex: false, includeFileName: true, groups: [] };
+
+        function getApi() {
+            // 현재 창에 API가 있으면 반환
+            if (window.pywebview && window.pywebview.api) return window.pywebview.api;
+            // iframe 내부에 삽입되었을 경우 부모 창의 API를 찾아 반환 (누락 복구)
+            if (window.parent && window.parent.pywebview && window.parent.pywebview.api) return window.parent.pywebview.api;
+            return null;
+        }
+
+        function initApp() {
+            const api = getApi();
+            if (api && api.get_projects) {
+                renderDashboard();
+            } else {
+                setTimeout(initApp, 100);
+            }
+        }
+        document.addEventListener('DOMContentLoaded', initApp);
+
+        // --- 모달 및 토스트 알림 함수 ---
+        function openModal(title, message, buttons, sizeClass = 'max-w-sm') {
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('modal-content');
+            document.getElementById('modal-title').innerHTML = title;
+            document.getElementById('modal-message').innerHTML = message;
+
+            content.classList.forEach(cls => {
+                if (cls.startsWith('max-w-')) content.classList.remove(cls);
+            });
+            content.classList.add(sizeClass);
+
+            const btnContainer = document.getElementById('modal-buttons');
+            btnContainer.innerHTML = '';
+            buttons.forEach(btn => {
+                const b = document.createElement('button');
+                b.textContent = btn.text;
+                let baseClass = "px-4 py-2 rounded text-sm font-medium transition-colors ";
+                if (btn.type === 'primary') baseClass += "bg-blue-600 text-white hover:bg-blue-700";
+                else if (btn.type === 'danger') baseClass += "bg-red-600 text-white hover:bg-red-700";
+                else baseClass += "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50";
+                b.className = baseClass;
+                b.onclick = () => { closeModal(); if (btn.action) btn.action(); };
+                btnContainer.appendChild(b);
+            });
+            modal.classList.remove('hidden');
+            setTimeout(() => { content.classList.remove('scale-95'); content.classList.add('scale-100'); }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('modal-content');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); }, 150);
+        }
+
+        function showToast(message, type = 'info') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'fixed bottom-10 left-1/2 transform -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center w-full max-w-md';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            let bgClass = 'bg-slate-800 text-white';
+            let icon = 'info';
+
+            if (type === 'success') { bgClass = 'bg-emerald-600 text-white'; icon = 'check-circle-2'; }
+            else if (type === 'error') { bgClass = 'bg-red-600 text-white'; icon = 'alert-circle'; }
+            else if (type === 'warning') { bgClass = 'bg-amber-500 text-white'; icon = 'alert-triangle'; }
+
+            toast.className = `flex items-center justify-center gap-3 px-6 py-3.5 rounded-full shadow-2xl border border-transparent ${bgClass} text-sm font-bold tracking-wide transform translate-y-12 opacity-0 transition-all duration-300 pointer-events-auto`;
+            toast.innerHTML = `<i data-lucide="${icon}" class="w-5 h-5 shrink-0"></i><span>${message}</span>`;
+
+            container.appendChild(toast);
+            lucide.createIcons({ root: toast });
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-12', 'opacity-0');
+                toast.classList.add('translate-y-0', 'opacity-100');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-12', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function customConfirm(title, message, onConfirm) { openModal(title, message, [{ text: '취소', type: 'secondary' }, { text: '확인', type: 'primary', action: onConfirm }]); }
+        function customConfirm3(title, message, btn1, btn2, btn3) { openModal(title, message, [btn1, btn2, btn3]); }
+
+        function customPrompt(title, message, defaultValue, onSubmit) {
+            if (typeof defaultValue === 'function') { onSubmit = defaultValue; defaultValue = ''; }
+            const inputHtml = `<div class="mt-3"><input type="text" id="prompt-input" value="${defaultValue || ''}" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500" autocomplete="off"></div>`;
+            openModal(title, message + inputHtml, [{ text: '취소', type: 'secondary' }, { text: '확인', type: 'primary', action: () => { onSubmit(document.getElementById('prompt-input').value); } }]);
+            setTimeout(() => { const inp = document.getElementById('prompt-input'); inp.focus(); inp.select(); }, 100);
+        }
+
+        // --- 시스템 로그 ---
+        function addLog(msg, type = 'info') {
+            if (!currentProject) return;
+            currentProject.logs = currentProject.logs || [];
+            const time = new Date().toLocaleString('sv-SE').replace('T', ' ');
+            currentProject.logs.push({ time, msg, type });
+            if (currentProject.logs.length > 1000) currentProject.logs.shift();
+        }
+
+        window.switchLogTab = function (tabId) {
+            if (tabId === 'info') {
+                document.getElementById('log-tab-info').className = "border-b-2 border-blue-600 text-blue-600 px-6 py-2 font-bold text-sm transition-colors";
+                document.getElementById('log-tab-error').className = "border-b-2 border-transparent text-slate-500 hover:text-slate-800 px-6 py-2 font-bold text-sm transition-colors";
+                document.getElementById('log-content-info').classList.remove('hidden');
+                document.getElementById('log-content-error').classList.add('hidden');
+            } else {
+                document.getElementById('log-tab-error').className = "border-b-2 border-red-600 text-red-600 px-6 py-2 font-bold text-sm transition-colors";
+                document.getElementById('log-tab-info').className = "border-b-2 border-transparent text-slate-500 hover:text-slate-800 px-6 py-2 font-bold text-sm transition-colors";
+                document.getElementById('log-content-error').classList.remove('hidden');
+                document.getElementById('log-content-info').classList.add('hidden');
+            }
+        };
+
+        window.toggleLogMore = function (btn) {
+            const contentDiv = btn.previousElementSibling;
+            if (contentDiv.classList.contains('line-clamp-2')) {
+                contentDiv.classList.remove('line-clamp-2');
+                btn.textContent = '접기';
+            } else {
+                contentDiv.classList.add('line-clamp-2');
+                btn.textContent = '더보기';
+            }
+        };
+
+        function showLogsModal() {
+            if (!currentProject) return;
+            const logs = currentProject.logs || [];
+            let infoLogs = logs.filter(l => l.type === 'info' || l.type === 'success');
+            let errLogs = logs.filter(l => l.type === 'error' || l.type === 'warning');
+
+            function makeHtml(arr) {
+                return arr.length ? arr.reverse().map(l => {
+                    let color = "text-slate-700";
+                    let bg = "bg-white border-slate-200";
+                    let icon = "info";
+                    if (l.type === 'error') { color = "text-red-700 font-medium"; bg = "bg-red-50 border-red-200"; icon = "alert-circle"; }
+                    if (l.type === 'success') { color = "text-emerald-700"; bg = "bg-emerald-50 border-emerald-200"; icon = "check-circle"; }
+                    if (l.type === 'warning') { color = "text-amber-700"; bg = "bg-amber-50 border-amber-200"; icon = "alert-triangle"; }
+
+                    let contentHtml = '';
+                    if (l.type === 'error' || l.type === 'warning') {
+                        contentHtml = `
+                                        <div class="line-clamp-2 whitespace-pre-wrap select-text break-words leading-relaxed">${l.msg}</div>
+                                        <button onclick="toggleLogMore(this)" class="text-[10px] text-blue-600 hover:text-blue-800 mt-1.5 font-bold tracking-wide">더보기</button>
+                                    `;
+                    } else {
+                        contentHtml = `<div class="whitespace-pre-wrap select-text break-words leading-relaxed">${l.msg}</div>`;
+                    }
+
+                    return `<div class="p-3 border rounded-md text-sm flex gap-3 items-start ${bg} ${color} shadow-sm">
+                                            <i data-lucide="${icon}" class="w-4 h-4 shrink-0 mt-0.5"></i>
+                                            <div class="flex-1 min-w-0">
+                                                <div class="font-bold opacity-60 text-[11px] mb-1.5">${l.time}</div>
+                                                ${contentHtml}
+                                            </div>
+                                        </div>`;
+                }).join('') : `<div class="text-center py-10 text-slate-400 font-medium text-sm">기록된 내역이 없습니다.</div>`;
+            }
+
+            let html = `
+                            <div class="flex gap-2 border-b border-slate-200 mb-4 pb-1">
+                                <button onclick="switchLogTab('info')" id="log-tab-info" class="border-b-2 border-blue-600 text-blue-600 px-6 py-2 font-bold text-sm transition-colors">일반 작업 내역 (${infoLogs.length})</button>
+                                <button onclick="switchLogTab('error')" id="log-tab-error" class="border-b-2 border-transparent text-slate-500 hover:text-slate-800 px-6 py-2 font-bold text-sm transition-colors">오류 상세 내역 (${errLogs.length})</button>
+                            </div>
+                            <div id="log-content-info" class="h-[500px] overflow-y-auto flex flex-col gap-2.5 p-1 pr-2">${makeHtml(infoLogs)}</div>
+                            <div id="log-content-error" class="h-[500px] overflow-y-auto flex flex-col gap-2.5 p-1 pr-2 hidden">${makeHtml(errLogs)}</div>
+                        `;
+
+            openModal("시스템 기록 (Log)", html, [
+                { text: '로그 모두 지우기', type: 'danger', action: () => { currentProject.logs = []; saveProject(); showLogsModal(); } },
+                { text: '닫기', type: 'secondary' }
+            ], 'max-w-4xl');
+
+            setTimeout(() => lucide.createIcons(), 10);
+        }
+
+        // --- 상태 관리 ---
+        function markAsUnsaved() {
+            if (!isUnsaved) {
+                isUnsaved = true;
+                document.getElementById('unsaved-badge').classList.remove('hidden');
+            }
+        }
+
+        function markAsSaved() {
+            isUnsaved = false;
+            document.getElementById('unsaved-badge').classList.add('hidden');
+        }
+
+        // --- UI 전환 ---
+        function showDashboard() {
+            if (isUnsaved) {
+                customConfirm3(
+                    "저장하지 않은 변경 사항",
+                    "설정이 변경되었습니다. 저장하고 대시보드로 이동하시겠습니까?",
+                    { text: '취소', type: 'secondary' },
+                    { text: '저장 안 함', type: 'danger', action: () => { _executeShowDashboard(); } },
+                    { text: '저장 후 이동', type: 'primary', action: async () => { await saveProject(); _executeShowDashboard(); } }
+                );
+            } else {
+                _executeShowDashboard();
+            }
+        }
+
+        function _executeShowDashboard() {
+            markAsSaved();
+            document.getElementById('view-workspace').classList.add('hidden');
+            document.getElementById('view-dashboard').classList.remove('hidden');
+            document.getElementById('header-actions').classList.add('hidden');
+            document.getElementById('workspace-header-title').classList.add('hidden');
+            document.getElementById('header-divider').classList.add('hidden');
+            renderDashboard();
+        }
+
+        function showWorkspace() {
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-workspace').classList.remove('hidden');
+            document.getElementById('header-actions').classList.remove('hidden');
+            document.getElementById('workspace-header-title').classList.remove('hidden');
+            document.getElementById('header-divider').classList.remove('hidden');
+            currentProject = { id: Date.now(), name: '새 취합 작업' };
+            document.getElementById('current-project-name').textContent = currentProject.name;
+            resetWorkspace();
+            switchTab('design');
+            markAsSaved();
+        }
+
+        function switchTab(tabId) {
+            ['design', 'files', 'preview'].forEach(id => {
+                const btn = document.getElementById(`tab-btn-${id}`);
+                const content = document.getElementById(`tab-content-${id}`);
+                if (id === tabId) {
+                    btn.className = `px-6 py-2.5 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 transition-colors flex items-center gap-2 bg-white`;
+                    content.classList.remove('hidden');
+                } else {
+                    btn.className = `px-6 py-2.5 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-2`;
+                    content.classList.add('hidden');
+                }
+            });
+        }
+
+        function resetWorkspace() {
+            files = []; sheetsData = []; activeSheetIndex = -1;
+            namedRangesBySheetCache = {}; sheetNamesCache = []; globalNamedRangesCache = [];
+            document.getElementById('sheet-overlay').classList.remove('hidden');
+            document.getElementById('ref-file-info').classList.add('hidden');
+            renderSheetList(); renderColumnLayout();
+            document.getElementById('preview-content').classList.add('hidden');
+            document.getElementById('preview-empty').classList.remove('hidden');
+        }
+
+        async function renderDashboard() {
+            const listEl = document.getElementById('project-list');
+            listEl.innerHTML = '<div class="p-8 text-center text-slate-400">불러오는 중...</div>';
+            let savedProjects = [];
+            const api = getApi();
+            if (api && api.get_projects) {
+                const res = await api.get_projects();
+                if (res.success) savedProjects = res.projects || [];
+            }
+            listEl.innerHTML = '';
+            if (savedProjects.length === 0) {
+                listEl.innerHTML = '<div class="p-8 text-center text-slate-400">최근 작업 내역이 없습니다.</div>';
+                return;
+            }
+            savedProjects.forEach(proj => {
+                const li = document.createElement('li');
+                li.className = 'p-3 hover:bg-blue-50 transition-colors flex justify-between items-center group border-b border-slate-100 last:border-0';
+                const dateStr = proj.last_modified || '날짜 없음';
+                const sheetCount = (proj.sheetsData || []).filter(s => s.selected).length;
+
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'flex items-center gap-4 flex-1 cursor-pointer';
+                infoDiv.onclick = () => loadSavedProject(proj);
+                infoDiv.innerHTML = `
+                                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                                    <i data-lucide="archive" class="w-5 h-5"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <h3 class="font-semibold text-slate-800 text-base">${proj.name}</h3>
+                                    <p class="text-xs text-slate-500 mt-0.5">마지막 수정: ${dateStr} · 선택된 시트: ${sheetCount}개</p>
+                                </div>
+                            `;
+
+                const actionDiv = document.createElement('div');
+                actionDiv.className = 'flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 pr-2';
+                actionDiv.innerHTML = `
+                                <button class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-100 rounded transition-colors" title="이름 변경" onclick="renameProject('${proj.id}', '${proj.name.replace(/'/g, "\\'")}')"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                                <button class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors" title="삭제" onclick="deleteProject('${proj.id}')"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            `;
+
+                li.appendChild(infoDiv);
+                li.appendChild(actionDiv);
+                listEl.appendChild(li);
+            });
+            lucide.createIcons();
+        }
+
+        function renameProject(id, oldName) {
+            customPrompt("작업 이름 변경", "새로운 작업 이름을 입력하세요:", oldName, async (newName) => {
+                if (newName && newName.trim() !== '' && newName !== oldName) {
+                    const api = getApi();
+                    if (api) {
+                        const res = await api.rename_project({ id: id, name: newName.trim() });
+                        if (res.success) { renderDashboard(); showToast("이름이 변경되었습니다.", "success"); }
+                        else showToast(res.message, "error");
+                    }
+                }
+            });
+        }
+
+        function deleteProject(id) {
+            customConfirm("작업 삭제", "이 취합 작업 내역을 정말 삭제하시겠습니까?<br><span class='text-xs text-red-500'>(원본 엑셀 파일은 삭제되지 않습니다)</span>", async () => {
+                const api = getApi();
+                if (api) {
+                    const res = await api.delete_project({ id: id });
+                    if (res.success) { renderDashboard(); showToast("작업이 삭제되었습니다.", "success"); }
+                    else showToast(res.message, "error");
+                }
+            });
+        }
+
+        function loadSavedProject(proj) {
+            currentProject = proj; sheetsData = proj.sheetsData || [];
+            summarySheet = proj.summarySheet || { enabled: false, sheetName: "총괄표", includeFileIndex: false, includeFileName: true, groups: [] };
+            if (summarySheet.includeFileIndex === undefined) summarySheet.includeFileIndex = false;
+            if (summarySheet.includeFileName === undefined) summarySheet.includeFileName = true;
+            sheetNamesCache = proj.sheetNamesCache || []; namedRangesBySheetCache = proj.namedRangesBySheetCache || {};
+            globalNamedRangesCache = proj.globalNamedRangesCache || []; files = proj.files || [];
+            window.rangeDetailsCache = proj.rangeDetailsCache || {};
+
+            document.getElementById('current-project-name').textContent = proj.name;
+
+            const sumCb = document.getElementById('summary-enable-cb');
+            if (sumCb) sumCb.checked = summarySheet.enabled;
+
+            if (proj.referenceFileName) {
+                document.getElementById('ref-file-info').classList.remove('hidden');
+                document.getElementById('ref-file-text').textContent = proj.referenceFileName;
+                document.getElementById('sheet-overlay').classList.add('hidden');
+
+                // [핵심] 불러온 설정에 포함된 임시 양식 파일이면 '새로고침' 버튼을 숨깁니다!
+                const refreshBtn = document.getElementById('btn-refresh-ref-file');
+                if (refreshBtn) {
+                    if (proj.isImportedTemplate) refreshBtn.classList.add('hidden');
+                    else refreshBtn.classList.remove('hidden');
+                }
+            } else {
+                document.getElementById('ref-file-info').classList.add('hidden');
+                document.getElementById('sheet-overlay').classList.remove('hidden');
+            }
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-workspace').classList.remove('hidden');
+            document.getElementById('header-actions').classList.remove('hidden');
+            document.getElementById('workspace-header-title').classList.remove('hidden');
+            document.getElementById('header-divider').classList.remove('hidden');
+            switchTab('design'); renderSheetList(); renderFileList();
+            if (sheetsData.length > 0) setActiveSheet(sheetsData.findIndex(s => s.selected) === -1 ? 0 : sheetsData.findIndex(s => s.selected));
+            else { activeSheetIndex = -1; renderColumnLayout(); }
+            markAsSaved();
+        }
+
+        function createNewProject() {
+            customPrompt("새 작업 만들기", "작업의 이름을 입력해주세요.", "", (val) => {
+                if (val && val.trim() !== '') {
+                    showWorkspace();
+                    currentProject.name = val.trim();
+                    document.getElementById('current-project-name').textContent = val.trim();
+                    markAsUnsaved();
+                }
+            });
+        }
+
+        
+
+        function addNewVirtualSheet() {
+            const vName = "추가시트_" + (sheetsData.length + 1);
+            const newSheet = {
+                name: vName, targetName: vName, selected: true, isVirtual: true, type: 'named', range: '',
+                layout: [{ id: 'data_main', type: 'data', name: '취합 데이터 영역', sheet: '', cellType: 'manual', cell: '' }]
+            };
+            sheetsData.push(newSheet);
+            setActiveSheet(sheetsData.length - 1);
+            markAsUnsaved();
+        }
+
+        function updateTargetSheetName(value) {
+            if (activeSheetIndex !== -1 && sheetsData[activeSheetIndex]) {
+                sheetsData[activeSheetIndex].targetName = value.trim();
+                markAsUnsaved();
+            }
+        }
+        // [신규] 파일 선택/새로고침 시 디자인(sheetsData)을 초기화하지 않고 병합하는 공통 함수
+        function processReferenceResponse(response, isRefresh = false) {
+            document.getElementById('ref-file-info').classList.remove('hidden');
+            document.getElementById('ref-file-text').textContent = response.fileName;
+            document.getElementById('sheet-overlay').classList.add('hidden');
+
+            currentProject.referenceFileName = response.fileName;
+            currentProject.referenceFilePath = response.filepath;
+            currentProject.isImportedTemplate = false; // [핵심] PC에서 파일을 직접 골랐으므로 꼬리표 떼기
+
+            // [핵심] 파일을 직접 선택했으므로 숨겨놨던 '새로고침' 버튼을 다시 나타나게 함!
+            const refreshBtn = document.getElementById('btn-refresh-ref-file');
+            if (refreshBtn) refreshBtn.classList.remove('hidden');
+
+            sheetNamesCache = response.sheets || [];
+            namedRangesBySheetCache = response.namedRangesBySheet || {};
+            globalNamedRangesCache = response.globalNamedRanges || [];
+            window.rangeDetailsCache = response.rangeDetails || {};
+
+            // 기존 시트 데이터를 맵으로 백업 (설정 날아감 방지)
+            const oldSheetsMap = {};
+            sheetsData.forEach(s => { oldSheetsMap[s.name] = s; });
+
+            const newSheetsData = [];
+
+            // 1. 기준 파일에 존재하는 실제 시트들 병합 (기존에 세팅한 범위, 열 배치는 그대로 쏙 가져옴)
+            sheetNamesCache.forEach(s => {
+                if (oldSheetsMap[s]) {
+                    newSheetsData.push(oldSheetsMap[s]);
+                    delete oldSheetsMap[s];
+                } else {
+                    newSheetsData.push({
+                        name: s, targetName: s, selected: false, type: 'manual', range: '',
+                        layout: [{ id: 'data_main', type: 'data', name: '취합 데이터 영역', sheet: '', cellType: 'manual', cell: '' }]
+                    });
+                }
+            });
+
+            // 2. 가상 시트(Virtual)는 무조건 살림
+            sheetsData.forEach(s => {
+                if (s.isVirtual && oldSheetsMap[s.name]) {
+                    newSheetsData.push(s);
+                }
+            });
+
+            sheetsData = newSheetsData;
+            renderSheetList();
+
+            // 활성화된 시트 화면 재출력
+            let activeIdx = sheetsData.findIndex(s => s.selected);
+            if (activeIdx === -1 && sheetsData.length > 0) activeIdx = 0;
+            if (activeIdx !== -1) setActiveSheet(activeIdx);
+
+            markAsUnsaved();
+
+            if (isRefresh) {
+                showToast("양식 파일의 변경사항이 갱신되었습니다.", "success");
+            } else {
+                showToast("기준 파일 분석 및 적용 완료", "success");
+            }
+        }
+
+        // [수정] 기존 파일 선택 로직 (이제 초기화하지 않고 병합함)
+        async function selectReferenceFile() {
+            const api = getApi();
+            if (api) {
+                const response = await api.select_reference_file();
+                if (response.success) {
+                    processReferenceResponse(response, false);
+                } else if (response.message !== "파일 선택이 취소되었습니다.") {
+                    showToast(response.message, "error");
+                }
+            } else {
+                showToast("파이썬 연동이 필요합니다.", "error");
+            }
+        }
+
+        // [수정] 양식 파일 내용 새로고침 (파이썬 갱신 함수 호출)
+        async function refreshReferenceFile() {
+            const api = getApi();
+            if (!api) return showToast("파이썬 연동이 필요합니다.", "error");
+
+            // 1. 과거에 저장된 프로젝트라 파일 경로 정보가 없는 경우 예외 처리
+            if (!currentProject || !currentProject.referenceFilePath) {
+                return showToast("파일 경로 정보가 없습니다. [파일 선택]으로 양식을 한 번 다시 지정해주시면 이후부터 저장 및 새로고침이 가능합니다.", "warning");
+            }
+
+            try {
+                // 2. 윈도우 환경(WebView2)에서 typeof 검사가 우회되는 버그를 피해 즉시 함수 호출
+                const response = await api.refresh_reference_file({ filepath: currentProject.referenceFilePath });
+
+                if (response.success) {
+                    processReferenceResponse(response, true);
+                } else {
+                    showToast("새로고침 실패: " + response.message, "error");
+                }
+            } catch (e) {
+                // 3. 진짜로 백엔드에 함수가 없는 경우(파이썬 프로그램 재시작 안 함)
+                showToast("파이썬 백엔드 연결 오류입니다. 프로그램을 완전히 종료했다가 다시 실행해주세요.", "error");
+            }
+        }
+
+        // [수정] 프로젝트 저장 시 파일 경로도 함께 저장
+        async function saveProject() {
+            const api = getApi();
+            if (api && currentProject) {
+                currentProject.sheetsData = sheetsData;
+                currentProject.sheetNamesCache = sheetNamesCache;
+                currentProject.namedRangesBySheetCache = namedRangesBySheetCache;
+                currentProject.globalNamedRangesCache = globalNamedRangesCache;
+                currentProject.rangeDetailsCache = window.rangeDetailsCache || {};
+                currentProject.summarySheet = summarySheet; // [신규]
+                currentProject.referenceFileName = document.getElementById('ref-file-text').textContent;
+                // referenceFilePath는 processReferenceResponse에서 이미 저장됨
+                currentProject.files = files;
+
+                const response = await api.save_project(currentProject);
+                if (response.success) {
+                    markAsSaved();
+                    showToast("설정이 안전하게 저장되었습니다.", "success");
+                    renderDashboard();
+                } else {
+                    showToast(response.message, "error");
+                }
+            } else {
+                showToast("API가 연결되지 않았습니다.", "error");
+            }
+        }
+
+        // [신규] 취합 설정 내보내기 연동
+        window.exportSettings = async function () {
+            if (!currentProject) return;
+            // 내보내기 전 현재 화면의 최신 상태를 강제 갱신
+            currentProject.sheetsData = sheetsData;
+            currentProject.summarySheet = summarySheet;
+            const api = getApi();
+            if (api) {
+                const res = await api.export_settings({ project: currentProject });
+                if (res.success) showToast(res.message, "success");
+                else if (res.message !== "취소됨") showToast(res.message, "error");
+            }
+        };
+
+        // [신규] 취합 설정 불러오기 연동
+        window.importSettings = async function () {
+            const api = getApi();
+            if (api) {
+                const res = await api.import_settings({});
+                if (res.success) {
+                    showToast(res.message, "success");
+                    renderDashboard(); // 불러온 뒤 리스트 새로고침
+                } else if (res.message !== "취소됨") {
+                    showToast(res.message, "error");
+                }
+            }
+        };
+
+        // [신규] 기준 양식 파일만 빼서 저장하기 연동
+        window.exportReferenceFile = async function () {
+            if (!currentProject || !currentProject.referenceFilePath) {
+                return showToast("저장할 기준 양식 파일이 지정되지 않았습니다.", "warning");
+            }
+            const api = getApi();
+            if (api && api.export_reference_file) {
+                const res = await api.export_reference_file({ project: currentProject });
+                if (res.success) showToast(res.message, "success");
+                else if (res.message !== "취소됨") showToast(res.message, "error");
+            } else {
+                showToast("파이썬 연동(export_reference_file)이 필요합니다.", "error");
+            }
+        };
+
+        function renderSheetList() {
+            const container = document.getElementById('sheet-list-container');
+            container.innerHTML = '';
+            sheetsData.forEach((sheet, idx) => {
+                const isActive = idx === activeSheetIndex;
+                const div = document.createElement('div');
+                div.className = `flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors border ${isActive ? 'bg-white border-blue-300 shadow-sm' : 'border-transparent hover:bg-white/60'}`;
+                div.onclick = (e) => { if (e.target.tagName !== 'INPUT') setActiveSheet(idx); };
+
+                div.innerHTML = `
+                                <input type="checkbox" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer custom-checkbox shrink-0" ${sheet.selected ? 'checked' : ''} onclick="toggleSheetSelection(event, ${idx})">
+                                <span class="flex-1 text-sm font-bold ${isActive ? 'text-blue-700' : 'text-slate-600'} truncate">${sheet.isVirtual ? '✨ ' + sheet.name : sheet.name}</span>
+                                ${sheet.selected && sheet.range ? `<i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0"></i>` : ''}
+                            `;
+                container.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        function toggleSheetSelection(e, idx) { e.stopPropagation(); sheetsData[idx].selected = e.target.checked; renderSheetList(); markAsUnsaved(); }
+        function toggleAllSheets() { const all = sheetsData.every(s => s.selected); sheetsData.forEach(s => s.selected = !all); renderSheetList(); markAsUnsaved(); }
+
+        function toggleSummarySheet(e) {
+            e.stopPropagation();
+            summarySheet.enabled = e.target.checked;
+            markAsUnsaved();
+        }
+
+        function setActiveSheet(idx) {
+            activeSheetIndex = idx;
+            renderSheetList();
+
+            if (idx === 'summary') {
+                document.getElementById('sheet-detail-container').classList.add('hidden');
+                document.getElementById('summary-detail-container').classList.remove('hidden');
+                document.getElementById('summary-sheet-tab').classList.add('bg-purple-100', 'border-purple-300');
+                document.getElementById('summary-sheet-tab').classList.remove('bg-purple-50');
+                document.getElementById('summary-enable-cb').checked = summarySheet.enabled;
+                document.getElementById('summary-sheet-name').value = summarySheet.sheetName;
+                document.getElementById('sum-inc-fileindex').checked = summarySheet.includeFileIndex;
+                document.getElementById('sum-inc-filename').checked = summarySheet.includeFileName;
+                renderSummaryGroups();
+                return;
+            } else {
+                document.getElementById('sheet-detail-container').classList.remove('hidden');
+                document.getElementById('summary-detail-container').classList.add('hidden');
+                document.getElementById('summary-sheet-tab').classList.remove('bg-purple-100', 'border-purple-300');
+                document.getElementById('summary-sheet-tab').classList.add('bg-purple-50');
+            }
+
+            const sheet = sheetsData[idx];
+            document.getElementById('active-sheet-title').textContent = sheet.isVirtual ? '새 가상 시트 설정' : sheet.name;
+            const targetContainer = document.getElementById('target-name-container');
+            const targetInput = document.getElementById('target-sheet-name-input');
+            if (targetContainer && targetInput) {
+                targetContainer.classList.remove('hidden');
+                targetInput.value = sheet.targetName || sheet.name;
+            }
+            document.querySelector(`input[name="range-type"][value="${sheet.type}"]`).checked = true;
+
+            const rangeInput = document.getElementById('rule-range-manual');
+            rangeInput.value = sheet.type === 'manual' ? sheet.range : '';
+            if (window.validateRangeInput) window.validateRangeInput(rangeInput);
+
+            const ignoreColsInput = document.getElementById('sheet-ignore-columns');
+            if (ignoreColsInput) ignoreColsInput.value = sheet.ignoreColumns || '';
+
+            updateRangeUI(sheet.type);
+            renderColumnLayout();
+        }
+
+        // =======================================================
+        // [총괄 시트] 그립 전용 드래그, 1줄 정보창, 하이브리드 서식 로직
+        // =======================================================
+
+        function getMaxColsForGroup(grp) {
+            let maxCols = 50;
+            let isFormula = false;
+            let rawInfo = "범위를 지정해주세요.";
+            let parsedAddr = "";
+            let isCacheMissing = false;
+
+            if (grp.type === 'manual' && grp.range) {
+                try {
+                    let r = grp.range.replace(/\s/g, '').toUpperCase();
+                    rawInfo = r;
+                    if (r.includes('[') && r.includes(']')) {
+                        maxCols = 1; parsedAddr = "표 특정 열 참조 (1열)";
+                    } else {
+                        let parts = r.split(':');
+                        let start = parts[0].replace(/[0-9]/g, '');
+                        let end = parts.length > 1 ? parts[1].replace(/[0-9]/g, '') : start;
+                        let sCol = 0, eCol = 0;
+                        for (let i = 0; i < start.length; i++) sCol = sCol * 26 + (start.charCodeAt(i) - 64);
+                        for (let i = 0; i < end.length; i++) eCol = eCol * 26 + (end.charCodeAt(i) - 64);
+                        maxCols = Math.max(1, eCol - sCol + 1);
+                        parsedAddr = `주소 직접 입력 (${maxCols}열)`;
+                    }
+                } catch (e) { isFormula = true; rawInfo = "주소 입력 오류"; }
+            } else if (grp.type === 'named' && grp.range) {
+                let cacheKey = grp.range;
+                if (window.rangeDetailsCache && window.rangeDetailsCache[grp.targetSheet + '!' + grp.range]) {
+                    cacheKey = grp.targetSheet + '!' + grp.range;
+                }
+
+                let cached = window.rangeDetailsCache && window.rangeDetailsCache[cacheKey];
+                if (cached) {
+                    maxCols = cached.maxCols || 150;
+                    isFormula = cached.isFormula || false;
+                    rawInfo = cached.raw || "정보 없음";
+                    parsedAddr = cached.parsedAddr || "해석불가";
+                } else {
+                    isCacheMissing = true;
+                    rawInfo = "데이터 없음";
+                    parsedAddr = "새로고침 필요";
+                }
+            } else if (grp.targetSheet) {
+                let cached = window.rangeDetailsCache && window.rangeDetailsCache[grp.targetSheet];
+                if (cached) {
+                    maxCols = cached.maxCols || 150;
+                    isFormula = cached.isFormula || false;
+                    rawInfo = cached.raw || "정보 없음";
+                    parsedAddr = cached.parsedAddr || "시트 전체";
+                }
+            }
+
+            return { maxCols: maxCols, isFormula: isFormula, rawInfo: rawInfo, parsedAddr: parsedAddr, isCacheMissing: isCacheMissing };
+        }
+
+        // [신규] 조건식 도움말 팝업 함수
+        window.showConditionHelp = function () {
+            const title = "조건식 (Countif / Sumif) 입력 가이드";
+            const msg = `
+                <div class="text-sm text-slate-700 leading-relaxed space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                    <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                        <h4 class="font-bold text-blue-800 mb-2 flex items-center gap-1.5"><i data-lucide="info" class="w-4 h-4"></i> 1. 단일 조건 (현재 열 기준)</h4>
+                        <ul class="list-disc ml-5 space-y-1.5 text-xs">
+                            <li><code class="bg-white px-1.5 py-0.5 rounded border border-blue-100 text-blue-700 font-bold shadow-sm">사과</code> : '사과'와 정확히 일치하는 셀</li>
+                            <li><code class="bg-white px-1.5 py-0.5 rounded border border-blue-100 text-blue-700 font-bold shadow-sm">*사과*</code> : '사과'가 포함된 모든 셀 (* 와일드카드)</li>
+                            <li><code class="bg-white px-1.5 py-0.5 rounded border border-blue-100 text-blue-700 font-bold shadow-sm">&gt;=100</code> : 100 이상인 숫자</li>
+                            <li><code class="bg-white px-1.5 py-0.5 rounded border border-blue-100 text-blue-700 font-bold shadow-sm">&lt;&gt;</code> : 데이터가 있는(빈칸이 아닌) 셀</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="bg-purple-50 border border-purple-200 p-3 rounded-lg">
+                        <h4 class="font-bold text-purple-800 mb-1.5 flex items-center gap-1.5"><i data-lucide="layers" class="w-4 h-4"></i> 2. 다중 조건 (여러 열 동시 검사)</h4>
+                        <p class="text-xs mb-2.5 text-slate-600"><b>열번호:조건</b> 형식으로 작성하고 <b>&amp;</b> 기호로 연결합니다.</p>
+                        <ul class="list-disc ml-5 space-y-2 text-xs">
+                            <li><code class="bg-white px-1.5 py-0.5 rounded border border-purple-100 text-purple-700 font-bold shadow-sm">1:사과 &amp; 3:&gt;=100</code><br>
+                                <span class="text-slate-500 mt-1 inline-block">→ 1번째 열이 '사과'이고 3번째 열이 100 이상인 경우</span>
+                            </li>
+                            <li><code class="bg-white px-1.5 py-0.5 rounded border border-purple-100 text-purple-700 font-bold shadow-sm">2:*완료* &amp; 4:&lt;&gt;</code><br>
+                                <span class="text-slate-500 mt-1 inline-block">→ 2번째 열에 '완료'가 포함되고 4번째 열에 내용이 있는 경우</span>
+                            </li>
+                        </ul>
+                        <div class="mt-3 p-2 bg-white/60 rounded border border-purple-100 text-[11px] text-purple-700">
+                            <b>※ 주의:</b> 열 번호는 선택한 <b>'엑셀 원본 범위(Raw)'의 맨 왼쪽부터 1, 2, 3...</b> 순서입니다.
+                        </div>
+                    </div>
+                    
+                    <div class="bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                        <h4 class="font-bold text-amber-800 mb-1.5 flex items-center gap-1.5"><i data-lucide="calculator" class="w-4 h-4"></i> 3. 조건 합계 (Sumif) 참고사항</h4>
+                        <p class="text-xs text-slate-700">조건 합계 선택 시, 조건을 통과한 행에서 <b>'가져올 열 위치'</b>에 있는 숫자들을 모두 더합니다. 조건식은 위와 똑같이 단일/다중으로 마음대로 쓰시면 됩니다.</p>
+                    </div>
+                </div>
+            `;
+            openModal(title, msg, [{ text: '확인', type: 'primary' }]);
+            setTimeout(() => lucide.createIcons(), 10);
+        };
+
+        function getAutoTitle(grp, funcVal) {
+            let base = "항목";
+            if (grp.type === 'named') base = grp.range ? grp.range : "[이름미지정]";
+            else if (grp.type === 'manual') base = grp.range ? grp.range : "[주소미지정]";
+
+            const fm = { 'first': '', 'nth': 'N번째값', 'sum': '합계', 'avg': '평균', 'count': '숫자셀수', 'counta': '문자(숫자포함)수', 'max': '최대', 'min': '최소', 'countif': '조건수', 'sumif': '조건합계' };
+            return `${base} ${fm[funcVal] || ''}`.trim();
+        }
+
+        function validateGroupAndToast(grp) {
+            if (!grp.targetSheet) { showToast("대상 시트가 선택되지 않았습니다.", "warning"); return false; }
+            if (!grp.range) { showToast("가져올 방식(주소 또는 이름정의)의 범위가 비어있습니다.", "warning"); return false; }
+            if (grp.columns.length === 0) { showToast("요약할 항목(열)을 1개 이상 추가해주세요.", "warning"); return false; }
+            const info = getMaxColsForGroup(grp);
+            if (info.isCacheMissing) { showToast("범위(이름정의) 파악 오류가 있습니다. 양식 새로고침이 필요합니다.", "error"); return false; }
+            return true;
+        }
+
+        function toggleSummaryGroup(grpId) {
+            let canClose = true;
+            const currentActive = summarySheet.groups.find(g => g._isExpanded);
+            if (currentActive && currentActive.id !== grpId) {
+                canClose = validateGroupAndToast(currentActive);
+            }
+            if (canClose) {
+                let isOpening = false;
+                summarySheet.groups.forEach(g => {
+                    if (g.id === grpId) {
+                        g._isExpanded = !g._isExpanded;
+                        isOpening = g._isExpanded;
+                    }
+                    else g._isExpanded = false;
+                });
+                renderSummaryGroups();
+                if (isOpening) {
+                    setTimeout(() => {
+                        const expandedCard = document.getElementById('grp-card-' + grpId);
+                        if (expandedCard) expandedCard.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                    }, 50);
+                }
+            }
+        }
+
+        window.confirmAndCollapseGroup = function (grpId) {
+            const grp = summarySheet.groups.find(g => g.id === grpId);
+            if (grp && validateGroupAndToast(grp)) {
+                grp._isExpanded = false;
+                renderSummaryGroups();
+                markAsUnsaved();
+                showToast("오류 검사 완료. 설정이 반영되었습니다.", "success");
+            }
+        };
+
+        function addSummaryGroup() {
+            const currentActive = summarySheet.groups.find(g => g._isExpanded);
+            if (currentActive && !validateGroupAndToast(currentActive)) return;
+            summarySheet.groups.forEach(g => g._isExpanded = false);
+            const newId = 'grp_' + Math.random().toString(36).substr(2, 9);
+            summarySheet.groups.push({ id: newId, targetSheet: '', type: 'manual', range: '', columns: [], _isExpanded: true });
+            renderSummaryGroups(); markAsUnsaved();
+            setTimeout(() => {
+                const newCard = document.getElementById('grp-card-' + newId);
+                if (newCard) newCard.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            }, 50);
+        }
+
+        function removeSummaryGroup(grpId) {
+            customConfirm("그룹 삭제", "정말 이 출처 그룹을 삭제하시겠습니까?", () => {
+                summarySheet.groups = summarySheet.groups.filter(g => g.id !== grpId);
+                renderSummaryGroups(); markAsUnsaved();
+            });
+        }
+
+        function addSummaryColumn(grpId) {
+            const grp = summarySheet.groups.find(g => g.id === grpId);
+            if (grp) {
+                const info = getMaxColsForGroup(grp);
+                let nextColIndex = 1;
+                if (grp.columns.length > 0) {
+                    const lastCol = grp.columns[grp.columns.length - 1];
+                    nextColIndex = (parseInt(lastCol.colIndex) || 0) + 1;
+                }
+                if (!info.isFormula && !info.isCacheMissing && grp.range && nextColIndex > info.maxCols) nextColIndex = info.maxCols;
+
+                const newFunc = 'first';
+                const newTitle = getAutoTitle(grp, newFunc);
+                grp.columns.push({ id: 'col_' + Math.random().toString(36).substr(2, 9), colIndex: nextColIndex, func: newFunc, title: newTitle, format: '', nthRow: 1, conditionVal: '' });
+
+                if (!grp._isExpanded) {
+                    summarySheet.groups.forEach(g => g._isExpanded = false);
+                    grp._isExpanded = true;
+                }
+                renderSummaryGroups(); markAsUnsaved();
+
+                setTimeout(() => {
+                    const scrollContainer = document.getElementById('scroll-cols-' + grpId);
+                    if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                }, 50);
+            }
+        }
+
+        function removeSummaryColumn(grpId, colId) {
+            customConfirm("항목 삭제", "정말 이 요약 항목(열)을 삭제하시겠습니까?", () => {
+                const grp = summarySheet.groups.find(g => g.id === grpId);
+                if (grp) {
+                    grp.columns = grp.columns.filter(c => c.id !== colId);
+                    renderSummaryGroups(); markAsUnsaved();
+                }
+            });
+        }
+
+        function updateSummaryGroup(grpId, field, value) {
+            const grp = summarySheet.groups.find(g => g.id === grpId);
+            if (grp) {
+                grp[field] = value;
+                if (field === 'type') {
+                    if (value === 'named') {
+                        const availableNames = namedRangesBySheetCache[grp.targetSheet] || [];
+                        if (availableNames.length === 1) grp.range = availableNames[0];
+                        else grp.range = '';
+                    } else { grp.range = ''; }
+                }
+                if (field === 'targetSheet' && grp.type === 'named') {
+                    const availableNames = namedRangesBySheetCache[value] || [];
+                    if (availableNames.length === 1) grp.range = availableNames[0];
+                    else if (grp.range && !availableNames.includes(grp.range)) grp.range = '';
+                }
+                if (['targetSheet', 'type', 'range'].includes(field)) {
+                    const info = getMaxColsForGroup(grp);
+                    if (grp.range && grp.columns.length === 0 && !info.isCacheMissing && !info.isFormula) {
+                        grp.columns.push({
+                            id: 'col_' + Math.random().toString(36).substr(2, 9),
+                            colIndex: 1, func: 'first', title: getAutoTitle(grp, 'first'), format: '', nthRow: 1, conditionVal: ''
+                        });
+                        showToast("범위 감지 완료: 기본 요약 항목이 자동 생성되었습니다.", "info");
+                    }
+                    let clampOccurred = false;
+                    grp.columns.forEach(c => {
+                        if (!info.isFormula && !info.isCacheMissing && grp.range && c.colIndex > info.maxCols) {
+                            c.colIndex = info.maxCols; clampOccurred = true;
+                        }
+                        if (!c.title || c.title.includes('[이름미지정]') || c.title.includes('[주소미지정]')) {
+                            c.title = getAutoTitle(grp, c.func);
+                        }
+                    });
+                    if (clampOccurred && grp.range && !info.isFormula && !info.isCacheMissing) {
+                        showToast(`범위 변경으로 열 위치가 ${info.maxCols}열로 자동 하향 조정되었습니다.`, "info");
+                    }
+                }
+                renderSummaryGroups(); markAsUnsaved();
+            }
+        }
+
+        function updateSummaryColumn(grpId, colId, field, value) {
+            const grp = summarySheet.groups.find(g => g.id === grpId);
+            if (grp) {
+                const col = grp.columns.find(c => c.id === colId);
+                if (col) {
+                    col[field] = value;
+                    markAsUnsaved();
+                    if (field === 'func') {
+                        if (!col.title || col.title.includes('[이름미지정]') || col.title.includes('[주소미지정]')) {
+                            col.title = getAutoTitle(grp, value);
+                        }
+                        renderSummaryGroups();
+                    }
+                }
+            }
+        }
+
+        let draggedGrpIdx = null; let draggedGrpId = null;
+        window.onGrpDragStart = function (e, grpId, idx) {
+            if (e.target.tagName.match(/INPUT|SELECT|BUTTON|TEXTAREA/)) { e.preventDefault(); return; }
+            draggedGrpIdx = idx; draggedGrpId = grpId;
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => { e.target.classList.add('opacity-50', 'scale-[0.98]'); }, 0);
+        };
+        window.onGrpDragOver = function (e, grpId, idx) {
+            e.preventDefault(); if (draggedGrpId === grpId) return;
+            e.dataTransfer.dropEffect = 'move';
+
+            // [기능 추가] 카드 드래그 시 좌/우 자동 스크롤
+            const scrollContainer = document.getElementById('summary-groups-container');
+            if (scrollContainer) {
+                const rect = scrollContainer.getBoundingClientRect();
+                const scrollZone = 60;
+                if (e.clientX - rect.left < scrollZone) scrollContainer.scrollLeft -= 15;
+                else if (rect.right - e.clientX < scrollZone) scrollContainer.scrollLeft += 15;
+            }
+
+            const targetCard = e.currentTarget;
+            const rectTarget = targetCard.getBoundingClientRect();
+            targetCard.classList.remove('border-l-4', 'border-r-4', 'border-blue-500');
+            if (e.clientX - rectTarget.left < rectTarget.width / 2) targetCard.classList.add('border-l-4', 'border-blue-500');
+            else targetCard.classList.add('border-r-4', 'border-blue-500');
+        };
+        window.onGrpDragLeave = function (e) { e.currentTarget.classList.remove('border-l-4', 'border-r-4', 'border-blue-500'); };
+        window.onGrpDrop = function (e, grpId, targetIdx) {
+            e.preventDefault(); e.currentTarget.classList.remove('border-l-4', 'border-r-4', 'border-blue-500');
+            if (draggedGrpIdx === null || draggedGrpId === grpId) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            let insertIdx = targetIdx;
+            if (e.clientX - rect.left >= rect.width / 2) insertIdx++;
+            if (draggedGrpIdx < insertIdx) insertIdx--;
+            if (draggedGrpIdx !== insertIdx) {
+                const item = summarySheet.groups.splice(draggedGrpIdx, 1)[0];
+                summarySheet.groups.splice(insertIdx, 0, item);
+                renderSummaryGroups(); markAsUnsaved();
+            }
+            draggedGrpIdx = null; draggedGrpId = null;
+        };
+        window.onGrpDragEnd = function (e) {
+            e.target.classList.remove('opacity-50', 'scale-[0.98]');
+            document.querySelectorAll('.draggable-grp-card').forEach(el => el.classList.remove('border-l-4', 'border-r-4', 'border-blue-500'));
+            draggedGrpIdx = null; draggedGrpId = null;
+        };
+
+        let draggedSumColIdx = null; let draggedSumGrpId = null;
+        window.onSumColDragStart = function (e, grpId, idx) {
+            draggedSumColIdx = idx; draggedSumGrpId = grpId; e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => { e.target.classList.add('opacity-40', 'bg-blue-50', 'ring-2', 'ring-blue-500'); }, 0);
+        };
+        window.onSumColDragOver = function (e, grpId, idx) {
+            e.preventDefault(); if (draggedSumGrpId !== grpId) return;
+            e.dataTransfer.dropEffect = 'move';
+
+            // [기능 추가] 요약 항목 드래그 시 상/하 자동 스크롤
+            const scrollContainer = document.getElementById('scroll-cols-' + grpId);
+            if (scrollContainer) {
+                const rect = scrollContainer.getBoundingClientRect();
+                const scrollZone = 50;
+                if (e.clientY - rect.top < scrollZone) scrollContainer.scrollTop -= 15;
+                else if (rect.bottom - e.clientY < scrollZone) scrollContainer.scrollTop += 15;
+            }
+
+            const rect = e.currentTarget.getBoundingClientRect();
+            e.currentTarget.classList.remove('border-t-2', 'border-b-2', 'border-blue-600');
+            if (e.clientY - rect.top < rect.height / 2) e.currentTarget.classList.add('border-t-2', 'border-blue-600');
+            else e.currentTarget.classList.add('border-b-2', 'border-blue-600');
+        };
+        window.onSumColDragLeave = function (e) { e.currentTarget.classList.remove('border-t-2', 'border-b-2', 'border-blue-600'); };
+        window.onSumColDrop = function (e, grpId, targetIdx) {
+            e.preventDefault(); e.currentTarget.classList.remove('border-t-2', 'border-b-2', 'border-blue-600');
+            if (draggedSumColIdx === null || draggedSumGrpId !== grpId) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            let insertIdx = targetIdx;
+            if (e.clientY - rect.top >= rect.height / 2) insertIdx++;
+            if (draggedSumColIdx < insertIdx) insertIdx--;
+            if (draggedSumColIdx !== insertIdx) {
+                const grp = summarySheet.groups.find(g => g.id === grpId);
+                if (grp) {
+                    const item = grp.columns.splice(draggedSumColIdx, 1)[0];
+                    grp.columns.splice(insertIdx, 0, item);
+                    renderSummaryGroups(); markAsUnsaved();
+                }
+            }
+            draggedSumColIdx = null; draggedSumGrpId = null;
+        };
+        window.onSumColDragEnd = function (e) {
+            e.target.classList.remove('opacity-40', 'bg-blue-50', 'ring-2', 'ring-blue-500');
+            document.querySelectorAll('.draggable-sum-item').forEach(el => el.classList.remove('border-t-2', 'border-b-2', 'border-blue-600'));
+            draggedSumColIdx = null; draggedSumGrpId = null;
+        };
+
+        function renderSummaryGroups() {
+            if (!document.getElementById('smart-spin-style')) {
+                const style = document.createElement('style');
+                style.id = 'smart-spin-style';
+                style.innerHTML = `
+                    .smart-spin-input::-webkit-outer-spin-button,
+                    .smart-spin-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+                    .smart-spin-input:focus::-webkit-outer-spin-button,
+                    .smart-spin-input:focus::-webkit-inner-spin-button { -webkit-appearance: inner-spin-button; }
+                    .smart-spin-input { -moz-appearance: textfield; }
+                `;
+                document.head.appendChild(style);
+            }
+
+            const container = document.getElementById('summary-groups-container');
+            if (!container) return;
+
+            const scrollPositions = {};
+            document.querySelectorAll('.summary-cols-scroll').forEach(el => { scrollPositions[el.id] = el.scrollTop; });
+            const containerScrollLeft = container.scrollLeft;
+
+            if (!document.getElementById('cell-formats-datalist')) {
+                const dl = document.createElement('datalist');
+                dl.id = 'cell-formats-datalist';
+                dl.innerHTML = `<option value="#,##0"></option><option value="#,##0.00"></option><option value="yyyy-mm-dd"></option><option value="0.00%"></option><option value="@"></option>`;
+                document.body.appendChild(dl);
+            }
+
+            const parent = container.parentElement;
+            parent.classList.remove('overflow-y-auto');
+            parent.classList.add('flex', 'flex-col', 'overflow-hidden');
+            container.className = 'flex flex-row gap-3 h-full overflow-x-auto pb-4 items-stretch';
+
+            container.innerHTML = '';
+
+            if (summarySheet.groups.length === 0) {
+                container.innerHTML = '<div class="text-center p-8 text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-xl w-full h-fit my-auto shadow-sm bg-white/50">출처 그룹이 없습니다. 우측 상단의 [출처 그룹 추가] 버튼을 눌러주세요.</div>';
+                return;
+            }
+
+            let sheetOptions = `<option value="">대상 시트 선택</option>`;
+            sheetNamesCache.forEach(s => { sheetOptions += `<option value="${s}">${s}</option>`; });
+
+            summarySheet.groups.forEach((grp, idx) => {
+                const availableNames = namedRangesBySheetCache[grp.targetSheet] || [];
+                let nameOptions = '<option value="">이름 정의 선택</option>' + availableNames.map(r => `<option value="${r}" ${grp.range === r ? 'selected' : ''}>${r}</option>`).join('');
+
+                const isExpanded = grp._isExpanded === true;
+                const div = document.createElement('div');
+
+                div.id = `grp-card-${grp.id}`;
+                div.setAttribute('ondragstart', `onGrpDragStart(event, '${grp.id}', ${idx})`);
+                div.setAttribute('ondragover', `onGrpDragOver(event, '${grp.id}', ${idx})`);
+                div.setAttribute('ondragleave', `onGrpDragLeave(event)`);
+                div.setAttribute('ondrop', `onGrpDrop(event, '${grp.id}', ${idx})`);
+                div.setAttribute('ondragend', `onGrpDragEnd(event)`);
+
+                if (!isExpanded) {
+                    div.className = 'draggable-grp-card bg-slate-50 border border-slate-300 rounded-xl shadow-md hover:border-purple-400 transition-all flex flex-col shrink-0 w-[136px] overflow-hidden group';
+                    div.onclick = (e) => {
+                        if (!e.target.closest('.drag-handle')) toggleSummaryGroup(grp.id);
+                    };
+
+                    const sheetName = grp.targetSheet || '시트 미선택';
+
+                    let colBoxesHtml = '';
+                    if (grp.columns.length > 0) {
+                        grp.columns.forEach((c, cIdx) => {
+                            const funcMap = { 'first': '첫행값', 'sum': '합계', 'avg': '평균', 'count': '숫자수', 'counta': '문자수', 'max': '최댓값', 'min': '최솟값', 'countif': '조건수', 'sumif': '조건합계' };
+
+                            let fName = funcMap[c.func] || c.func;
+                            if (c.func === 'nth') fName = `${c.nthRow || 1}번째`;
+                            if (c.func === 'countif') fName = `조건(${c.conditionVal || '없음'})`;
+                            if (c.func === 'sumif') fName = `합계(${c.conditionVal || '없음'})`;
+
+                            const cTitle = c.title || '제목없음';
+                            colBoxesHtml += `
+                                <div class="bg-white border border-slate-200 rounded-lg p-1.5 flex flex-col items-center shadow-sm w-full gap-1 hover:border-purple-300 transition-colors">
+                                    <span class="text-[11px] font-black text-blue-800 truncate w-full text-center tracking-tight" title="${cTitle}">${cTitle}</span>
+                                    <div class="flex items-center gap-1 w-full">
+                                        <span class="text-[10px] font-mono text-slate-500 bg-slate-50 px-1 py-0.5 rounded w-1/2 text-center border border-slate-100 shadow-inner">${c.colIndex}열</span>
+                                        <span class="text-[9px] font-bold text-purple-700 bg-purple-50 px-1 py-0.5 rounded w-1/2 text-center border border-purple-100 truncate shadow-inner">${fName}</span>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        colBoxesHtml = `<div class="text-[10px] text-slate-400 font-bold text-center w-full py-4 border border-dashed border-slate-200 rounded-lg bg-slate-50">항목 없음</div>`;
+                    }
+
+                    div.innerHTML = `
+                        <div class="bg-slate-200 p-2 border-b border-slate-300 flex items-center justify-between shrink-0 transition-colors group-hover:bg-slate-300">
+                            <div class="drag-handle flex items-center gap-1 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 px-0.5"
+                                 onmouseenter="document.getElementById('grp-card-${grp.id}').setAttribute('draggable', 'true')"
+                                 onmouseleave="document.getElementById('grp-card-${grp.id}').setAttribute('draggable', 'false')">
+                                <i data-lucide="grip-vertical" class="w-4 h-4 pointer-events-none"></i>
+                                <span class="bg-slate-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm pointer-events-none">${idx + 1}</span>
+                            </div>
+                            <i data-lucide="maximize-2" class="w-4 h-4 text-slate-400 group-hover:text-purple-600 transition-colors cursor-pointer"></i>
+                        </div>
+                        <div class="p-2 flex flex-col gap-2 flex-1 overflow-y-auto bg-slate-100/50 items-center">
+                            <div class="font-black text-slate-800 text-[12px] text-center leading-tight break-words px-1 w-full border-b border-slate-200 pb-2">${sheetName}</div>
+                            ${colBoxesHtml}
+                        </div>
+                    `;
+                } else {
+                    div.className = 'draggable-grp-card bg-white border-2 border-purple-500 rounded-xl shadow-md transition-all flex flex-col shrink-0 w-[660px] overflow-hidden relative';
+
+                    let rangeInputHtml = grp.type === 'manual'
+                        ? `<input type="text" value="${grp.range}" onchange="updateSummaryGroup('${grp.id}', 'range', this.value)" placeholder="예:A5:G100" class="border border-slate-300 rounded px-2 py-1.5 text-sm font-mono font-bold flex-1 outline-none focus:border-purple-500 shadow-sm min-w-0">`
+                        : `<select onchange="updateSummaryGroup('${grp.id}', 'range', this.value)" class="border border-slate-300 rounded px-2 py-1.5 text-sm font-bold flex-1 outline-none focus:border-purple-500 shadow-sm bg-white min-w-0">${nameOptions}</select>`;
+
+                    const info = getMaxColsForGroup(grp);
+                    const isGrpInvalid = !grp.range || info.isCacheMissing;
+
+                    let refInfoHtml = '';
+                    if (isGrpInvalid) {
+                        refInfoHtml = `
+                            <div class="mx-3 mt-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-md text-[11px] font-bold text-red-600 flex items-center gap-2 shadow-sm">
+                                <i data-lucide="x-circle" class="w-3.5 h-3.5 shrink-0 text-red-500"></i>
+                                범위(이름정의)가 지정되지 않았거나 끊어졌습니다. 올바른 범위를 지정하거나 이 그룹을 삭제해야 취합이 진행됩니다.
+                            </div>
+                        `;
+                    } else if (grp.range && grp.type === 'named') {
+                        let rawBadgeColor = info.isFormula ? "bg-amber-50 text-amber-800 border-amber-300" : "bg-blue-50 text-blue-800 border-blue-200";
+                        let rawIcon = info.isFormula ? "alert-triangle" : "search";
+
+                        refInfoHtml = `
+                            <div class="mx-3 mt-2 px-3 py-1.5 ${rawBadgeColor} border rounded-md text-[11px] flex items-center gap-2 shadow-sm overflow-hidden">
+                                <i data-lucide="${rawIcon}" class="w-3.5 h-3.5 shrink-0 opacity-70"></i>
+                                <span class="font-black opacity-60 text-[10px] shrink-0">원본(Raw):</span>
+                                <span class="font-mono font-bold truncate text-slate-700 max-w-[180px]" title="${info.rawInfo}">${info.rawInfo}</span>
+                                <div class="h-3 w-[1px] bg-black/20 shrink-0 mx-1"></div>
+                                <i data-lucide="calculator" class="w-3.5 h-3.5 shrink-0 opacity-70"></i>
+                                <span class="font-black opacity-60 text-[10px] shrink-0">분석 결과:</span>
+                                <span class="font-bold text-[11px] truncate text-blue-700 flex-1 min-w-0" title="${info.parsedAddr}">${info.parsedAddr}</span>
+                            </div>
+                        `;
+                    }
+
+                    let colsHtml = `<div id="scroll-cols-${grp.id}" class="summary-cols-scroll flex flex-col gap-2 p-2.5 bg-slate-50/80 flex-1 overflow-y-auto content-start min-h-[150px]">`;
+                    if (grp.columns.length === 0) {
+                        colsHtml += `<div class="text-[12px] ${isGrpInvalid ? 'text-red-500' : 'text-slate-400'} p-4 font-bold text-center w-full">아래 항목 추가 버튼을 누르세요.</div>`;
+                    }
+
+                    grp.columns.forEach((c, cIdx) => {
+                        let colSelectOptions = '';
+                        if (isGrpInvalid) {
+                            colSelectOptions = `<option value="1">오류</option>`;
+                        } else {
+                            for (let i = 1; i <= info.maxCols; i++) {
+                                colSelectOptions += `<option value="${i}" ${parseInt(c.colIndex) === i ? 'selected' : ''}>${i}</option>`;
+                            }
+                        }
+
+                        const boxClass = isGrpInvalid ? 'bg-red-50/80 border-red-400 ring-1 ring-red-200' : 'bg-white border-slate-200 hover:border-blue-400 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-200';
+                        const badgeClass = isGrpInvalid ? 'bg-red-500 text-white' : 'bg-blue-600 text-white';
+                        const labelClass = isGrpInvalid ? 'text-red-600' : 'text-slate-500';
+                        const inputClass = isGrpInvalid ? 'border-red-300 bg-white focus:border-red-500 text-red-700' : 'border-slate-300 bg-slate-50 focus:border-blue-500';
+                        const selectClass = isGrpInvalid ? 'border-red-300 bg-white focus:border-red-500 text-red-700' : 'border-slate-300 bg-white focus:border-blue-500';
+                        const titleClass = isGrpInvalid ? 'border-red-300 bg-red-100 focus:border-red-500 text-red-700' : 'border-slate-300 bg-white focus:border-blue-500';
+
+                        const safeFormat = c.format ? c.format.replace(/"/g, '&quot;') : '';
+
+                        // [버그 수정] 콤보박스 (기본값) 엑셀 자동지정 무반응 버그 완벽 패치 (Dummy 값 트릭 활용)
+                        const formatInputHtml = `
+                            <div class="flex items-center border rounded shadow-sm bg-white relative w-[200px] shrink-0 ${isGrpInvalid ? 'border-red-300 focus-within:border-red-500' : 'border-slate-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-200'}">
+                                <input type="text" value="${safeFormat}" onchange="updateSummaryColumn('${grp.id}', '${c.id}', 'format', this.value)" placeholder="기본값 (변경안함)" class="w-full px-2 py-1.5 text-xs font-mono font-bold outline-none bg-transparent ${isGrpInvalid ? 'text-red-700 placeholder-red-300' : 'text-slate-700 placeholder-slate-400'} pr-6" title="직접 타이핑하거나 우측 화살표를 눌러 선택하세요" ${isGrpInvalid ? 'disabled' : ''}>
+                                <select onchange="if(this.value==='_dummy')return; const inp=this.previousElementSibling; inp.value=this.value; updateSummaryColumn('${grp.id}', '${c.id}', 'format', this.value); this.value='_dummy';" class="absolute right-0 inset-y-0 w-6 opacity-0 cursor-pointer" title="자주 쓰는 서식 선택" ${isGrpInvalid ? 'disabled' : ''}>
+                                    <option value="_dummy" disabled selected></option>
+                                    <option value="">(기본값) 엑셀 자동 지정</option>
+                                    <optgroup label="[숫자 / 회계]">
+                                        <option value="#,##0">#,##0 (정수, 천단위 콤마)</option>
+                                        <option value="#,##0.00">#,##0.00 (소수점 2자리)</option>
+                                        <option value="_-* #,##0_-;-* #,##0_-;_-* &quot;-&quot;_-;_-@_-">회계 (기호 없음)</option>
+                                        <option value="_-₩* #,##0_-;-₩* #,##0_-;_-₩* &quot;-&quot;_-;_-@_-">회계 (₩ 원화 기호)</option>
+                                    </optgroup>
+                                    <optgroup label="[날짜 / 시간]">
+                                        <option value="yyyy-mm-dd">yyyy-mm-dd (연-월-일)</option>
+                                        <option value="yyyy-mm-dd hh:mm">yyyy-mm-dd hh:mm (연월일 시간)</option>
+                                        <option value="yyyy&quot;년&quot; m&quot;월&quot; d&quot;일&quot;">yyyy년 m월 d일 (한국어)</option>
+                                    </optgroup>
+                                    <optgroup label="[기타 서식]">
+                                        <option value="0.0%">0.0% (백분율 1자리)</option>
+                                        <option value="0.00%">0.00% (백분율 2자리)</option>
+                                        <option value="@">@ (텍스트로 강제 인식)</option>
+                                    </optgroup>
+                                </select>
+                                <i data-lucide="chevron-down" class="w-4 h-4 ${isGrpInvalid ? 'text-red-400' : 'text-slate-400'} absolute right-1 pointer-events-none"></i>
+                            </div>
+                        `;
+
+                        let extraInputHtml = '';
+                        if (c.func === 'nth') {
+                            extraInputHtml = `
+                               <div class="h-6 w-[1px] ${isGrpInvalid ? 'bg-red-300' : 'bg-slate-200'} shrink-0"></div>
+                               <span class="text-[11px] font-bold shrink-0 leading-tight text-right w-[40px] ${labelClass}">가져올<br>행번호</span>
+                               <input type="number" min="1" value="${c.nthRow || 1}" onchange="updateSummaryColumn('${grp.id}', '${c.id}', 'nthRow', parseInt(this.value)||1)" class="smart-spin-input w-[52px] rounded px-1 py-1.5 text-sm text-center font-mono font-bold outline-none shadow-sm transition-colors border ${inputClass}" title="클릭 시에만 조절 버튼이 나타납니다" ${isGrpInvalid ? 'disabled' : ''}>`;
+                        } else if (c.func === 'countif' || c.func === 'sumif') {
+                            extraInputHtml = `
+                               <div class="h-6 w-[1px] ${isGrpInvalid ? 'bg-red-300' : 'bg-slate-200'} shrink-0"></div>
+                               <div class="flex flex-col justify-center items-end w-[44px] shrink-0">
+                                   <div class="flex items-center gap-0.5">
+                                       <span class="text-[11px] font-bold leading-tight ${labelClass}">조건식</span>
+                                       <i data-lucide="help-circle" class="w-3.5 h-3.5 text-blue-500 hover:text-blue-700 cursor-pointer" onclick="showConditionHelp()" title="조건식 작성 가이드 보기"></i>
+                                   </div>
+                               </div>
+                               <input type="text" value="${(c.conditionVal || '').replace(/"/g, '&quot;')}" onchange="updateSummaryColumn('${grp.id}', '${c.id}', 'conditionVal', this.value)" placeholder="예: >=100, 1:*사과* & 3:<>" class="w-[144px] rounded px-2 py-1 text-[11px] font-bold outline-none shadow-sm transition-colors border ${inputClass}" title="클릭해서 조건식 도움말(?)을 확인하세요" ${isGrpInvalid ? 'disabled' : ''}>`;
+                        }
+
+                        // [버그 수정] 요약 항목의 드래그 이벤트(ondragstart, ondrop 등)를 
+                        // 아이콘(grip-vertical)이 아닌, 컨테이너 DIV (draggable-sum-item)에 묶어 순서가 정확히 바뀌게 수정!
+                        colsHtml += `
+                            <div id="sum-col-${c.id}" class="draggable-sum-item flex flex-col gap-2 p-2.5 border rounded-lg shadow-sm transition-all w-full shrink-0 ${boxClass}"
+                                 ondragstart="onSumColDragStart(event, '${grp.id}', ${cIdx})"
+                                 ondragover="onSumColDragOver(event, '${grp.id}', ${cIdx})"
+                                 ondragleave="onSumColDragLeave(event)"
+                                 ondrop="onSumColDrop(event, '${grp.id}', ${cIdx})"
+                                 ondragend="onSumColDragEnd(event)">
+                                
+                                <div class="flex items-center gap-2 w-full">
+                                    <div class="flex items-center gap-1 w-[46px] shrink-0">
+                                        <div class="text-slate-400 hover:text-blue-600 px-0.5 py-1 cursor-grab active:cursor-grabbing rounded hover:bg-slate-100 transition-colors"
+                                             onmouseenter="document.getElementById('sum-col-${c.id}').setAttribute('draggable', 'true')"
+                                             onmouseleave="document.getElementById('sum-col-${c.id}').setAttribute('draggable', 'false')" 
+                                             title="마우스로 끌어서 순서 변경">
+                                            <i data-lucide="grip-vertical" class="w-4 h-4 pointer-events-none"></i>
+                                        </div>
+                                        <span class="text-[11px] font-black px-1.5 py-1 rounded shadow-sm flex-1 text-center ${badgeClass}">${cIdx + 1}</span>
+                                    </div>
+                                    
+                                    <span class="text-[11px] font-bold shrink-0 leading-tight text-right w-[40px] ${labelClass}">가져올<br>열위치</span>
+                                    <select onchange="updateSummaryColumn('${grp.id}', '${c.id}', 'colIndex', parseInt(this.value))" class="w-[60px] rounded px-1 py-1.5 text-sm text-center font-mono font-bold outline-none shadow-sm cursor-pointer transition-colors border ${inputClass}" ${isGrpInvalid ? 'disabled' : ''}>
+                                        ${colSelectOptions}
+                                    </select>
+                                    
+                                    <div class="h-6 w-[1px] ${isGrpInvalid ? 'bg-red-300' : 'bg-slate-200'} shrink-0"></div>
+                                    
+                                    <span class="text-[11px] font-bold shrink-0 leading-tight text-right w-[28px] ${labelClass}">계산<br>방식</span>
+                                    <select onchange="updateSummaryColumn('${grp.id}', '${c.id}', 'func', this.value)" class="w-[124px] border rounded px-1.5 py-1.5 text-[11.5px] font-bold outline-none cursor-pointer shadow-sm ${selectClass}">
+                                        <option value="first" ${c.func === 'first' ? 'selected' : ''}>첫행값 그대로</option>
+                                        <option value="nth" ${c.func === 'nth' ? 'selected' : ''}>N번째 행값</option>
+                                        <option value="countif" ${c.func === 'countif' ? 'selected' : ''}>조건 개수 (Countif)</option>
+                                        <option value="sumif" ${c.func === 'sumif' ? 'selected' : ''}>조건 합계 (Sumif)</option>
+                                        <option value="sum" ${c.func === 'sum' ? 'selected' : ''}>합계 (Sum)</option>
+                                        <option value="avg" ${c.func === 'avg' ? 'selected' : ''}>평균 (Average)</option>
+                                        <option value="count" ${c.func === 'count' ? 'selected' : ''}>숫자 셀 수</option>
+                                        <option value="counta" ${c.func === 'counta' ? 'selected' : ''}>문자(숫자포함) 수</option>
+                                        <option value="max" ${c.func === 'max' ? 'selected' : ''}>최댓값 (Max)</option>
+                                        <option value="min" ${c.func === 'min' ? 'selected' : ''}>최솟값 (Min)</option>
+                                    </select>
+                                    
+                                    ${extraInputHtml}
+                                    
+                                    <div class="flex-1"></div>
+                                    <button onclick="removeSummaryColumn('${grp.id}', '${c.id}')" class="text-slate-400 hover:text-red-600 transition-colors bg-white/50 rounded p-1.5 shrink-0 shadow-sm border border-transparent hover:border-red-200" title="항목 삭제"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                </div>
+                                
+                                <div class="flex items-center gap-2 w-full pl-[54px] pr-1">
+                                    <span class="text-[11px] font-bold shrink-0 leading-tight text-right w-[40px] ${labelClass}">출력<br>열제목</span>
+                                    <input type="text" value="${c.title}" onchange="updateSummaryColumn('${grp.id}', '${c.id}', 'title', this.value)" placeholder="예: 국어 평균" class="flex-1 min-w-[70px] border rounded px-2 py-1.5 text-xs font-bold outline-none shadow-sm ${titleClass}">
+                                    
+                                    <div class="h-6 w-[1px] ${isGrpInvalid ? 'bg-red-300' : 'bg-slate-200'} shrink-0"></div>
+                                    
+                                    <span class="text-[11px] font-bold shrink-0 leading-tight text-right w-[40px] ${labelClass}">엑셀<br>셀서식</span>
+                                    ${formatInputHtml}
+                                </div>
+                                
+                            </div>
+                        `;
+                    });
+                    colsHtml += '</div>';
+
+                    div.innerHTML = `
+                        <div class="bg-purple-100 p-2.5 border-b border-purple-200 flex items-center justify-between shrink-0">
+                            <div class="flex items-center gap-1.5 flex-1">
+                                <div class="drag-handle cursor-grab active:cursor-grabbing text-purple-400 hover:text-purple-700 p-1 rounded hover:bg-purple-200 transition-colors"
+                                     onmouseenter="document.getElementById('grp-card-${grp.id}').setAttribute('draggable', 'true')"
+                                     onmouseleave="document.getElementById('grp-card-${grp.id}').setAttribute('draggable', 'false')" title="이 그룹을 드래그하여 순서 변경">
+                                    <i data-lucide="grip-vertical" class="w-4 h-4 pointer-events-none"></i>
+                                </div>
+                                <div class="flex items-center gap-1.5 cursor-pointer group" onclick="toggleSummaryGroup('${grp.id}')" title="이 그룹 접기">
+                                    <span class="bg-purple-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm pointer-events-none">${idx + 1}</span>
+                                    <span class="text-[13px] font-black text-purple-900 pointer-events-none">데이터 출처 그룹 편집 중</span>
+                                    <i data-lucide="chevron-left" class="w-4 h-4 text-purple-500 group-hover:text-purple-800 transition-colors ml-1 pointer-events-none"></i>
+                                </div>
+                            </div>
+                            <button onclick="removeSummaryGroup('${grp.id}')" class="text-red-500 hover:text-white hover:bg-red-500 text-[11px] font-bold flex items-center gap-1 transition-colors bg-white px-2 py-1 rounded shadow-sm border border-red-200"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i>그룹 전체삭제</button>
+                        </div>
+                        
+                        <div class="p-3 bg-white border-b border-slate-200 flex items-center gap-2 shrink-0 shadow-sm z-10">
+                            <span class="text-[12px] font-bold text-slate-500 shrink-0 pl-1">시트:</span>
+                            <select onchange="updateSummaryGroup('${grp.id}', 'targetSheet', this.value)" class="border border-slate-300 rounded px-2 py-1.5 text-sm font-bold outline-none focus:border-purple-500 shadow-sm bg-white w-32 shrink-0">
+                                ${sheetOptions.replace(`value="${grp.targetSheet}"`, `value="${grp.targetSheet}" selected`)}
+                            </select>
+                            
+                            <div class="h-6 w-[1px] bg-slate-300 mx-2 shrink-0"></div>
+                            
+                            <span class="text-[12px] font-bold text-slate-500 shrink-0">가져올 방식:</span>
+                            <label class="flex items-center gap-1 cursor-pointer text-[12px] font-bold text-slate-600 leading-none bg-slate-50 px-2 py-1.5 border border-slate-200 rounded"><input type="radio" name="r_type_${grp.id}" value="manual" ${grp.type === 'manual' ? 'checked' : ''} onchange="updateSummaryGroup('${grp.id}', 'type', 'manual')"> 주소</label>
+                            <label class="flex items-center gap-1 cursor-pointer text-[12px] font-bold text-slate-600 leading-none bg-slate-50 px-2 py-1.5 border border-slate-200 rounded"><input type="radio" name="r_type_${grp.id}" value="named" ${grp.type === 'named' ? 'checked' : ''} onchange="updateSummaryGroup('${grp.id}', 'type', 'named')"> 이름정의</label>
+                            
+                            <div class="h-6 w-[1px] bg-slate-300 mx-2 shrink-0"></div>
+                            ${rangeInputHtml}
+                        </div>
+                        
+                        ${refInfoHtml}
+                        ${colsHtml}
+                        
+                        <div class="p-3 bg-slate-100 border-t border-slate-200 shrink-0 flex gap-2 justify-center shadow-inner">
+                            <button onclick="addSummaryColumn('${grp.id}')" class="flex-1 text-[13px] font-black text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm"><i data-lucide="plus" class="w-4 h-4"></i> 요약 항목(열) 추가</button>
+                            <button onclick="confirmAndCollapseGroup('${grp.id}')" class="flex-1 text-[13px] font-black text-white bg-blue-600 hover:bg-blue-700 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm"><i data-lucide="check-circle" class="w-4 h-4"></i> 설정 확인 및 카드 닫기</button>
+                        </div>
+                    `;
+                }
+                container.appendChild(div);
+            });
+            lucide.createIcons();
+            setTimeout(() => { Object.keys(scrollPositions).forEach(id => { const el = document.getElementById(id); if (el) el.scrollTop = scrollPositions[id]; }); if (container) container.scrollLeft = containerScrollLeft; }, 0);
+        }
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        function updateRangeUI(type) {
+            const isManual = type === 'manual';
+            document.getElementById('range-input-wrapper').classList.toggle('hidden', !isManual);
+            document.getElementById('range-select-wrapper').classList.toggle('hidden', isManual);
+            document.getElementById('label-manual').className = `flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition-colors ${isManual ? 'bg-blue-50 shadow-sm ring-1 ring-blue-300 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`;
+            document.getElementById('label-named').className = `flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition-colors ${!isManual ? 'bg-blue-50 shadow-sm ring-1 ring-blue-300 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`;
+
+            if (activeSheetIndex !== -1) {
+                const sheet = sheetsData[activeSheetIndex];
+                let availableRanges = [];
+                if (sheet.isVirtual) {
+                    availableRanges = globalNamedRangesCache;
+                } else {
+                    availableRanges = namedRangesBySheetCache[sheet.name] || [];
+                }
+                const rangeSelect = document.getElementById('rule-range-named');
+                rangeSelect.innerHTML = '<option value="">이름 정의 범위 선택</option>' + availableRanges.map(r => `<option value="${r}">${r}</option>`).join('');
+                rangeSelect.value = sheet.type === 'named' ? sheet.range : '';
+            }
+        }
+
+        function updateActiveSheetSetting() {
+            if (activeSheetIndex === -1) return;
+            const type = document.querySelector('input[name="range-type"]:checked').value;
+            sheetsData[activeSheetIndex].type = type;
+            sheetsData[activeSheetIndex].range = '';
+            document.getElementById('rule-range-manual').value = '';
+            updateRangeUI(type);
+            renderSheetList();
+            markAsUnsaved();
+        }
+
+        function saveActiveSheetInput() {
+            if (activeSheetIndex === -1) return;
+            const type = sheetsData[activeSheetIndex].type;
+            sheetsData[activeSheetIndex].range = type === 'manual' ? document.getElementById('rule-range-manual').value : document.getElementById('rule-range-named').value;
+            renderSheetList();
+            markAsUnsaved();
+        }
+
+        function applyToAllSelectedSheets() {
+            if (activeSheetIndex === -1) return;
+            const currentSetting = sheetsData[activeSheetIndex];
+
+            if (!currentSetting.range) {
+                showToast("취합 범위를 먼저 설정해주세요.", "warning");
+                return;
+            }
+
+            let targetSheets = [];
+            sheetsData.forEach((sheet, i) => {
+                if (sheet.selected && i !== activeSheetIndex) {
+                    targetSheets.push(sheet.name);
+                }
+            });
+
+            if (targetSheets.length === 0) {
+                showToast("반영할 다른 대상 시트가 체크되어 있지 않습니다.", "warning");
+                return;
+            }
+
+            const msgHtml = `
+                <div class="text-sm text-slate-600 mb-3 leading-relaxed">
+                    현재 <b class="text-blue-600">[ ${currentSetting.name} ]</b> 시트의 <br><b>취합 범위</b>와 <b>열 배치 설정</b>을 체크된 다른 <b>${targetSheets.length}개</b>의 시트에 모두 덮어씁니다.
+                    <br><br><span class="text-amber-700 text-xs font-bold bg-amber-50 border border-amber-200 px-2 py-1 rounded shadow-sm">💡 '검사 제외 열' 설정은 시트마다 다를 수 있어 덮어쓰지 않습니다.</span>
+                </div>
+                <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700 font-bold leading-relaxed mt-2">
+                    ⚠️ 주의: 대상 시트에 기존에 설정해둔 내용이 있다면 모두 삭제되며 복구할 수 없습니다. 정말 일괄 반영하시겠습니까?
+                </div>
+            `;
+
+            customConfirm("설정 일괄 반영", msgHtml, () => {
+                let count = 0;
+                sheetsData.forEach((sheet, i) => {
+                    if (sheet.selected && i !== activeSheetIndex) {
+                        sheet.type = currentSetting.type;
+                        sheet.range = currentSetting.range;
+                        sheet.layout = JSON.parse(JSON.stringify(currentSetting.layout));
+
+                        // ※ sheet.keyColumns 는 여기서 의도적으로 복사하지 않음!
+
+                        sheet.layout.forEach(item => {
+                            if (item.type !== 'data') item.id = 'meta_' + Math.random().toString(36).substr(2, 9);
+                        });
+                        count++;
+                    }
+                });
+                renderSheetList();
+                markAsUnsaved();
+                showToast(`${count}개의 시트에 설정이 복사되었습니다. (필수열 제외)`, "success");
+            });
+        }
+
+        function addColumnField() {
+            if (activeSheetIndex === -1) return;
+            sheetsData[activeSheetIndex].layout.push({ id: 'meta_' + Math.random().toString(36).substr(2, 9), type: 'meta', name: '', sheet: '', cellType: 'manual', cell: '', repeatMode: 'all' });
+            renderColumnLayout();
+            markAsUnsaved();
+        }
+
+        function removeColumnField(id) {
+            if (activeSheetIndex === -1) return;
+            sheetsData[activeSheetIndex].layout = sheetsData[activeSheetIndex].layout.filter(c => c.id !== id);
+            renderColumnLayout();
+            markAsUnsaved();
+        }
+
+        function updateColumnData(id, field, value) {
+            if (activeSheetIndex === -1) return;
+            const col = sheetsData[activeSheetIndex].layout.find(c => c.id === id);
+            if (col) {
+                let needsRender = false;
+                const currentType = col.cellType || 'manual';
+
+                // [핵심] 1. 값 업데이트 시 현재 유형(Type)에 맞춰 백업(기억)해둠
+                if (field === 'name') {
+                    if (currentType === 'manual') col.manualName = value;
+                    if (currentType === 'named') col.namedName = value;
+                }
+                if (field === 'cell') {
+                    if (currentType === 'manual') col.manualCell = value;
+                    if (currentType === 'named') col.namedCell = value;
+                }
+                if (field === 'sheet') {
+                    if (currentType === 'manual') col.manualSheet = value;
+                    if (currentType === 'named') col.namedSheet = value;
+                }
+
+                col[field] = value;
+
+                // [핵심] 2. 유형(cellType)이 변경될 때 과거의 값 복구하기
+                if (field === 'cellType') {
+                    const newType = value;
+
+                    if (newType === 'manual') {
+                        col.name = col.manualName || '';
+                        col.cell = col.manualCell || '';
+                        col.sheet = col.manualSheet || '';
+                    } else if (newType === 'named') {
+                        col.name = col.namedName || '';
+                        col.cell = col.namedCell || '';
+                        col.sheet = col.namedSheet || '';
+                    } else if (newType === 'filename') {
+                        col.name = '파일명';
+                        col.cell = '';
+                        col.sheet = '';
+                    } else if (newType === 'fileindex') {
+                        col.name = '파일순번';
+                        col.cell = '';
+                        col.sheet = '';
+                    }
+                    needsRender = true;
+                }
+
+                // 이름 정의를 선택하면 해당 항목명으로 동기화 및 기억
+                if (field === 'cell' && currentType === 'named' && value) {
+                    col.name = value;
+                    col.namedName = value;
+                    needsRender = true;
+                }
+
+                if (['sheet', 'cellType', 'cell', 'repeatMode'].includes(field)) {
+                    needsRender = true;
+                }
+
+                if (needsRender) renderColumnLayout();
+                markAsUnsaved();
+            }
+        }
+        // [신규] 셀 주소 실시간 유효성 검사 함수
+        window.validateCellInput = function (input) {
+            const val = input.value.trim();
+            // 영어 알파벳 + 숫자 1 이상으로 시작하는 형태인지 검사 (예: A1, B12)
+            const isValid = /^[A-Za-z]+[1-9]\d*$/.test(val);
+            const icon = input.nextElementSibling; // 아이콘 요소 찾기
+
+            if (!isValid && val !== '') {
+                input.classList.add('border-red-400', 'focus:border-red-500');
+                input.classList.remove('border-slate-200', 'focus:border-blue-500');
+                if (icon) { icon.classList.remove('hidden'); icon.classList.add('block'); }
+            } else {
+                input.classList.remove('border-red-400', 'focus:border-red-500');
+                input.classList.add('border-slate-200', 'focus:border-blue-500');
+                if (icon) { icon.classList.remove('block'); icon.classList.add('hidden'); }
+            }
+        };
+
+        // [신규] 취합 범위 실시간 유효성 검사 함수 (A1:B10 또는 A1 형태)
+        window.validateRangeInput = function (input) {
+            const val = input.value.replace(/\s/g, ''); // 공백 제거 후 검사
+            const isValid = /^[A-Za-z]+[1-9]\d*(:[A-Za-z]+[1-9]\d*)?$/.test(val);
+            const icon = input.nextElementSibling;
+
+            if (!isValid && val !== '') {
+                input.classList.add('border-red-400', 'focus:border-red-500');
+                input.classList.remove('border-slate-300', 'focus:border-blue-500');
+                if (icon) { icon.classList.remove('hidden'); icon.classList.add('block'); }
+            } else {
+                input.classList.remove('border-red-400', 'focus:border-red-500');
+                input.classList.add('border-slate-300', 'focus:border-blue-500');
+                if (icon) { icon.classList.remove('block'); icon.classList.add('hidden'); }
+            }
+        };
+
+        function renderColumnLayout() {
+            const container = document.getElementById('column-layout-container');
+            container.innerHTML = '';
+            if (activeSheetIndex === -1) return;
+            const layout = sheetsData[activeSheetIndex].layout;
+
+            layout.forEach((col, index) => {
+                const div = document.createElement('div');
+                div.className = "draggable-item flex-shrink-0 w-64 h-full flex flex-col rounded-2xl shadow-lg border-2 transition-all bg-white";
+                div.setAttribute('draggable', 'true');
+                div.ondragstart = (e) => onDragStart(e, index);
+                div.ondragover = (e) => onDragOver(e, index);
+                div.ondragleave = onDragLeave;
+                div.ondrop = (e) => onDrop(e, index);
+                div.ondragend = onDragEnd;
+
+                if (col.type === 'data') {
+                    div.classList.add('border-blue-300');
+                    div.innerHTML = `
+                            <div class="cursor-grab bg-blue-50 text-blue-400 p-2 border-b border-blue-200 flex justify-center hover:bg-blue-100 transition-colors rounded-t-2xl"><i data-lucide="grip-horizontal" class="w-4 h-4"></i></div>
+                            <div class="p-4 flex-1 flex flex-col items-center justify-center text-center gap-2 bg-blue-50/30">
+                                <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-blue-500 shadow-sm border border-blue-100"><i data-lucide="table-2" class="w-6 h-6"></i></div>
+                                <span class="font-bold text-blue-900 text-sm">취합 데이터 (본문)</span>
+                                <span class="text-xs text-blue-500">(선택한 범위의 데이터)</span>
+                            </div>
+                        `;
+                } else {
+                    div.classList.add('border-slate-200');
+                    const targetSheet = col.sheet || sheetsData[activeSheetIndex].name;
+                    let sheetOptions = `<option value="">(현재 시트와 동일)</option>`;
+                    sheetNamesCache.forEach(s => { sheetOptions += `<option value="${s}" ${col.sheet === s ? 'selected' : ''}>${s}</option>`; });
+
+                    const availableNames = namedRangesBySheetCache[targetSheet] || [];
+                    let nameOptions = '<option value="">이름 정의 선택</option>' + availableNames.map(r => `<option value="${r}" ${col.cell === r ? 'selected' : ''}>${r}</option>`).join('');
+
+                    let typeOptions = [
+                        { v: 'manual', l: '주소' }, { v: 'named', l: '이름정의' },
+                        { v: 'filename', l: '파일명' }, { v: 'fileindex', l: '순번' }
+                    ];
+                    let typeHtml = `<div class="flex gap-0.5 bg-slate-100 p-0.5 rounded border border-slate-200 w-full mb-2">`;
+                    typeOptions.forEach(opt => {
+                        let isSel = (col.cellType || 'manual') === opt.v;
+                        typeHtml += `<button onclick="updateColumnData('${col.id}', 'cellType', '${opt.v}')" class="flex-1 px-1 py-1.5 text-[11px] font-bold rounded ${isSel ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'} transition-all">${opt.l}</button>`;
+                    });
+                    typeHtml += `</div>`;
+
+                    let inputHtml = '';
+                    let sheetSelectVisibility = '';
+
+                    if (col.cellType === 'filename') {
+                        inputHtml = `<div class="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs text-slate-500 text-center font-bold">엑셀 원본 파일명 출력</div>`;
+                        sheetSelectVisibility = 'hidden';
+                    } else if (col.cellType === 'fileindex') {
+                        inputHtml = `<div class="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs text-slate-500 text-center font-bold">1, 2, 3.. (취합 순서) 출력</div>`;
+                        sheetSelectVisibility = 'hidden';
+                    } else if (col.cellType === 'named') {
+                        inputHtml = `<select onchange="updateColumnData('${col.id}', 'cell', this.value)" class="w-full border border-slate-300 rounded px-2 py-1.5 text-xs focus:border-blue-500 outline-none">${nameOptions}</select>`;
+                    } else {
+                        // [수정] 주소 모드일 때 실시간 유효성 검사 및 에러 아이콘 추가
+                        const isInvalid = col.cell && !/^[A-Za-z]+[1-9]\d*$/.test(col.cell.trim());
+                        const borderClass = isInvalid ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-blue-500';
+                        const iconDisplay = isInvalid ? 'block' : 'hidden';
+
+                        inputHtml = `
+                            <div class="relative w-full">
+                                <input type="text" value="${col.cell}" onchange="updateColumnData('${col.id}', 'cell', this.value)" oninput="validateCellInput(this)" placeholder="셀 주소 (예: B2)" class="w-full border ${borderClass} rounded-lg px-3 py-1.5 text-sm font-mono font-bold outline-none shadow-sm uppercase pr-8 transition-colors">
+                                <i data-lucide="alert-circle" class="w-4 h-4 text-red-500 absolute right-2.5 top-2 ${iconDisplay}"></i>
+                            </div>`;
+                    }
+
+                    let repeatHtml = `
+                            <div class="flex justify-between items-center pt-3 border-t border-slate-100 mt-auto">
+                                <span class="text-[11px] font-bold text-slate-500">데이터 반복 인쇄</span>
+                                <div class="flex gap-1">
+                                    <button onclick="updateColumnData('${col.id}', 'repeatMode', 'all')" class="px-2 py-1 text-[11px] font-bold rounded border ${(!col.repeatMode || col.repeatMode === 'all') ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'} transition-all">모든행</button>
+                                    <button onclick="updateColumnData('${col.id}', 'repeatMode', 'first')" class="px-2 py-1 text-[11px] font-bold rounded border ${(col.repeatMode === 'first') ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'} transition-all">첫행만</button>
+                                </div>
+                            </div>
+                        `;
+
+                    div.innerHTML = `
+                            <div class="cursor-grab text-slate-400 p-2 border-b border-slate-100 flex justify-between items-center bg-slate-50 hover:bg-slate-100 rounded-t-2xl transition-colors">
+                                <i data-lucide="grip-horizontal" class="w-4 h-4 ml-1"></i>
+                                <button onclick="removeColumnField('${col.id}')" class="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><i data-lucide="x" class="w-4 h-4"></i></button>
+                            </div>
+                            <div class="p-3 flex flex-col gap-3 flex-1">
+                                <div class="bg-slate-50 px-2 py-2 rounded border border-slate-200 flex flex-col">
+                                    ${typeHtml}
+                                    <div class="${sheetSelectVisibility} mb-2">
+                                        <select onchange="updateColumnData('${col.id}', 'sheet', this.value)" class="w-full border border-slate-300 rounded px-2 py-1.5 text-xs text-slate-600 focus:border-blue-500 focus:outline-none bg-white">${sheetOptions}</select>
+                                    </div>
+                                    ${inputHtml}
+                                </div>
+                                <div>
+                                    <input type="text" value="${col.name}" onchange="updateColumnData('${col.id}', 'name', this.value)" id="name-input-${col.id}" placeholder="결과물 항목명 (예: 학교명)" class="w-full border border-blue-300 rounded px-2.5 py-2 text-sm font-bold text-blue-900 focus:border-blue-500 focus:outline-none bg-blue-50/30">
+                                </div>
+                                ${repeatHtml}
+                            </div>
+                        `;
+                }
+                container.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        function onDragStart(e, idx) { draggedItemIndex = idx; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text', idx); setTimeout(() => e.target.classList.add('dragging'), 0); }
+        function onDragOver(e, idx) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; document.querySelectorAll('.draggable-item').forEach(el => el.classList.remove('drag-over-left', 'drag-over-right')); const rect = e.currentTarget.getBoundingClientRect(); if (e.clientX - rect.left < rect.width / 2) e.currentTarget.classList.add('drag-over-left'); else e.currentTarget.classList.add('drag-over-right'); }
+        function onDragLeave(e) { e.currentTarget.classList.remove('drag-over-left', 'drag-over-right'); }
+        function onDrop(e, targetIdx) {
+            e.preventDefault(); document.querySelectorAll('.draggable-item').forEach(el => el.classList.remove('drag-over-left', 'drag-over-right', 'dragging'));
+            if (draggedItemIndex === null || activeSheetIndex === -1) return;
+            const layout = sheetsData[activeSheetIndex].layout;
+            let insertIdx = targetIdx;
+            if (e.clientX - e.currentTarget.getBoundingClientRect().left >= e.currentTarget.getBoundingClientRect().width / 2) insertIdx++;
+            if (draggedItemIndex < insertIdx) insertIdx--;
+            if (draggedItemIndex !== insertIdx) { const item = layout.splice(draggedItemIndex, 1)[0]; layout.splice(insertIdx, 0, item); renderColumnLayout(); markAsUnsaved(); }
+            draggedItemIndex = null;
+        }
+        function onDragEnd(e) { e.target.classList.remove('dragging'); document.querySelectorAll('.draggable-item').forEach(el => el.classList.remove('drag-over-left', 'drag-over-right')); draggedItemIndex = null; }
+
+        let currentTargetFolder = "";
+
+        async function changeTargetFolder() {
+            try {
+                const api = getApi();
+                if (!api) return showToast("파이썬 연동이 필요합니다.", "error");
+
+                const res = await api.scan_folder();
+                if (res && res.success) processScanResult(res);
+            } catch (e) {
+                showToast("폴더 변경 중 오류가 발생했습니다: " + e.message, "error");
+            }
+        }
+
+        async function refreshTargetFolder() {
+            try {
+                const api = getApi();
+                if (!api) return showToast("파이썬 연동이 필요합니다.", "error");
+
+                let target = currentTargetFolder || (currentProject && currentProject.targetFolder);
+                if (!target && files.length > 0 && files[0].path) {
+                    target = files[0].path.substring(0, Math.max(files[0].path.lastIndexOf('\\'), files[0].path.lastIndexOf('/')));
+                }
+
+                if (!target) return showToast("스캔된 폴더 기록이 없습니다. [폴더 변경]을 먼저 눌러주세요.", "warning");
+
+                // 파이썬 프로그램 재시작 여부 감지
+                if (!api.refresh_folder) {
+                    const msg = `<div class="text-sm text-slate-600 leading-relaxed">
+                        현재 파이썬 프로그램이 <b>과거 버전</b>으로 실행 중입니다.<br><br>
+                        1. 파이썬 코드(<span class="text-blue-600 font-mono">excel_merger_api.py</span>)를 최신 코드로 저장했는지 확인하세요.<br>
+                        2. 실행 중인 <b>검은색 터미널(CMD) 창을 완전히 끄고(X버튼)</b> 다시 실행해주세요.
+                    </div>`;
+                    return openModal("파이썬 재시작 필요!", msg, [{ text: '확인', type: 'danger' }]);
+                }
+
+                showToast("폴더 변경사항을 스캔하고 있습니다...", "info");
+                const res = await api.refresh_folder({ folderPath: target });
+                if (res.success) processScanResult(res);
+                else showToast(res.message, "error");
+            } catch (e) {
+                showToast("새로고침 중 오류가 발생했습니다: " + e.message, "error");
+            }
+        }
+
+        // =========================================================
+        // 파일 정렬 (파일명, 수정일) 상태 관리 및 실행
+        // =========================================================
+        let sortState = { key: null, order: 'asc' };
+
+        function toggleSort(key) {
+            if (sortState.key === key) {
+                sortState.order = sortState.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortState.key = key;
+                sortState.order = 'asc';
+            }
+            applySorting();
+            renderFileList();
+            markAsUnsaved();
+        }
+
+        function applySorting() {
+            const isUnmergeable = (f) => f.hasError && f.errorMessage && (f.errorMessage.includes("미지원") || f.errorMessage.includes("취합 불가"));
+
+            const unmergeableFiles = [];
+            const normalFiles = [];
+
+            files.forEach(f => {
+                if (isUnmergeable(f)) unmergeableFiles.push(f);
+                else normalFiles.push(f);
+            });
+
+            if (sortState.key) {
+                const sortLogic = (a, b) => {
+                    let valA = sortState.key === 'name' ? a.name.toLowerCase() : new Date(a.lastModified).getTime();
+                    let valB = sortState.key === 'name' ? b.name.toLowerCase() : new Date(b.lastModified).getTime();
+
+                    if (valA < valB) return sortState.order === 'asc' ? -1 : 1;
+                    if (valA > valB) return sortState.order === 'asc' ? 1 : -1;
+                    return 0;
+                };
+                normalFiles.sort(sortLogic);
+                unmergeableFiles.sort(sortLogic);
+            }
+
+            files = [...unmergeableFiles, ...normalFiles];
+        }
+
+        function processScanResult(res) {
+            try {
+                currentTargetFolder = res.folder;
+                if (currentProject) currentProject.targetFolder = res.folder;
+
+                const newFiles = res.files || [];
+                let addedCount = 0;
+                let removedCount = 0;
+
+                const isUnmergeable = (f) => f.hasError && f.errorMessage && (f.errorMessage.includes("미지원") || f.errorMessage.includes("취합 불가"));
+
+                if (files.length === 0) {
+                    files = newFiles.map(f => {
+                        if (isUnmergeable(f)) f.excluded = true;
+                        return f;
+                    });
+                    addedCount = newFiles.length;
+                } else {
+                    const newPaths = new Set(newFiles.map(f => f.path));
+                    const initialLen = files.length;
+                    files = files.filter(f => newPaths.has(f.path));
+                    removedCount = initialLen - files.length;
+
+                    const existingPaths = new Set(files.map(f => f.path));
+                    newFiles.forEach(nf => {
+                        if (!existingPaths.has(nf.path)) {
+                            if (isUnmergeable(nf)) nf.excluded = true;
+                            files.push(nf);
+                            addedCount++;
+                        } else {
+                            const existingFile = files.find(f => f.path === nf.path);
+                            if (existingFile) {
+                                existingFile.hasError = nf.hasError;
+                                existingFile.errorMessage = nf.errorMessage;
+                                if (isUnmergeable(nf)) existingFile.excluded = true;
+                            }
+                        }
+                    });
+                }
+
+                applySorting();
+                markAsUnsaved();
+                renderFileList();
+
+                const errorFiles = files.filter(f => isUnmergeable(f));
+                const normalCount = files.length - errorFiles.length;
+
+                if (errorFiles.length > 0) {
+                    const errorItems = errorFiles.map(f =>
+                        `<div class="p-2 border-b border-amber-200 last:border-0">
+                            <div class="text-[13px] font-bold text-slate-800">${f.name}</div>
+                            <div class="text-[11px] text-amber-700 mt-0.5">${f.errorMessage}</div>
+                        </div>`
+                    ).join('');
+
+                    const msgHtml = `
+                        <div class="text-sm text-slate-600 mb-3 leading-relaxed">
+                            총 <b>${files.length}</b>개 중 <b class="text-blue-600">${normalCount}</b>개 파일이 준비되었습니다.<br>
+                            <b class="text-amber-600">${errorFiles.length}</b>개의 파일은 엑셀이 아니거나 지원되지 않아 제일 위로 분류되었습니다.
+                        </div>
+                        <details class="bg-amber-50 border border-amber-200 rounded-lg shadow-inner group mb-2 cursor-pointer open:pb-2">
+                            <summary class="p-2.5 text-sm font-bold text-amber-800 outline-none select-none flex items-center justify-between hover:bg-amber-100 rounded-lg transition-colors">
+                                문제 파일 목록 보기 (${errorFiles.length}개)
+                                <i data-lucide="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180"></i>
+                            </summary>
+                            <div class="border-t border-amber-200 max-h-48 overflow-y-auto mx-2 mt-1 bg-white rounded border">
+                                ${errorItems}
+                            </div>
+                        </details>
+                    `;
+                    openModal("스캔 완료 (주의 파일 알림)", msgHtml, [{ text: '확인', type: 'primary' }], 'max-w-md');
+                    setTimeout(() => lucide.createIcons(), 10);
+                } else {
+                    const msg = `폴더 갱신 완료 - 정상: ${normalCount}개 (추가: ${addedCount}, 삭제: ${removedCount})`;
+                    addLog(msg, 'info');
+                    showToast(msg, "success");
+                }
+            } catch (e) {
+                showToast("스캔 결과를 처리하는 중 오류가 발생했습니다: " + e.message, "error");
+            }
+        }
+
+        let draggedFileIndex = null;
+        function onFileDragStart(e, idx) { draggedFileIndex = idx; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', idx); setTimeout(() => e.target.classList.add('opacity-50'), 0); }
+        function onFileDragOver(e, idx) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; document.querySelectorAll('#file-list-body tr').forEach(el => el.classList.remove('bg-blue-50', 'border-t-2', 'border-blue-500')); e.currentTarget.classList.add('bg-blue-50', 'border-t-2', 'border-blue-500'); }
+        function onFileDragLeave(e) { e.currentTarget.classList.remove('bg-blue-50', 'border-t-2', 'border-blue-500'); }
+        function onFileDrop(e, targetIdx) {
+            e.preventDefault(); e.currentTarget.classList.remove('bg-blue-50', 'border-t-2', 'border-blue-500');
+            if (draggedFileIndex === null || draggedFileIndex === targetIdx) return;
+
+            sortState.key = null;
+
+            const item = files.splice(draggedFileIndex, 1)[0];
+            files.splice(targetIdx, 0, item);
+            addLog(`파일 순서 변경: ${item.name} 이동됨`, 'info');
+            markAsUnsaved();
+            renderFileList();
+            draggedFileIndex = null;
+        }
+        function onFileDragEnd(e) { e.target.classList.remove('opacity-50'); draggedFileIndex = null; document.querySelectorAll('#file-list-body tr').forEach(el => el.classList.remove('bg-blue-50', 'border-t-2', 'border-blue-500')); }
+
+        function toggleFileExclude(idx) {
+            files[idx].excluded = !files[idx].excluded;
+            addLog(`파일 ${files[idx].excluded ? '제외' : '포함'}: ${files[idx].name}`, 'info');
+            markAsUnsaved();
+            renderFileList();
+        }
+
+        function renderFileList() {
+            const pathEl = document.getElementById('target-folder-path');
+            if (files.length > 0 && files[0].path) {
+                const path = files[0].path;
+                pathEl.textContent = path.substring(0, Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/')));
+            } else {
+                pathEl.textContent = "폴더가 스캔되지 않았습니다.";
+            }
+
+            const thName = document.getElementById('th-sort-name');
+            const thDate = document.getElementById('th-sort-date');
+
+            if (thName) {
+                const icon = sortState.key === 'name' ? (sortState.order === 'asc' ? 'arrow-up' : 'arrow-down') : 'arrow-up-down';
+                const color = sortState.key === 'name' ? 'text-blue-500' : 'text-slate-300';
+                thName.innerHTML = `<div class="flex items-center gap-1.5">파일명 (경로) <i data-lucide="${icon}" class="w-3.5 h-3.5 ${color}"></i></div>`;
+            }
+            if (thDate) {
+                const icon = sortState.key === 'date' ? (sortState.order === 'asc' ? 'arrow-up' : 'arrow-down') : 'arrow-up-down';
+                const color = sortState.key === 'date' ? 'text-blue-500' : 'text-slate-300';
+                thDate.innerHTML = `<div class="flex items-center gap-1.5">최종 수정일 <i data-lucide="${icon}" class="w-3.5 h-3.5 ${color}"></i></div>`;
+            }
+
+            const tbody = document.getElementById('file-list-body');
+            tbody.innerHTML = '';
+
+            const isUnmergeable = (f) => f.hasError && f.errorMessage && (f.errorMessage.includes("미지원") || f.errorMessage.includes("취합 불가"));
+
+            files.forEach(f => {
+                if (isUnmergeable(f)) {
+                    f.excluded = true;
+                }
+            });
+
+            document.getElementById('empty-state').classList.toggle('hidden', files.length > 0);
+            document.getElementById('count-pending').textContent = `${files.filter(f => !f.excluded).length} / ${files.length}`;
+
+            let normalIdx = 1;
+            let errorIdx = 1;
+
+            // [핵심] 다른 파일들과 시트 수가 다른(튀는) 파일을 찾기 위해 최빈값(가장 흔한 시트 수) 계산
+            let sheetCountMap = {};
+            let majoritySheetCount = null;
+            let maxCount = 0;
+            files.forEach(f => {
+                if (f.sheetCount) {
+                    sheetCountMap[f.sheetCount] = (sheetCountMap[f.sheetCount] || 0) + 1;
+                    if (sheetCountMap[f.sheetCount] > maxCount) {
+                        maxCount = sheetCountMap[f.sheetCount];
+                        majoritySheetCount = f.sheetCount;
+                    }
+                }
+            });
+
+            files.forEach((f, idx) => {
+                const unmergeable = isUnmergeable(f);
+
+                let displayNumHtml = '';
+                if (unmergeable) {
+                    displayNumHtml = `<span class="bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded text-[10px]">불가-${errorIdx++}</span>`;
+                } else {
+                    displayNumHtml = `<span class="text-slate-400 font-bold">${normalIdx++}</span>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.setAttribute('draggable', 'true');
+                tr.ondragstart = (e) => onFileDragStart(e, idx);
+                tr.ondragover = (e) => onFileDragOver(e, idx);
+                tr.ondragleave = onFileDragLeave;
+                tr.ondrop = (e) => onFileDrop(e, idx);
+                tr.ondragend = onFileDragEnd;
+
+                tr.ondblclick = async () => {
+                    const api = getApi();
+                    if (api && api.execute_file) {
+                        showToast(`파일을 열고 있습니다: ${f.name}`, "info");
+                        const res = await api.execute_file(f.path);
+                        if (!res.success) showToast(res.message, "error");
+                    }
+                };
+
+                tr.className = `transition-all cursor-grab border-b border-slate-50 last:border-0 ${f.hasError ? 'bg-red-50 hover:bg-red-100' : (f.hasWarning ? 'bg-amber-50/50 hover:bg-amber-100' : (f.excluded ? 'bg-slate-50 opacity-40' : 'hover:bg-slate-50/50'))}`;
+
+                const errorMsg = f.errorMessage || "최근 취합 중 오류 발생";
+                const warningMsg = f.warningMessage || "일부 데이터 누락";
+
+                let fileBadge = '';
+                if (f.hasError) {
+                    fileBadge = `<div class="ml-3 flex items-center gap-1.5 px-2.5 py-1 bg-white/80 rounded-md border border-red-200 shadow-sm shrink-0">
+                        <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-red-500 shrink-0"></i>
+                        <span class="text-[11.5px] font-bold text-red-600 truncate max-w-[500px]" title="${errorMsg}">${errorMsg}</span>
+                     </div>`;
+                } else if (f.hasWarning) {
+                    fileBadge = `<div class="ml-3 flex items-center gap-1.5 px-2.5 py-1 bg-white/80 rounded-md border border-amber-200 shadow-sm shrink-0">
+                        <i data-lucide="info" class="w-3.5 h-3.5 text-amber-500 shrink-0"></i>
+                        <span class="text-[11.5px] font-bold text-amber-600 truncate max-w-[500px]" title="${warningMsg}">${warningMsg}</span>
+                     </div>`;
+                }
+
+                const mergeTimeHtml = f.mergeTime && !f.hasError
+                    ? `<span class="bg-blue-50 text-blue-600 px-2.5 py-1 rounded font-bold border border-blue-100 tracking-tight">${f.mergeTime}</span>`
+                    : `<span class="text-slate-300">-</span>`;
+
+                // [수정] 시트 수 숫자만 표시, 다를 경우 빨간색으로 하이라이트!
+                let sheetCountHtml = `<span class="text-slate-300">-</span>`;
+                if (f.sheetCount) {
+                    if (majoritySheetCount && f.sheetCount !== majoritySheetCount) {
+                        // 남들과 다르면 빨간색!
+                        sheetCountHtml = `<span class="font-black text-red-600 bg-red-50 px-2.5 py-0.5 rounded border border-red-200 shadow-sm cursor-help" title="주의: 다른 파일들과 시트 개수가 다릅니다!">${f.sheetCount}</span>`;
+                    } else {
+                        // 정상(대다수)이면 회색!
+                        sheetCountHtml = `<span class="font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">${f.sheetCount}</span>`;
+                    }
+                }
+
+                const textStyle = f.hasError ? 'text-red-600 font-bold' : (f.hasWarning ? 'text-amber-700 font-bold' : (f.excluded ? 'line-through text-slate-300' : 'text-slate-700'));
+                const fileIcon = unmergeable ? '<i data-lucide="file-warning" class="w-3.5 h-3.5 text-red-500"></i>' : '<i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>';
+                const iconColor = f.hasError ? 'text-red-500' : (f.hasWarning ? 'text-amber-500' : 'text-emerald-500');
+
+                tr.innerHTML = `
+                        <td class="px-4 py-3 text-center border-slate-100 text-slate-300"><i data-lucide="grip-vertical" class="w-3.5 h-3.5 mx-auto"></i></td>
+                        <td class="px-4 py-3 text-center text-slate-400 font-bold">${displayNumHtml}</td>
+                        <td class="px-6 py-3 font-medium ${textStyle}">
+                            <div class="flex items-center gap-2">
+                                <div class="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center ${iconColor} shadow-sm shrink-0">
+                                    ${fileIcon}
+                                </div>
+                                <span class="font-bold tracking-tight truncate max-w-[400px]" title="${f.name}">${f.name}</span>
+                                ${fileBadge}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-center">${sheetCountHtml}</td>
+                        <td class="px-6 py-3 text-slate-500 text-xs whitespace-nowrap">${f.lastModified}</td>
+                        <td class="px-6 py-3 text-center whitespace-nowrap">${mergeTimeHtml}</td>
+                        <td class="px-4 py-3 text-center">
+                            <input type="checkbox" ${f.excluded ? 'checked' : ''} 
+                                ${unmergeable ? 'disabled title="지원하지 않는 파일은 포함할 수 없습니다."' : `onclick="toggleFileExclude(${idx})"`} 
+                                class="w-4 h-4 rounded-md border-slate-300 text-red-500 focus:ring-red-500 ${unmergeable ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}">
+                        </td>
+                        <td class="px-4 py-3 text-center"><button onclick="event.stopPropagation(); files.splice(${idx}, 1); markAsUnsaved(); renderFileList();" class="text-slate-300 hover:text-red-500 transition-colors"><i data-lucide="trash-2" class="w-4 h-4 mx-auto"></i></button></td>
+                    `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        // [신규] 파이썬에서 실시간으로 호출하여 취합 진행률 바를 움직이는 함수
+        window.updateMergeProgress = function (percent, text) {
+            const bar = document.getElementById('merge-progress-bar');
+            const pct = document.getElementById('merge-progress-percent');
+            const txt = document.getElementById('merge-progress-text');
+            if (bar) bar.style.width = percent + '%';
+            if (pct) pct.textContent = Math.round(percent) + '%';
+            if (txt && text) txt.textContent = text;
+        };
+
+        async function executeMerge(isFullRefresh = false) {
+            // [핵심] 총괄표가 활성화되어 있다면 무결성 100% 깐깐하게 검증 후 불합격 시 취합 강제 취소!
+            if (summarySheet.enabled) {
+                if (!summarySheet.sheetName || summarySheet.sheetName.trim() === '') {
+                    setActiveSheet('summary');
+                    return showToast("총괄표의 출력 시트명을 입력해주세요.", "error");
+                }
+                if (summarySheet.groups.length === 0) {
+                    setActiveSheet('summary');
+                    return showToast("총괄표에 요약 데이터를 가져올 '출처 그룹'을 1개 이상 추가해주세요.", "error");
+                }
+
+                for (let i = 0; i < summarySheet.groups.length; i++) {
+                    const grp = summarySheet.groups[i];
+                    if (!grp.targetSheet) {
+                        setActiveSheet('summary');
+                        return showToast(`[총괄표] ${i + 1}번째 그룹: 시트가 선택되지 않았습니다. 붉은색 오류를 해결해주세요.`, "error");
+                    }
+                    if (!grp.range) {
+                        setActiveSheet('summary');
+                        return showToast(`[총괄표] ${i + 1}번째 그룹: 범위(이름)가 지정되지 않았습니다. 붉은색 오류를 해결해주세요.`, "error");
+                    }
+                    if (grp.columns.length === 0) {
+                        setActiveSheet('summary');
+                        return showToast(`[총괄표] ${i + 1}번째 그룹: 요약 항목이 1개도 없습니다. 항목을 추가하거나 그룹을 삭제해주세요.`, "error");
+                    }
+                    const info = getMaxColsForGroup(grp);
+                    if (info.isCacheMissing) {
+                        setActiveSheet('summary');
+                        return showToast(`[총괄표] ${i + 1}번째 그룹: 범위(이름) 파악 오류가 있습니다. 붉은색 안내에 따라 양식 새로고침이 필요합니다.`, "error");
+                    }
+                }
+            }
+
+            const selectedSheets = sheetsData.filter(s => s.selected);
+            if (selectedSheets.length === 0) return showToast("취합할 시트를 체크해주세요.", "warning");
+            if (files.length === 0) return showToast("스캔된 파일이 없습니다.", "warning");
+
+            for (const sheet of selectedSheets) {
+                if (!sheet.range || sheet.range.trim() === '') {
+                    const errMsg = `
+                        <div class="bg-red-50 p-3 rounded-lg border border-red-200 mt-2">
+                            <div class="text-red-700 font-bold mb-1"><i data-lucide="alert-triangle" class="w-4 h-4 inline -mt-0.5"></i> [ ${sheet.name} ] 시트</div>
+                            <div class="text-slate-700 text-sm mt-1"><b>취합 범위</b>가 설정되지 않았습니다.<br>주소나 이름 정의를 먼저 지정해주세요.</div>
+                        </div>`;
+                    return openModal("설정 누락", errMsg, [{ text: '확인', type: 'danger' }]);
+                } else if (sheet.type === 'manual' && !/^[A-Za-z]+[1-9]\d*(:[A-Za-z]+[1-9]\d*)?$/.test(sheet.range.replace(/\s/g, ''))) {
+                    const errMsg = `
+                        <div class="bg-red-50 p-3 rounded-lg border border-red-200 mt-2">
+                            <div class="text-red-700 font-bold mb-1"><i data-lucide="alert-triangle" class="w-4 h-4 inline -mt-0.5"></i> [ ${sheet.name} ] 시트</div>
+                            <div class="text-slate-700 text-sm mt-1">입력된 <b>취합 범위</b>(<span class="font-mono text-red-600">${sheet.range}</span>) 형식이 올바르지 않습니다.<br>(올바른 예: A5:G100 또는 A5)</div>
+                        </div>`;
+                    return openModal("형식 오류", errMsg, [{ text: '확인', type: 'danger' }]);
+                }
+
+                for (let j = 0; j < sheet.layout.length; j++) {
+                    const col = sheet.layout[j];
+                    if (col.type === 'meta') {
+                        const cellType = col.cellType || 'manual';
+                        const colLabel = col.name ? `'${col.name}'` : `${j + 1}번째 부가항목`;
+
+                        if (!col.name || col.name.trim() === '') {
+                            const errMsg = `
+                                <div class="bg-red-50 p-3 rounded-lg border border-red-200 mt-2">
+                                    <div class="text-red-700 font-bold mb-1"><i data-lucide="alert-triangle" class="w-4 h-4 inline -mt-0.5"></i> [ ${sheet.name} ] 시트</div>
+                                    <div class="text-slate-700 text-sm mt-1">${j + 1}번째 부가항목의 <b>항목명(Display Label)</b>이 비어있습니다.</div>
+                                </div>`;
+                            return openModal("설정 누락", errMsg, [{ text: '확인', type: 'danger' }]);
+                        }
+
+                        if (cellType === 'manual') {
+                            if (!col.cell || col.cell.trim() === '') {
+                                const errMsg = `
+                                    <div class="bg-red-50 p-3 rounded-lg border border-red-200 mt-2">
+                                        <div class="text-red-700 font-bold mb-1"><i data-lucide="alert-triangle" class="w-4 h-4 inline -mt-0.5"></i> [ ${sheet.name} ] 시트</div>
+                                        <div class="text-slate-700 text-sm mt-1">항목명: <b>${colLabel}</b><br>가져올 <b>셀 주소</b>가 입력되지 않았습니다.</div>
+                                    </div>`;
+                                return openModal("설정 누락", errMsg, [{ text: '확인', type: 'danger' }]);
+                            } else if (!/^[A-Za-z]+[1-9]\d*$/.test(col.cell.trim())) {
+                                const errMsg = `
+                                    <div class="bg-red-50 p-3 rounded-lg border border-red-200 mt-2">
+                                        <div class="text-red-700 font-bold mb-1"><i data-lucide="alert-triangle" class="w-4 h-4 inline -mt-0.5"></i> [ ${sheet.name} ] 시트</div>
+                                        <div class="text-slate-700 text-sm mt-1">항목명: <b>${colLabel}</b><br>입력된 셀 주소(<span class="font-mono text-red-600">${col.cell}</span>) 형식이 올바르지 않습니다.<br>(올바른 예: B2, C10)</div>
+                                    </div>`;
+                                return openModal("형식 오류", errMsg, [{ text: '확인', type: 'danger' }]);
+                            }
+                        }
+
+                        if (cellType === 'named' && (!col.cell || col.cell.trim() === '')) {
+                            const errMsg = `
+                                <div class="bg-red-50 p-3 rounded-lg border border-red-200 mt-2">
+                                    <div class="text-red-700 font-bold mb-1"><i data-lucide="alert-triangle" class="w-4 h-4 inline -mt-0.5"></i> [ ${sheet.name} ] 시트</div>
+                                    <div class="text-slate-700 text-sm mt-1">항목명: <b>${colLabel}</b><br>참조할 <b>이름 정의</b>가 선택되지 않았습니다.</div>
+                                </div>`;
+                            return openModal("설정 누락", errMsg, [{ text: '확인', type: 'danger' }]);
+                        }
+                    }
+                }
+            }
+
+            const api = getApi();
+            if (!api) return showToast("파이썬 연동이 필요합니다.", "error");
+
+            previewCache = {};
+            document.getElementById('preview-content').classList.add('hidden');
+            document.getElementById('preview-empty').classList.remove('hidden');
+
+            const loadingTitle = isFullRefresh ? "전체 새로 취합 진행 중" : "변경사항만 취합 진행 중";
+            const loadingDesc = isFullRefresh
+                ? "기존 데이터를 모두 초기화하고, 모든 파일을 처음부터 새로 분석합니다."
+                : "수정 사항이 없는 파일은 건너뛰고, 새로 고쳐진 파일만 빠르게 수집합니다.";
+
+            const progressModalHtml = `
+                <div class="flex flex-col items-center justify-center py-5 gap-4 w-full">
+                    <div class="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
+                    <div class="w-full max-w-sm px-4">
+                        <div class="flex justify-between text-[13px] font-bold text-slate-700 mb-1.5">
+                            <span id="merge-progress-text">취합 준비 중...</span>
+                            <span id="merge-progress-percent" class="text-blue-600 font-black">0%</span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200">
+                            <div id="merge-progress-bar" class="bg-blue-500 h-2.5 rounded-full transition-all duration-300 shadow-sm" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1 text-center font-medium">${loadingDesc}</p>
+                </div>
+            `;
+            openModal(loadingTitle, progressModalHtml, []);
+
+            // [핵심 픽스] 취합을 실행하기 직전! 화면에 있는 총괄표 등의 모든 최신 상태를 DB 객체에 100% 강제 삽입
+            currentProject.sheetsData = sheetsData;
+            currentProject.files = files;
+            currentProject.summarySheet = summarySheet;
+            currentProject.sheetNamesCache = sheetNamesCache;
+            currentProject.namedRangesBySheetCache = namedRangesBySheetCache;
+            currentProject.globalNamedRangesCache = globalNamedRangesCache;
+            currentProject.rangeDetailsCache = window.rangeDetailsCache || {};
+            const refText = document.getElementById('ref-file-text').textContent;
+            if (refText) currentProject.referenceFileName = refText;
+
+            await api.save_project(currentProject);
+            markAsSaved();
+
+            try {
+                const res = await api.execute_merge({ project: currentProject, files: files, fullRefresh: isFullRefresh });
+                if (res.project) {
+                    currentProject = res.project;
+                    files = currentProject.files;
+                    renderFileList();
+                }
+
+                if (res.success) {
+                    window.updateMergeProgress(100, "취합 성공!");
+                    setTimeout(() => {
+                        closeModal();
+                        setTimeout(() => {
+                            const msgHtml = `<div class="select-text whitespace-pre-wrap text-sm font-medium text-slate-700">${res.message}</div>`;
+                            openModal("취합 완료", msgHtml, [
+                                { text: '상세 로그 확인', type: 'secondary', action: () => setTimeout(showLogsModal, 160) },
+                                { text: '확인', type: 'primary' }
+                            ]);
+                        }, 200);
+                    }, 500);
+                } else {
+                    window.updateMergeProgress(100, "작업 완료 (누락 발생)");
+                    setTimeout(() => {
+                        closeModal();
+                        setTimeout(() => {
+                            const errorFiles = files.filter(f => f.hasError);
+
+                            let errorListHtml = "";
+                            if (errorFiles.length > 0) {
+                                const errorItems = errorFiles.map(f =>
+                                    `<div class="p-2 border-b border-red-100 last:border-0">
+                                        <div class="text-[13px] font-bold text-slate-800">${f.name}</div>
+                                        <div class="text-[11px] text-red-600 mt-0.5 whitespace-pre-wrap">${f.errorMessage || '오류 발생'}</div>
+                                    </div>`
+                                ).join('');
+
+                                errorListHtml = `
+                                <details class="bg-red-50 border border-red-200 rounded-lg shadow-inner group my-3 cursor-pointer open:pb-2" open>
+                                    <summary class="p-2.5 text-sm font-bold text-red-800 outline-none select-none flex items-center justify-between hover:bg-red-100 rounded-lg transition-colors">
+                                        누락된 파일 상세 내역 (${errorFiles.length}개)
+                                        <i data-lucide="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180"></i>
+                                    </summary>
+                                    <div class="border-t border-red-200 max-h-48 overflow-y-auto mx-2 mt-1 bg-white rounded border p-1">
+                                        ${errorItems}
+                                    </div>
+                                </details>`;
+                            }
+
+                            const errorHtml = `
+                                <div class="text-sm text-slate-700 leading-relaxed font-medium">
+                                    작업이 완료되었으나, 오류가 발생한 파일이 있습니다.
+                                </div>
+                                ${errorListHtml}
+                            `;
+
+                            openModal("⚠️ 취합 누락 파일 발생!", errorHtml, [
+                                { text: '전체 로그 확인', type: 'secondary', action: () => setTimeout(showLogsModal, 160) },
+                                { text: '닫기', type: 'danger' }
+                            ], 'max-w-md');
+                            setTimeout(() => lucide.createIcons(), 10);
+                        }, 200);
+                    }, 500);
+                }
+            } catch (err) {
+                const errorHtml = `
+                    <div class="mt-2 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-xs font-mono overflow-y-auto max-h-40 select-text" style="white-space: pre-wrap;">${err.message || err}</div>
+                `;
+                openModal("시스템 연결 오류", errorHtml, [{ text: '닫기', type: 'secondary' }]);
+            }
+        }
+
+        async function loadMergedData() {
+            const api = getApi();
+            if (!api) return showToast("파이썬 연동이 필요합니다.", "error");
+
+            openModal("데이터 불러오는 중...", "저장된 취합 결과를 가져오고 있습니다.", []);
+            currentProject.sheetsData = sheetsData;
+            const res = await api.get_merged_data({ project: currentProject });
+            closeModal();
+
+            if (res.success) {
+                previewCache = res.data;
+                document.getElementById('preview-empty').classList.add('hidden');
+                document.getElementById('preview-content').classList.remove('hidden');
+                const tabs = document.getElementById('preview-sheet-tabs'); tabs.innerHTML = '';
+
+                const sheetsWithData = Object.keys(previewCache);
+                if (sheetsWithData.length === 0) {
+                    return showToast("보여줄 데이터가 없습니다. 먼저 취합을 실행해주세요.", "warning");
+                }
+
+                sheetsWithData.forEach((sName, idx) => {
+                    const btn = document.createElement('button');
+                    btn.className = `px-6 py-3 text-sm font-bold border-b-2 transition-colors ${idx === 0 ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}`;
+                    btn.textContent = sName;
+                    btn.onclick = (e) => {
+                        Array.from(tabs.children).forEach(c => c.className = 'px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800');
+                        e.target.className = 'px-6 py-3 text-sm font-bold border-b-2 border-blue-600 text-blue-600 bg-white';
+                        renderPreviewTable(sName);
+                    };
+                    tabs.appendChild(btn);
+                });
+                renderPreviewTable(sheetsWithData[0]);
+            } else {
+                showToast(res.message, "error");
+            }
+        }
+
+        // [신규] 취합 결과에서 파일명 클릭 시 엑셀 원본 파일 바로 열기!
+        window.openFileByName = async function (fileName) {
+            if (!fileName) return;
+            const fileObj = files.find(f => f.name === fileName);
+            if (!fileObj || !fileObj.path) {
+                return showToast("파일 경로를 찾을 수 없거나 목록에서 제외된 파일입니다.", "warning");
+            }
+            const api = getApi();
+            if (api && api.execute_file) {
+                showToast(`엑셀 파일을 여는 중...`, "info");
+                const res = await api.execute_file(fileObj.path);
+                if (!res.success) showToast(res.message, "error");
+            } else {
+                showToast("파이썬 연결 오류가 발생했습니다.", "error");
+            }
+        };
+
+        // [핵심] '위/왼쪽' 동시 틀 고정 + 파일명 클릭 링크 패치!
+        window.renderPreviewTable = function (sheetName, page = 1) {
+            const isSummary = summarySheet.enabled && sheetName === summarySheet.sheetName;
+
+            const layout = (sheetsData.find(s => (s.targetName || s.name) === sheetName) || {}).layout || [];
+            const rowData = previewCache[sheetName] || [];
+            const totalRows = rowData.length;
+
+            const rowsPerPage = isSummary ? Math.max(totalRows, 1) : 100;
+            const totalPages = Math.ceil(totalRows / rowsPerPage);
+
+            const startIndex = (page - 1) * rowsPerPage;
+            const endIndex = Math.min(startIndex + rowsPerPage, totalRows);
+            const displayData = rowData.slice(startIndex, endIndex);
+
+            let infoBar = document.getElementById('preview-info-bar');
+            if (!infoBar) {
+                const previewContent = document.getElementById('preview-content');
+                const tableContainer = document.getElementById('preview-thead').parentElement.parentElement;
+                infoBar = document.createElement('div');
+                infoBar.id = 'preview-info-bar';
+                infoBar.className = 'p-3 bg-blue-50 border-b border-blue-200 flex items-center justify-between shrink-0';
+                previewContent.insertBefore(infoBar, tableContainer);
+            }
+
+            if (isSummary) {
+                infoBar.innerHTML = `
+                <span class="text-[13px] font-bold text-purple-700 flex items-center gap-1.5">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 text-purple-500"></i> 
+                    총괄표: 총 <span class="font-black">${totalRows.toLocaleString()}</span>개 파일의 요약 데이터를 전체 표시합니다.
+                </span>`;
+            } else if (totalRows > rowsPerPage) {
+                const prevDisabled = page === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700 active:scale-95';
+                const nextDisabled = page === totalPages ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700 active:scale-95';
+                const prevClick = page === 1 ? '' : `onclick="renderPreviewTable('${sheetName}', ${page - 1})"`;
+                const nextClick = page === totalPages ? '' : `onclick="renderPreviewTable('${sheetName}', ${page + 1})"`;
+
+                infoBar.innerHTML = `
+                <span class="text-[13px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <i data-lucide="list-tree" class="w-4 h-4 text-blue-500"></i> 
+                    미리보기: 총 <span class="text-blue-700">${totalRows.toLocaleString()}</span>행 중 
+                    <span class="bg-white px-2 py-0.5 rounded border border-slate-200 text-blue-600">${startIndex + 1} ~ ${endIndex}</span> 행
+                </span>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-slate-400 mr-2">${page} / ${totalPages} 페이지</span>
+                    <button ${prevClick} class="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md shadow-sm transition-all flex items-center gap-1 ${prevDisabled}">
+                        <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i> 이전 100행
+                    </button>
+                    <button ${nextClick} class="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md shadow-sm transition-all flex items-center gap-1 ${nextDisabled}">
+                        다음 100행 <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>`;
+            } else {
+                infoBar.innerHTML = `
+                <span class="text-[13px] font-bold text-emerald-700 flex items-center gap-1.5">
+                    <i data-lucide="check-circle" class="w-4 h-4 text-emerald-500"></i> 
+                    총 <span class="font-black">${totalRows.toLocaleString()}</span>행을 모두 불러왔습니다.
+                </span>`;
+            }
+
+            function getExcelColName(idx) {
+                let res = ''; let n = idx;
+                while (n >= 0) { res = String.fromCharCode((n % 26) + 65) + res; n = Math.floor(n / 26) - 1; }
+                return res;
+            }
+
+            let stickyCols = [];
+            let currentLeft = 50;
+
+            if (isSummary) {
+                if (summarySheet.includeFileIndex) {
+                    stickyCols.push({ type: 'index', title: '연번', width: 60, left: currentLeft });
+                    currentLeft += 60;
+                }
+                if (summarySheet.includeFileName !== false) {
+                    stickyCols.push({ type: 'filename', title: '파일명', width: 250, left: currentLeft });
+                    currentLeft += 250;
+                }
+            } else {
+                layout.forEach(c => {
+                    if (c.type === 'meta') {
+                        // [수정] 파일명(filename) 여부를 알 수 있도록 cellType을 같이 저장합니다.
+                        stickyCols.push({ type: 'meta', cellType: c.cellType, title: c.name || '(이름없음)', width: 130, left: currentLeft });
+                        currentLeft += 130;
+                    }
+                });
+            }
+
+            const thead = document.getElementById('preview-thead');
+            let hHtml = `<tr><th style="position: sticky; top: 0; left: 0; min-width: 50px; max-width: 50px; z-index: 40;" class="px-2 py-3.5 bg-slate-200 text-slate-600 border-b border-r border-slate-300 text-center font-bold shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.1)]">#</th>`;
+
+            let colIndex = 0;
+
+            // 1. 고정되는(Sticky) 헤더 그리기
+            stickyCols.forEach((col, idx) => {
+                const isLast = idx === stickyCols.length - 1;
+                const borderClass = isLast ? 'border-r-2 border-slate-400' : 'border-r border-slate-300';
+
+                const bgClass = isSummary ? 'bg-purple-100' : 'bg-blue-100';
+                const textClass = isSummary ? 'text-purple-900' : 'text-blue-900';
+                const labelClass = isSummary ? 'text-purple-600' : 'text-blue-600';
+
+                hHtml += `<th style="position: sticky; top: 0; left: ${col.left}px; min-width: ${col.width}px; max-width: ${col.width}px; z-index: 40;" class="px-3 py-3.5 ${bgClass} ${textClass} border-b border-slate-300 ${borderClass} whitespace-nowrap overflow-hidden text-ellipsis shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.1)]">
+                    <div class="text-[10px] ${labelClass} mb-0.5 font-semibold">${getExcelColName(colIndex++)}열</div>
+                    <div class="font-bold truncate" title="${col.title}">${col.title}</div>
+                </th>`;
+            });
+
+            // 2. 일반(스크롤되는) 헤더 그리기
+            if (isSummary) {
+                let sumHeaders = [];
+                summarySheet.groups.forEach(grp => grp.columns.forEach(c => sumHeaders.push(c.title || '이름없음')));
+                sumHeaders.forEach(h => {
+                    hHtml += `<th style="position: sticky; top: 0; z-index: 20;" class="px-6 py-3.5 bg-slate-50 text-slate-700 border-b border-slate-300 whitespace-nowrap shadow-[0_2px_5px_-2px_rgba(0,0,0,0.1)]">
+                        <div class="text-[10px] text-slate-400 mb-0.5 font-semibold">${getExcelColName(colIndex++)}열</div>
+                        <div class="font-bold">${h}</div>
+                    </th>`;
+                });
+            } else {
+                const dCols = rowData.length ? Math.max(1, rowData[0].length - stickyCols.length) : 3;
+                for (let k = 0; k < dCols; k++) {
+                    hHtml += `<th style="position: sticky; top: 0; z-index: 20;" class="px-6 py-3.5 bg-slate-50 text-slate-700 border-b border-slate-300 whitespace-nowrap shadow-[0_2px_5px_-2px_rgba(0,0,0,0.1)]">
+                        <div class="text-[10px] text-slate-400 mb-0.5 font-semibold">${getExcelColName(colIndex++)}열</div>
+                        <div class="font-bold">데이터 열 ${k + 1}</div>
+                    </th>`;
+                }
+            }
+            thead.innerHTML = hHtml + '</tr>';
+
+            const tbody = document.getElementById('preview-tbody');
+            tbody.innerHTML = '';
+
+            // 3. 본문(데이터) 그리기
+            displayData.forEach((r, i) => {
+                const actualRowNumber = startIndex + i + 1;
+                // # 열 데이터 고정 (z-index: 30)
+                let rHtml = `<tr class="hover:bg-slate-50 transition-colors">
+                    <td style="position: sticky; left: 0; min-width: 50px; max-width: 50px; z-index: 30;" class="px-2 py-3 bg-slate-100 text-center text-slate-500 font-mono border-b border-r border-slate-300 font-bold shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">${actualRowNumber}</td>`;
+
+                r.forEach((val, cIdx) => {
+                    const displayVal = (val === null || val === undefined || val === 'null' || val === 'None') ? '' : val;
+
+                    if (cIdx < stickyCols.length) {
+                        // 고정되는(Sticky) 데이터 그리기
+                        const col = stickyCols[cIdx];
+                        const isLast = cIdx === stickyCols.length - 1;
+                        const borderClass = isLast ? 'border-r-2 border-slate-400' : 'border-r border-slate-300';
+
+                        let cellContent = displayVal;
+
+                        // [신규] '파일명' 열이라면 클릭 시 열리는 예쁜 파란색 링크로 변신!
+                        if (col.type === 'filename' || col.cellType === 'filename') {
+                            const safeFileName = displayVal.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            cellContent = `<span class="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1.5 w-full" onclick="openFileByName('${safeFileName}')" title="클릭하여 파일 열기"><i data-lucide="external-link" class="w-3.5 h-3.5 shrink-0 text-blue-400"></i><span class="truncate">${displayVal}</span></span>`;
+                        }
+
+                        rHtml += `<td style="position: sticky; left: ${col.left}px; min-width: ${col.width}px; max-width: ${col.width}px; z-index: 30;" class="px-3 py-3 bg-white text-slate-800 border-b ${borderClass} whitespace-nowrap overflow-hidden text-ellipsis font-bold shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]" title="${displayVal}">${cellContent}</td>`;
+                    } else {
+                        // 일반(스크롤되는) 데이터 그리기
+                        rHtml += `<td class="px-6 py-3 text-slate-600 border-b border-slate-100 whitespace-nowrap">${displayVal}</td>`;
+                    }
+                });
+                tbody.innerHTML += rHtml + '</tr>';
+            });
+
+            lucide.createIcons();
+            thead.parentElement.parentElement.scrollTop = 0;
+        }
+
+        // [신규] 파이썬에서 실시간으로 호출하여 진행률 바를 움직이는 함수
+        window.updateExportProgress = function (percent, text) {
+            const bar = document.getElementById('export-progress-bar');
+            const pct = document.getElementById('export-progress-percent');
+            const txt = document.getElementById('export-progress-text');
+            if (bar) bar.style.width = percent + '%';
+            if (pct) pct.textContent = Math.round(percent) + '%';
+            if (txt && text) txt.textContent = text;
+        };
+
+        async function exportExcel() {
+            const api = getApi();
+            if (!api) return showToast("파이썬 연동이 필요합니다.", "error");
+
+            customConfirm("최종 엑셀 내보내기", "DB에 저장된 취합 데이터를 엑셀 파일로 내보내시겠습니까?", async () => {
+
+                // 1. 저장할 경로를 먼저 물어봅니다. (여기서 취소하면 로딩창이 아예 안 뜸)
+                currentProject.sheetsData = sheetsData;
+                const pathRes = await api.export_excel({ step: 'get_path', project: currentProject });
+                if (!pathRes.success) return; // 사용자가 창을 그냥 닫은 경우 종료
+
+                const savePath = pathRes.path;
+
+                // 2. 경로 선택이 완료되면 비로소 로딩 애니메이션 모달을 띄웁니다.
+                const progressModalHtml = `
+                    <div class="flex flex-col items-center justify-center py-5 gap-4 w-full">
+                        <div class="w-10 h-10 border-4 border-emerald-100 border-t-emerald-600 rounded-full animate-spin"></div>
+                        <div class="w-full max-w-sm px-4">
+                            <div class="flex justify-between text-[13px] font-bold text-slate-700 mb-1.5">
+                                <span id="export-progress-text">내보내기 준비 중...</span>
+                                <span id="export-progress-percent" class="text-emerald-600 font-black">0%</span>
+                            </div>
+                            <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200">
+                                <div id="export-progress-bar" class="bg-emerald-500 h-2.5 rounded-full transition-all duration-300 shadow-sm" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1 text-center font-medium">데이터가 많을 경우 다소 시간이 걸릴 수 있습니다.</p>
+                    </div>
+                `;
+                openModal("엑셀 파일 생성 중", progressModalHtml, []);
+
+                try {
+                    // 3. 실제 내보내기 지시 (저장 경로를 파이썬에 넘겨줌)
+                    const res = await api.export_excel({ step: 'export', project: currentProject, files: files, savePath: savePath });
+
+                    if (res.success) {
+                        window.updateExportProgress(100, "내보내기 완료!");
+                        setTimeout(() => {
+                            closeModal();
+                            setTimeout(() => {
+                                const msgHtml = `<div class="select-text whitespace-pre-wrap max-h-64 overflow-y-auto text-sm">${res.message}</div>`;
+                                openModal("저장 완료!", msgHtml, [{ text: '확인', type: 'primary' }]);
+                            }, 200);
+                        }, 500); // 바가 100% 차오른 모습을 0.5초간 보여준 뒤 창을 닫음
+                    } else {
+                        const errorHtml = `
+                            <div class="mt-2 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-xs font-mono overflow-y-auto max-h-64 select-text" style="white-space: pre-wrap;">${res.message}</div>
+                            <div class="mt-3 text-xs text-red-500 font-bold">오류 내용을 마우스로 드래그하여 복사할 수 있습니다.</div>
+                        `;
+                        openModal("내보내기 중 문제 발생", errorHtml, [{ text: '닫기', type: 'secondary' }]);
+                    }
+                } catch (err) {
+                    const errorHtml = `
+                        <div class="mt-2 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-xs font-mono overflow-y-auto max-h-64 select-text" style="white-space: pre-wrap;">${err.message || err}</div>
+                        <div class="mt-3 text-xs text-red-500 font-bold">오류 내용을 마우스로 드래그하여 복사할 수 있습니다.</div>
+                    `;
+                    openModal("시스템 연결 오류", errorHtml, [{ text: '닫기', type: 'secondary' }]);
+                }
+            });
+        }
+
+        // [신규] '빈 행 검사 제외 열' 기능 상세 설명 모달
+        function showIgnoreColumnsHelp() {
+            const title = "빈 행 검사 제외 열이란?";
+            const msgHtml = `
+                <div class="text-sm text-slate-600 leading-relaxed space-y-3">
+                    <p>엑셀 파일에 수식이 걸려있거나 기본값(예: -, 0, 해당없음 등)이 미리 채워져 있어서, <b>사용자가 실제 데이터를 입력하지 않았는데도 빈 줄이 자꾸 취합되는 현상</b>을 막아주는 유용한 기능입니다.</p>
+                    
+                    <div class="bg-slate-50 border border-slate-200 p-3 rounded-lg">
+                        <p class="font-bold text-slate-800 mb-1">📌 사용 방법</p>
+                        <p>기본값이 깔려있는 열의 <b>순서(숫자)</b>를 쉼표로 구분하여 입력하세요.</p>
+                        <ul class="list-disc ml-5 mt-1 text-slate-500 text-xs space-y-1">
+                            <li>예시 입력: <span class="font-mono font-bold text-blue-600 bg-blue-50 px-1 rounded">1, 3</span></li>
+                            <li>작동 원리: 취합 범위의 1번째 열과 3번째 열은 무시하고, <b>나머지 열 중 단 하나라도 값이 적혀 있다면</b> 정상적인 데이터로 판단하여 취합해 옵니다.</li>
+                        </ul>
+                    </div>
+                    
+                    <p class="text-xs text-amber-700 font-bold bg-amber-50 border border-amber-200 px-2 py-1.5 rounded inline-block shadow-sm">
+                        💡 팁: 이 설정은 시트마다 다를 수 있으므로 일괄 반영 시 덮어써지지 않습니다.
+                    </p>
+                </div>
+            `;
+            // max-w-md 사이즈로 조금 넓게 띄웁니다.
+            openModal(title, msgHtml, [{ text: '확인', type: 'primary' }], 'max-w-md');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프리미엄 다기능 타이머 (Vector Scalable)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Montserrat:wght@400;600;700;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), color 0.5s;
+        }
+
+        /* Input Number 화살표 제거 */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+
+        /* --- 반응형 스케일링을 위한 핵심 CSS --- */
+        /* 이 컨테이너의 font-size가 바뀌면 모든 자식 요소의 크기가 비례해서 바뀝니다 (em 단위 사용) */
+        #scalableWrapper {
+            font-size: 16px; /* 기본 기준 크기 (JS로 조절됨) */
+        }
+
+        /* --- 스타일별 테마 디자인 --- */
+
+        /* 1. 럭셔리 (Luxury) */
+        .style-luxury-light {
+            background: linear-gradient(135deg, #ffffff 0%, #f0f2f5 100%);
+            box-shadow: 0.5em 0.5em 1.5em #d1d1d1, -0.5em -0.5em 1.5em #ffffff;
+            color: #2c3e50;
+        }
+        .style-luxury-dark {
+            background: linear-gradient(135deg, #2d3436 0%, #000000 100%);
+            box-shadow: 0.5em 0.5em 1.5em #0a0a0a, -0.5em -0.5em 1.5em #383838;
+            color: #dfe6e9;
+        }
+        .text-luxury { font-family: 'Playfair Display', serif; }
+        .input-luxury {
+            background: transparent;
+            border-bottom: 0.05em solid rgba(150, 150, 150, 0.2);
+            font-family: 'Playfair Display', serif;
+        }
+        .input-luxury:focus { border-color: #d4af37; }
+
+        /* 2. 모던 (Modern) */
+        .style-modern-light {
+            background-color: #ffffff;
+            border: 0.15em solid #1a1a1a;
+            box-shadow: 0.3em 0.3em 0px rgba(0,0,0,0.05);
+            color: #1a1a1a;
+        }
+        .style-modern-dark {
+            background-color: #1a1a1a;
+            border: 0.15em solid #ffffff;
+            box-shadow: 0.3em 0.3em 0px rgba(255,255,255,0.1);
+            color: #ffffff;
+        }
+        .text-modern { font-family: 'Noto Sans KR', sans-serif; font-weight: 900; letter-spacing: -0.02em; }
+        .input-modern {
+            background: rgba(0,0,0,0.03);
+            border: none;
+            border-radius: 0.2em;
+            font-family: 'Noto Sans KR', sans-serif;
+            font-weight: 700;
+        }
+        .dark .input-modern { background: rgba(255,255,255,0.1); }
+
+        /* SVG 원형 프로그레스 애니메이션 */
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.1s linear, stroke 0.3s;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* 유틸리티 */
+        .btn-press:active { transform: scale(0.95); }
+        .hidden-opacity { opacity: 0; pointer-events: none; position: absolute; }
+        .visible-opacity { opacity: 1; pointer-events: auto; position: relative; }
+        
+        /* 알람 애니메이션 */
+        @keyframes flash {
+            0%, 100% { background-color: transparent; }
+            50% { background-color: rgba(255, 0, 0, 0.1); }
+        }
+        .alarm-active {
+            animation: flash 1s infinite;
+        }
+
+        /* 모달 스타일 */
+        #settingsModal { transition: opacity 0.3s ease, visibility 0.3s; }
+        #settingsModal.hidden-modal { opacity: 0; visibility: hidden; pointer-events: none; }
+        #settingsModal.visible-modal { opacity: 1; visibility: visible; pointer-events: auto; }
+        #modalContent { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .hidden-modal #modalContent { transform: scale(0.9) translateY(10px); }
+        .visible-modal #modalContent { transform: scale(1) translateY(0); }
+    </style>
+</head>
+<body id="body" class="bg-white text-gray-800 h-screen flex flex-col items-center justify-center overflow-hidden transition-colors duration-500 relative">
+
+    <!-- 우측 상단 컨트롤 패널 -->
+    <div class="absolute top-6 right-6 z-20 flex flex-col gap-3">
+        <!-- 설정 버튼 -->
+        <button onclick="toggleModal()" class="w-12 h-12 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-lg hover:scale-105 transition-all flex items-center justify-center btn-press focus:outline-none ring-1 ring-gray-100 dark:ring-gray-700" title="설정">
+            <i class="fas fa-sliders-h text-xl text-gray-600 dark:text-gray-300"></i>
+        </button>
+
+        <!-- 크기 조절 버튼 그룹 -->
+        <div class="flex flex-col gap-2 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-full p-1.5 shadow-lg ring-1 ring-gray-100 dark:ring-gray-700">
+            <button onclick="adjustScale(0.2)" class="w-9 h-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300 btn-press" title="크기 확대">
+                <i class="fas fa-plus"></i>
+            </button>
+            <button onclick="adjustScale(-0.2)" class="w-9 h-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300 btn-press" title="크기 축소">
+                <i class="fas fa-minus"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 메인 타이머 컨테이너 (스케일링 래퍼) -->
+    <!-- 모든 크기는 이 div의 font-size(em)에 비례합니다 -->
+    <div id="scalableWrapper" class="flex items-center justify-center p-4 transition-all duration-300">
+        
+        <div id="timerContainer" class="relative rounded-[2em] transition-all duration-500 flex flex-col items-center justify-center p-[2em] style-luxury-light" style="width: 32em; height: 32em;">
+            
+            <!-- [화면 1] 설정 모드 (Input Mode) -->
+            <div id="setupView" class="flex flex-col items-center justify-center w-full h-full transition-opacity duration-300">
+                
+                <!-- 시간 입력 필드 (잘림 방지를 위해 height 증가, width 넉넉히) -->
+                <!-- 글자 크기: 6em (wrapper 기준 6배) -->
+                <div class="flex items-end justify-center gap-[0.2em] mb-[3em] w-full">
+                    <div class="flex flex-col items-center">
+                        <!-- height: 1.4em으로 증가, width: 2ch로 증가 -->
+                        <input type="number" id="inputHours" placeholder="00" min="0" max="99" class="text-center outline-none transition-all input-luxury bg-transparent p-0 leading-normal" style="width: 2ch; height: 1.4em; font-size: 6em;">
+                        <span class="font-bold opacity-60 mt-[0.2em]" style="font-size: 1.5em;">시</span>
+                    </div>
+                    <span class="opacity-30 pb-[0.6em] px-[0.1em]" style="font-size: 4em;">:</span>
+                    <div class="flex flex-col items-center">
+                        <input type="number" id="inputMinutes" placeholder="00" min="0" max="59" class="text-center outline-none transition-all input-luxury bg-transparent p-0 leading-normal" style="width: 2ch; height: 1.4em; font-size: 6em;">
+                        <span class="font-bold opacity-60 mt-[0.2em]" style="font-size: 1.5em;">분</span>
+                    </div>
+                    <span class="opacity-30 pb-[0.6em] px-[0.1em]" style="font-size: 4em;">:</span>
+                    <div class="flex flex-col items-center">
+                        <input type="number" id="inputSeconds" placeholder="00" min="0" max="59" class="text-center outline-none transition-all input-luxury bg-transparent p-0 leading-normal" style="width: 2ch; height: 1.4em; font-size: 6em;">
+                        <span class="font-bold opacity-60 mt-[0.2em]" style="font-size: 1.5em;">초</span>
+                    </div>
+                </div>
+
+                <!-- 퀵 프리셋 버튼 (em 단위) -->
+                <div class="flex gap-[0.8em] mb-[2.5em] overflow-x-auto w-full justify-center px-[1em] scrollbar-hide">
+                    <button onclick="addTime(1)" class="px-[1em] py-[0.5em] rounded-full border border-current opacity-50 hover:opacity-100 transition font-medium whitespace-nowrap" style="font-size: 0.9em;">+1분</button>
+                    <button onclick="addTime(5)" class="px-[1em] py-[0.5em] rounded-full border border-current opacity-50 hover:opacity-100 transition font-medium whitespace-nowrap" style="font-size: 0.9em;">+5분</button>
+                    <button onclick="addTime(10)" class="px-[1em] py-[0.5em] rounded-full border border-current opacity-50 hover:opacity-100 transition font-medium whitespace-nowrap" style="font-size: 0.9em;">+10분</button>
+                    <button onclick="addTime(30)" class="px-[1em] py-[0.5em] rounded-full border border-current opacity-50 hover:opacity-100 transition font-medium whitespace-nowrap" style="font-size: 0.9em;">+30분</button>
+                </div>
+
+                <!-- 시작 버튼 (em 단위) -->
+                <button onclick="startTimer()" id="btnStart" class="px-[2em] py-[0.8em] rounded-[0.8em] bg-gray-800 text-white dark:bg-white dark:text-gray-900 font-bold shadow-md hover:shadow-lg hover:-translate-y-[0.1em] transition-all btn-press" style="font-size: 1.5em;">
+                    시작
+                </button>
+            </div>
+
+            <!-- [화면 2] 실행 모드 (Running Mode) -->
+            <div id="runningView" class="hidden-opacity flex flex-col items-center justify-center w-full h-full transition-opacity duration-300 absolute inset-0">
+                
+                <!-- 원형 프로그레스 (em 단위 크기) -->
+                <div class="relative flex items-center justify-center mb-[2em]" style="width: 22em; height: 22em;">
+                    <svg class="absolute inset-0 w-full h-full" width="100%" height="100%" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="2" opacity="0.1"></circle>
+                        <circle id="progressRing" class="progress-ring__circle" cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="0"></circle>
+                    </svg>
+                    
+                    <!-- 남은 시간 텍스트 -->
+                    <div class="text-center z-10 w-full px-[1em] flex flex-col items-center justify-center h-full">
+                        <!-- 폰트 크기: wrapper 기준 5.5배 -->
+                        <div id="displayTime" class="font-bold tracking-tight mb-[0.1em] transition-all duration-200 leading-none" style="font-size: 6.5em;">00:00</div>
+                        <div id="displayLabel" class="font-bold opacity-60 tracking-widest uppercase mt-[0.5em]" style="font-size: 1em;">남은 시간</div>
+                    </div>
+                </div>
+
+                <!-- 컨트롤 버튼 -->
+                <div class="flex gap-[1.5em] z-10 items-center">
+                    <button onclick="resetTimer()" class="rounded-full flex items-center justify-center border border-current opacity-60 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition btn-press" title="초기화" style="width: 4em; height: 4em; font-size: 1em;">
+                        <i class="fas fa-stop" style="font-size: 1.5em;"></i>
+                    </button>
+                    
+                    <!-- 일시정지 버튼 (색상 확실히 지정) -->
+                    <button onclick="togglePause()" id="btnPause" class="rounded-full flex items-center justify-center shadow-xl hover:shadow-2xl hover:scale-105 transition btn-press bg-gray-900 text-white dark:bg-white dark:text-gray-900" style="width: 5.5em; height: 5.5em;">
+                        <i id="iconPause" class="fas fa-pause" style="font-size: 2em;"></i>
+                    </button>
+                    
+                    <button onclick="addTimeRunning(1)" class="rounded-full flex items-center justify-center border border-current opacity-60 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition btn-press" title="1분 추가" style="width: 4em; height: 4em; font-size: 1em;">
+                        <span class="font-bold" style="font-size: 0.9em;">+1분</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 설정 팝업 모달 -->
+    <div id="settingsModal" class="fixed inset-0 z-30 flex items-center justify-center bg-black/30 backdrop-blur-sm hidden-modal">
+        <div class="absolute inset-0" onclick="closeModal()"></div>
+        <div id="modalContent" class="relative bg-white dark:bg-gray-900 w-80 rounded-3xl shadow-2xl p-6 ring-1 ring-gray-100 dark:ring-gray-700">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-bold text-gray-800 dark:text-white">설정</h2>
+                <button onclick="closeModal()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                    <i class="fas fa-times text-gray-500 dark:text-gray-400"></i>
+                </button>
+            </div>
+
+            <div class="mb-6">
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wider">테마 모드</p>
+                <div class="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+                    <button onclick="setTheme(false)" id="btn-theme-light" class="flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2">
+                        <i class="fas fa-sun text-amber-500"></i> 라이트
+                    </button>
+                    <button onclick="setTheme(true)" id="btn-theme-dark" class="flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2">
+                        <i class="fas fa-moon text-indigo-400"></i> 다크
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wider">디자인 스타일</p>
+                <div class="space-y-2">
+                    <button onclick="changeStyle('luxury')" id="btn-style-luxury" class="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-amber-500 transition-all group">
+                        <span class="text-sm font-serif italic font-bold text-gray-700 dark:text-gray-300">Luxury</span>
+                        <i class="fas fa-check text-amber-500 opacity-0 group-[.active]:opacity-100"></i>
+                    </button>
+                    <button onclick="changeStyle('modern')" id="btn-style-modern" class="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-rose-500 transition-all group">
+                        <span class="text-sm font-sans font-black text-gray-700 dark:text-gray-300 tracking-tighter">MODERN</span>
+                        <i class="fas fa-check text-rose-500 opacity-0 group-[.active]:opacity-100"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 상태 변수
+        let isDark = false;
+        let currentStyle = 'luxury'; 
+        let timerInterval = null;
+        let totalTime = 0; // 초 단위
+        let remainingTime = 0;
+        let isPaused = false;
+        
+        // 스케일링 변수 (기본값 키움)
+        let currentScale = 1.0; 
+        const baseSizePx = 16; // 1rem 기준
+
+        // 요소 참조
+        const body = document.getElementById('body');
+        const scalableWrapper = document.getElementById('scalableWrapper'); // 핵심 래퍼
+        const timerContainer = document.getElementById('timerContainer');
+        const setupView = document.getElementById('setupView');
+        const runningView = document.getElementById('runningView');
+        
+        const inputH = document.getElementById('inputHours');
+        const inputM = document.getElementById('inputMinutes');
+        const inputS = document.getElementById('inputSeconds');
+        
+        const displayTime = document.getElementById('displayTime');
+        const progressRing = document.getElementById('progressRing');
+        const btnStart = document.getElementById('btnStart');
+        const btnPause = document.getElementById('btnPause');
+        const iconPause = document.getElementById('iconPause');
+
+        // 원형 진행바 설정
+        const radius = progressRing.r.baseVal.value;
+        const circumference = radius * 2 * Math.PI;
+        progressRing.style.strokeDasharray = `${circumference} ${circumference}`;
+        progressRing.style.strokeDashoffset = circumference;
+
+        // 초기화
+        window.onload = () => {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                setTheme(true);
+            } else {
+                updateUI();
+            }
+            // 초기 스케일 적용 (기본적으로 크게)
+            adjustScale(0.2); // 약간 키운 상태로 시작
+            
+            [inputH, inputM, inputS].forEach(input => {
+                input.addEventListener('change', () => {
+                    if(input.value < 0) input.value = 0;
+                    if(input.id !== 'inputHours' && input.value > 59) input.value = 59;
+                });
+            });
+        };
+
+        // --- 크기 조절 (Vector Scaling) ---
+        function adjustScale(delta) {
+            currentScale += delta;
+            // 최대 크기를 기존 1.6에서 3.2로 2배 확대
+            if (currentScale < 0.6) currentScale = 0.6;
+            if (currentScale > 3.2) currentScale = 3.2; 
+            
+            // Wrapper의 폰트 사이즈를 변경하면, em 단위를 사용하는 모든 자식 요소가 비례하여 커짐
+            const newFontSize = baseSizePx * currentScale;
+            scalableWrapper.style.fontSize = `${newFontSize}px`;
+        }
+
+        // --- 타이머 로직 ---
+
+        function setProgress(percent) {
+            const offset = circumference - (percent / 100) * circumference;
+            progressRing.style.strokeDashoffset = offset;
+        }
+
+        function addTime(minutes) {
+            let m = parseInt(inputM.value) || 0;
+            let h = parseInt(inputH.value) || 0;
+            
+            m += minutes;
+            while(m >= 60) {
+                m -= 60;
+                h += 1;
+            }
+            inputM.value = m;
+            inputH.value = h;
+        }
+
+        function addTimeRunning(minutes) {
+            remainingTime += (minutes * 60);
+            totalTime += (minutes * 60);
+            updateDisplay();
+        }
+
+        function startTimer() {
+            const h = parseInt(inputH.value) || 0;
+            const m = parseInt(inputM.value) || 0;
+            const s = parseInt(inputS.value) || 0;
+
+            if (h === 0 && m === 0 && s === 0) return;
+
+            totalTime = (h * 3600) + (m * 60) + s;
+            remainingTime = totalTime;
+
+            setupView.classList.add('hidden-opacity');
+            setupView.classList.remove('visible-opacity');
+            
+            runningView.classList.remove('hidden-opacity');
+            runningView.classList.add('visible-opacity');
+
+            isPaused = false;
+            updatePlayPauseIcon();
+            updateDisplay();
+            
+            if(timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(tick, 1000);
+            tick();
+        }
+
+        function tick() {
+            if (!isPaused) {
+                if (remainingTime > 0) {
+                    remainingTime--;
+                    updateDisplay();
+                } else {
+                    finishTimer();
+                }
+            }
+        }
+
+        function updateDisplay() {
+            const h = Math.floor(remainingTime / 3600);
+            const m = Math.floor((remainingTime % 3600) / 60);
+            const s = remainingTime % 60;
+
+            let timeStr = "";
+            if (h > 0) {
+                timeStr = `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            } else {
+                timeStr = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }
+
+            displayTime.innerText = timeStr;
+            const percent = (remainingTime / totalTime) * 100;
+            setProgress(percent);
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            updatePlayPauseIcon();
+        }
+
+        function updatePlayPauseIcon() {
+            if (isPaused) {
+                iconPause.className = "fas fa-play"; 
+            } else {
+                iconPause.className = "fas fa-pause";
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            remainingTime = 0;
+            body.classList.remove('alarm-active');
+            
+            runningView.classList.add('hidden-opacity');
+            runningView.classList.remove('visible-opacity');
+            
+            setupView.classList.remove('hidden-opacity');
+            setupView.classList.add('visible-opacity');
+        }
+
+        function finishTimer() {
+            clearInterval(timerInterval);
+            displayTime.innerText = "00:00";
+            setProgress(0);
+            body.classList.add('alarm-active');
+        }
+
+        // --- 테마 & 스타일 로직 ---
+
+        function toggleModal() {
+            const modal = document.getElementById('settingsModal');
+            if (modal.classList.contains('hidden-modal')) {
+                modal.classList.remove('hidden-modal');
+                modal.classList.add('visible-modal');
+            } else {
+                closeModal();
+            }
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('settingsModal');
+            modal.classList.remove('visible-modal');
+            modal.classList.add('hidden-modal');
+        }
+
+        function setTheme(dark) {
+            isDark = dark;
+            if (isDark) {
+                body.classList.add('dark');
+                body.classList.remove('bg-white', 'text-gray-800');
+                body.classList.add('bg-gray-900', 'text-gray-100');
+                
+                btnStart.classList.remove('bg-gray-800', 'text-white');
+                btnStart.classList.add('bg-white', 'text-gray-900');
+
+                // 다크모드: 버튼 흰색, 글자 검은색
+                btnPause.className = "rounded-full flex items-center justify-center shadow-xl hover:shadow-2xl hover:scale-105 transition btn-press bg-white text-gray-900";
+
+            } else {
+                body.classList.remove('dark');
+                body.classList.remove('bg-gray-900', 'text-gray-100');
+                body.classList.add('bg-white', 'text-gray-800');
+                
+                btnStart.classList.remove('bg-white', 'text-gray-900');
+                btnStart.classList.add('bg-gray-800', 'text-white');
+
+                // 라이트모드: 버튼 검은색, 글자 흰색 (확실한 대비)
+                btnPause.className = "rounded-full flex items-center justify-center shadow-xl hover:shadow-2xl hover:scale-105 transition btn-press bg-gray-900 text-white";
+            }
+            updateUI();
+        }
+
+        function changeStyle(styleName) {
+            currentStyle = styleName;
+            updateUI();
+        }
+
+        function updateUI() {
+            // 스타일 초기화
+            timerContainer.className = "relative rounded-[2em] transition-all duration-500 flex flex-col items-center justify-center p-[2em]";
+            
+            const texts = document.querySelectorAll('h2, input, #displayTime, #displayLabel');
+            texts.forEach(el => el.classList.remove('text-luxury', 'text-modern'));
+            
+            const inputs = document.querySelectorAll('input');
+            inputs.forEach(el => {
+                // Tailwind 유틸리티 대신 style 속성의 em 크기 사용
+                el.className = "text-center outline-none transition-all bg-transparent p-0 leading-normal";
+            });
+
+            if (currentStyle === 'luxury') {
+                timerContainer.classList.add(isDark ? 'style-luxury-dark' : 'style-luxury-light');
+                texts.forEach(el => el.classList.add('text-luxury'));
+                inputs.forEach(el => el.classList.add('input-luxury'));
+                progressRing.style.stroke = isDark ? '#dfe6e9' : '#2c3e50';
+
+            } else if (currentStyle === 'modern') {
+                timerContainer.classList.add(isDark ? 'style-modern-dark' : 'style-modern-light');
+                texts.forEach(el => el.classList.add('text-modern'));
+                inputs.forEach(el => el.classList.add('input-modern'));
+                progressRing.style.stroke = isDark ? '#ffffff' : '#1a1a1a';
+            }
+
+            updateModalUI();
+        }
+
+        function updateModalUI() {
+            const btnLight = document.getElementById('btn-theme-light');
+            const btnDark = document.getElementById('btn-theme-dark');
+            
+            const inactiveClass = "flex-1 py-2 rounded-lg text-sm font-medium text-gray-500 transition-all duration-200 flex items-center justify-center gap-2 hover:bg-gray-200/50";
+            const activeClass = "flex-1 py-2 rounded-lg text-sm font-bold bg-white text-gray-900 shadow-sm transition-all duration-200 flex items-center justify-center gap-2";
+
+            if (isDark) {
+                btnLight.className = inactiveClass;
+                btnDark.className = activeClass;
+            } else {
+                btnLight.className = activeClass;
+                btnDark.className = inactiveClass;
+            }
+
+            ['luxury', 'modern'].forEach(style => {
+                const btn = document.getElementById(`btn-style-${style}`);
+                if (style === currentStyle) {
+                    btn.classList.add('active', 'border-indigo-500', 'bg-indigo-50', 'dark:bg-indigo-900/30', 'dark:border-indigo-500');
+                    btn.classList.remove('border-gray-200', 'dark:border-gray-700');
+                } else {
+                    btn.classList.remove('active', 'border-indigo-500', 'bg-indigo-50', 'dark:bg-indigo-900/30', 'dark:border-indigo-500');
+                    btn.classList.add('border-gray-200', 'dark:border-gray-700');
+                }
+            });
+        }
+    </script>
+</body>
+</html>

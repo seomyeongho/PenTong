@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PenTong Data Space</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #1a1f2c 0%, #0b0c10 100%);
+            font-family: 'Noto Sans KR', sans-serif;
+            color: white;
+            user-select: none; /* 드래그 방지 */
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .title-container {
+            text-align: center;
+            animation: fadeIn Up 1.2s ease-out;
+            background: rgba(11, 12, 16, 0.4);
+            padding: 30px 50px;
+            border-radius: 15px;
+            border: 1px solid rgba(102, 252, 241, 0.1);
+            backdrop-filter: blur(2px);
+            box-shadow: 0 0 30px rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            margin: 0;
+            font-weight: 700;
+            color: #66fcf1;
+            text-shadow: 0 0 15px rgba(102, 252, 241, 0.5);
+            letter-spacing: -1px;
+        }
+
+        p {
+            font-size: 1.2rem;
+            margin-top: 15px;
+            color: #c5c6c7;
+            font-weight: 300;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="overlay">
+        <div class="title-container" id="title-box">
+            <h1 id="user-greeting">PenTong</h1>
+            <p id="sub-greeting">스마트한 업무 처리를 위한 준비 완료</p>
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script src="api_client.js"></script>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        let particles = [];
+        let shockwaves = []; // 클릭 시 발생하는 충격파 배열
+        
+        // [추가] 애니메이션 실행 상태 플래그
+        let isAnimating = true;
+
+        // 마우스 설정
+        const mouse = { x: null, y: null, radius: 200 };
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            initParticles();
+        }
+        window.addEventListener('resize', resize);
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.x;
+            mouse.y = e.y;
+            
+            // 타이틀 박스에 약간의 시차 효과(Parallax) 주기
+            const titleBox = document.getElementById('title-box');
+            const moveX = (e.x - width / 2) * 0.01;
+            const moveY = (e.y - height / 2) * 0.01;
+            titleBox.style.transform = `translate(${moveX}px, ${moveY}px)`;
+        });
+
+        window.addEventListener('mouseout', () => {
+            mouse.x = null;
+            mouse.y = null;
+        });
+
+        // 클릭 이벤트: 폭발 및 충격파 생성
+        window.addEventListener('click', (e) => {
+            // 1. 충격파 생성
+            shockwaves.push(new Shockwave(e.x, e.y));
+
+            // 2. 주변 파티클 튕겨내기 (Explosion)
+            particles.forEach(p => {
+                const dx = p.x - e.x;
+                const dy = p.y - e.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist < 300) { // 반경 300px 이내 입자들에게 영향
+                    const angle = Math.atan2(dy, dx);
+                    const force = (300 - dist) / 10; // 가까울수록 강한 힘
+                    p.vx += Math.cos(angle) * force;
+                    p.vy += Math.sin(angle) * force;
+                    p.color = '#ffffff'; // 순간적으로 하얗게 발광
+                    setTimeout(() => { p.color = p.originalColor; }, 300); // 0.3초 뒤 원래 색 복구
+                }
+            });
+        });
+
+        // --- 충격파 클래스 ---
+        class Shockwave {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 1;
+                this.maxRadius = 300; // 얼마나 커질지
+                this.alpha = 1;
+                this.color = `rgba(102, 252, 241,`; 
+            }
+            draw() {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = this.color + this.alpha + ')';
+                ctx.lineWidth = 5;
+                ctx.stroke();
+                ctx.restore();
+            }
+            update() {
+                this.radius += 8; // 퍼지는 속도
+                this.alpha -= 0.03; // 사라지는 속도
+            }
+        }
+
+        // --- 파티클 클래스 ---
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * 1; 
+                this.vy = (Math.random() - 0.5) * 1;
+                this.size = Math.random() * 2 + 1;
+                this.originalColor = '#45a29e';
+                this.color = this.originalColor;
+                this.friction = 0.95; // 마찰력 (폭발 후 감속용)
+            }
+
+            update() {
+                // 마우스 인력 (Magnetic Pull)
+                if (mouse.x != null) {
+                    const dx = mouse.x - this.x;
+                    const dy = mouse.y - this.y;
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance < mouse.radius) {
+                        // 마우스 쪽으로 부드럽게 가속
+                        const forceDirectionX = dx / distance;
+                        const forceDirectionY = dy / distance;
+                        const force = (mouse.radius - distance) / mouse.radius;
+                        const attractionStrength = 0.05; // 당기는 힘 조절
+                        
+                        this.vx += forceDirectionX * force * attractionStrength;
+                        this.vy += forceDirectionY * force * attractionStrength;
+                    }
+                }
+
+                // 물리 적용
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // 마찰력 적용 (클릭으로 빨라진 속도가 서서히 줄어듦)
+                // 기본 속도보다는 줄어들지 않도록 제어
+                if (Math.abs(this.vx) > 1 || Math.abs(this.vy) > 1) {
+                    this.vx *= this.friction;
+                    this.vy *= this.friction;
+                }
+
+                // 벽 튕기기
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            const numberOfParticles = (width * height) / 9000;
+            for (let i = 0; i < numberOfParticles; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function connect() {
+            let opacityValue = 1;
+            for (let a = 0; a < particles.length; a++) {
+                for (let b = a; b < particles.length; b++) {
+                    let dx = particles[a].x - particles[b].x;
+                    let dy = particles[a].y - particles[b].y;
+                    let distance = dx * dx + dy * dy;
+
+                    // 연결선 길이 (화면 크기에 비례)
+                    let connectDistance = (width/7) * (height/7);
+                    
+                    if (distance < connectDistance) {
+                        opacityValue = 1 - (distance / connectDistance);
+                        ctx.strokeStyle = 'rgba(102, 252, 241,' + opacityValue * 0.15 + ')';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[a].x, particles[a].y);
+                        ctx.lineTo(particles[b].x, particles[b].y);
+                        ctx.stroke();
+                    }
+                }
+                
+                // 마우스와 연결선
+                if (mouse.x != null) {
+                    let dx = particles[a].x - mouse.x;
+                    let dy = particles[a].y - mouse.y;
+                    let distance = dx*dx + dy*dy;
+                    if (distance < 30000) {
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; 
+                        ctx.beginPath();
+                        ctx.moveTo(particles[a].x, particles[a].y);
+                        ctx.lineTo(mouse.x, mouse.y);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            // [수정] 화면에 보이지 않으면 루프 중단 (리소스 절약)
+            if (!isAnimating) return;
+
+            requestAnimationFrame(animate);
+            ctx.clearRect(0, 0, width, height);
+
+            // 파티클 업데이트
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+            }
+            connect();
+
+            // 충격파 업데이트 및 그리기
+            for (let i = 0; i < shockwaves.length; i++) {
+                shockwaves[i].update();
+                shockwaves[i].draw();
+                // 투명도가 0이 되면 배열에서 제거
+                if (shockwaves[i].alpha <= 0) {
+                    shockwaves.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        resize();
+        animate();
+
+        // [추가] 화면 노출 여부 감지 (성능 최적화 핵심)
+        // iframe이 숨겨지거나(display: none) 탭이 바뀌면 애니메이션을 일시 정지합니다.
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // 화면에 나타남 (보임)
+                    if (!isAnimating) {
+                        isAnimating = true;
+                        animate(); // 멈췄던 애니메이션 재시작
+                    }
+                } else {
+                    // 화면에서 사라짐 (숨김)
+                    isAnimating = false; // 루프 차단
+                }
+            });
+        }, { threshold: 0.1 }); // 요소가 10%라도 보이면 실행
+
+        observer.observe(document.body); // body 전체를 감시
+
+        // 사용자 정보 로드
+        async function loadUserInfo() {
+            try {
+                if (typeof getAppSetting === 'function') {
+                    const userName = await getAppSetting('user_name', '');
+                    const titleEl = document.getElementById('user-greeting');
+                    const subEl = document.getElementById('sub-greeting');
+                    
+                    if (userName) {
+                        titleEl.innerHTML = `${userName}<span style="font-size:0.5em; color:#fff;"> 님의</span><br>PenTong`;
+                        subEl.innerHTML = `데이터 스페이스에 접속하신 것을 환영합니다.`;
+                    }
+                }
+            } catch (e) {
+                console.error("사용자 정보 로드 실패:", e);
+            }
+        }
+        document.addEventListener('DOMContentLoaded', loadUserInfo);
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,646 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: transparent !important;
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M2,2 L2,26 L9,19 L16,30 L20,27 L13,17 L22,17 Z" fill="%23FFE600" stroke="%23000000" stroke-width="1.5" stroke-linejoin="round"/></svg>') 2 2, auto !important;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-user-drag: none;
+            -webkit-app-region: no-drag;
+            overscroll-behavior: none;
+        }
+
+        canvas {
+            display: block;
+            touch-action: none;
+            outline: none;
+            cursor: inherit;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-family: 'Malgun Gothic', sans-serif;
+            font-size: 16px;
+            display: none;
+            z-index: 9999;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        #capture-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(33, 115, 70, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-family: 'Malgun Gothic', sans-serif;
+            font-size: 14px;
+            display: none;
+            z-index: 9999;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="toast">알림</div>
+    <div id="capture-toast">✏️ 판서가 시작되었습니다.</div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        // 지우개 처리를 위한 보조 도화지
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+
+        let bgImg = new Image();
+        let scale = 1.0; let offsetX = 0; let offsetY = 0;
+        let isDrawing = false; let isPanning = false;
+        let panStartX, panStartY;
+
+        let currentTool = 'pen';
+        let currentColor = '#4A90E2';
+        let lineWidth = 6;
+        let paths = []; let currentPath = null;
+
+        let isFadeMode = false;
+        let isCaptureActive = false;
+        let isCaptureError = false;
+
+        let timerActive = false;
+        let timerSeconds = 600;
+        let timerEndTime = 0;
+
+        let animationId = null;
+
+        let activePointers = [];      // 현재 화면에 닿아있는 손가락 목록
+        let initialPinchDistance = 0; // 두 손가락 최초 거리
+        let initialScale = 1.0;       // 제스처 시작 시점의 배율
+        let lastPinchCenter = { x: 0, y: 0 }; // 두 손가락의 중간 지점
+        let isMultiTouch = false;     // 멀티 터치 모드 작동 여부
+        let lastClickTime = 0;
+        let lastClickPos = { x: 0, y: 0 };
+        // 🚨 [추가] 핀(유지) 상태 관리
+        let isPinned = true;
+        window.togglePin = function (state) {
+            isPinned = (state === 'true');
+        };
+
+        function showToast(msg) {
+            let t = document.getElementById('toast');
+            t.innerText = msg;
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 2000);
+        }
+
+        function resize() {
+            // 파이썬이 resize를 불렀더라도, 실제 모니터 크기와 이미 똑같다면 도화지를 초기화하지 않고 무시합니다!
+            if (canvas.width === window.innerWidth && canvas.height === window.innerHeight) return;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            offCanvas.width = window.innerWidth;
+            offCanvas.height = window.innerHeight;
+            if (!animationId) renderLoop();
+        }
+        window.addEventListener('resize', resize);
+
+        window.addEventListener('pywebviewready', function () {
+            if (window.pywebview && window.pywebview.api.canvas_initialized) {
+                window.pywebview.api.canvas_initialized();
+            }
+        });
+
+        window.updateBackground = function (b64) {
+            isCaptureActive = true;
+
+            if (b64 === 'ERROR') {
+                isCaptureError = true;
+                bgImg.src = '';
+                resize();
+                requestAnimationFrame(() => {
+                    if (window.pywebview) pywebview.api.on_canvas_ready();
+                });
+                return;
+            }
+
+            isCaptureError = false;
+            bgImg.onload = () => {
+                resize();
+                //let ct = document.getElementById('capture-toast');
+                //if (ct) {
+                //    ct.style.display = 'block';
+                //    setTimeout(() => ct.style.display = 'none', 2000);
+                //}
+                // requestAnimationFrame 대신 setTimeout 사용
+                setTimeout(() => {
+                    if (window.pywebview) pywebview.api.on_canvas_ready();
+                }, 0);
+            };
+            bgImg.src = b64;
+        };
+
+        window.setColor = function (c) { currentColor = c; };
+        window.setTool = function (t) { currentTool = t; };
+        window.toggleFade = function (state) { isFadeMode = (state === 'true'); };
+        window.toggleTimer = function (state) {
+            timerActive = (state === 'true');
+            if (timerActive) timerEndTime = Date.now() + timerSeconds * 1000;
+        };
+
+        window.undo = function () { paths.pop(); };
+        window.clearAll = function () { paths = []; scale = 1.0; offsetX = 0; offsetY = 0; };
+
+        window.endCapture = function () {
+            isCaptureActive = false;
+            isCaptureError = false;
+
+            // 🚨 [수정] 핀 모드(유지)가 꺼져 있을 때만 기억(paths)을 비웁니다.
+            if (!isPinned) {
+                paths = [];
+            }
+
+            scale = 1.0; offsetX = 0; offsetY = 0;
+            bgImg = new Image();
+            render();
+        };
+
+        window.getSnapshot = function () {
+            let oldTimer = timerActive;
+            timerActive = false;
+            render();
+            let b64 = canvas.toDataURL('image/png');
+            timerActive = oldTimer;
+            render();
+            return b64;
+        };
+
+        window.triggerSave = function () {
+            if (window.pywebview) pywebview.api.save_image(getSnapshot());
+        };
+        window.triggerCopy = function () {
+            if (window.pywebview) pywebview.api.copy_image(getSnapshot());
+        };
+
+        function renderLoop() {
+            render();
+            animationId = requestAnimationFrame(renderLoop);
+        }
+
+        function render() {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            
+
+            ctx.translate(offsetX, offsetY);
+            ctx.scale(scale, scale);
+
+            if (bgImg.complete && bgImg.src) {
+                ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+            }
+
+            // 보조 도화지 사용 (지우개 효과 위함)
+            offCtx.setTransform(1, 0, 0, 1, 0, 0);
+            offCtx.clearRect(0, 0, offCanvas.width, offCanvas.height);
+            offCtx.translate(offsetX, offsetY);
+            offCtx.scale(scale, scale);
+            offCtx.lineCap = 'round'; offCtx.lineJoin = 'round';
+
+            paths = paths.filter(p => !p.expired);
+            for (let path of paths) drawPath(offCtx, path);
+            if (currentPath) drawPath(offCtx, currentPath);
+
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.drawImage(offCanvas, 0, 0);
+
+            if (isCaptureError) {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                let boxW = 500, boxH = 300;
+                let bx = (canvas.width - boxW) / 2;
+                let by = (canvas.height - boxH) / 2;
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+                ctx.strokeStyle = '#F8E71C';
+                ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.roundRect(bx, by, boxW, boxH, 15);
+                ctx.fill(); ctx.stroke();
+
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 26px "Malgun Gothic"';
+                ctx.fillStyle = '#FF5252';
+                ctx.fillText('⚠️ 화면을 캡처할 수 없습니다!', canvas.width / 2, by + 50);
+
+                ctx.font = '16px "Malgun Gothic"';
+                ctx.fillStyle = '#ddd';
+                ctx.fillText('보안 프로그램(은행 등)이나 저작권 보호 화면이 켜져 있거나,', canvas.width / 2, by + 100);
+                ctx.fillText('모니터 해상도가 방금 변경되었을 수 있습니다.', canvas.width / 2, by + 130);
+
+                ctx.fillStyle = '#F8E71C';
+                ctx.font = 'bold 18px "Malgun Gothic"';
+                ctx.fillText('💡 해결 방법', canvas.width / 2, by + 190);
+
+                ctx.fillStyle = 'white';
+                ctx.font = '16px "Malgun Gothic"';
+                ctx.fillText('1. 해당 보안 프로그램이나 영상을 끄거나 내려주세요.', canvas.width / 2, by + 230);
+                ctx.fillText('2. ESC를 눌러 판서를 끈 후, 다시 켜주세요.', canvas.width / 2, by + 260);
+            }
+
+            if (timerActive) {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                let remaining = Math.max(0, Math.ceil((timerEndTime - Date.now()) / 1000));
+                let m = Math.floor(remaining / 60).toString().padStart(2, '0');
+                let s = (remaining % 60).toString().padStart(2, '0');
+
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 250px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`${m}:${s}`, canvas.width / 2, canvas.height / 2 - 20);
+
+                ctx.font = '30px "Malgun Gothic"';
+                ctx.fillStyle = '#aaa';
+                ctx.fillText(`마우스 휠: 시간 조절  |  ESC: 타이머 종료`, canvas.width / 2, canvas.height / 2 + 150);
+            }
+        }
+
+        function drawPath(targetCtx, path) {
+            if (path.points.length === 0) return;
+
+            let alpha = path.type === 'highlighter' ? 0.4 : 1.0;
+            if (path.fadeStart) {
+                let now = Date.now();
+                if (now > path.fadeStart) {
+                    let progress = (now - path.fadeStart) / path.fadeDuration;
+                    if (progress >= 1.0) { path.expired = true; return; }
+                    alpha *= (1.0 - progress);
+                }
+            }
+
+            targetCtx.beginPath();
+            targetCtx.strokeStyle = path.color;
+
+            if (path.type === 'eraser') {
+                targetCtx.globalCompositeOperation = 'destination-out';
+                targetCtx.lineWidth = 40 / scale;
+                targetCtx.globalAlpha = 1.0;
+            } else {
+                targetCtx.globalCompositeOperation = 'source-over';
+                targetCtx.lineWidth = path.width / scale;
+                targetCtx.globalAlpha = alpha;
+            }
+
+            if (path.type === 'pen' || path.type === 'highlighter' || path.type === 'eraser') {
+                targetCtx.moveTo(path.points[0].x, path.points[0].y);
+                for (let i = 1; i < path.points.length; i++) targetCtx.lineTo(path.points[i].x, path.points[i].y);
+                targetCtx.stroke();
+            } else if (path.type === 'rect') {
+                let p1 = path.points[0], p2 = path.points[path.points.length - 1];
+                targetCtx.rect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+                targetCtx.stroke();
+            } else if (path.type === 'circle') {
+                let p1 = path.points[0], p2 = path.points[path.points.length - 1];
+                let r = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+                targetCtx.arc(p1.x, p1.y, r, 0, Math.PI * 2);
+                targetCtx.stroke();
+            } else if (path.type === 'arrow') {
+                let p1 = path.points[0], p2 = path.points[path.points.length - 1];
+                targetCtx.moveTo(p1.x, p1.y); targetCtx.lineTo(p2.x, p2.y);
+                let angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                let headlen = 25 / scale;
+                targetCtx.lineTo(p2.x - headlen * Math.cos(angle - Math.PI / 6), p2.y - headlen * Math.sin(angle - Math.PI / 6));
+                targetCtx.moveTo(p2.x, p2.y);
+                targetCtx.lineTo(p2.x - headlen * Math.cos(angle + Math.PI / 6), p2.y - headlen * Math.sin(angle + Math.PI / 6));
+                targetCtx.stroke();
+            } else if (path.type === 'text') {
+                targetCtx.fillStyle = path.color;
+                targetCtx.font = `bold ${35 / scale}px "Malgun Gothic"`;
+                targetCtx.textAlign = 'left'; targetCtx.textBaseline = 'top';
+
+                let lines = path.text.split('\n');
+                let lineHeight = 35 * 1.2 / scale;
+                for (let i = 0; i < lines.length; i++) {
+                    targetCtx.fillText(lines[i], path.points[0].x, path.points[0].y + (i * lineHeight));
+                }
+            }
+
+            targetCtx.globalCompositeOperation = 'source-over';
+            targetCtx.globalAlpha = 1.0;
+        }
+
+        function getMousePos(e) {
+            return { x: (e.clientX - offsetX) / scale, y: (e.clientY - offsetY) / scale };
+        }
+
+        canvas.addEventListener('pointerdown', (e) => {
+            if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+            e.preventDefault();
+
+            let currentTime = Date.now();
+            // 첫 번째 클릭한 위치와 두 번째 클릭한 위치의 거리를 계산
+            let clickDx = e.clientX - lastClickPos.x;
+            let clickDy = e.clientY - lastClickPos.y;
+            let clickDist = Math.sqrt(clickDx * clickDx + clickDy * clickDy);
+
+            // 300ms 이내에 제자리(20px 이내)에서 다시 클릭하면 더블클릭으로 인정!
+            if (currentTime - lastClickTime < 300 && clickDist < 20) {
+                isDrawing = false;
+                isPanning = false;
+                currentPath = null;
+
+                // 첫 번째 클릭 때문에 화면에 실수로 찍힌 '점'을 몰래 지워줍니다.
+                if (paths.length > 0 && paths[paths.length - 1].points && paths[paths.length - 1].points.length <= 2) {
+                    paths.pop();
+                }
+
+                // 현재 배율이 1.0(원본)이면 2배로 확대, 아니면 다시 1.0(원본)으로 복구
+                let newScale = (scale === 1.0) ? 3.0 : 1.0;
+
+                if (newScale === 1.0) {
+                    offsetX = 0; offsetY = 0;
+                } else {
+                    // 마우스 커서의 위치를 돋보기의 중심으로 삼아 정확히 확대합니다.
+                    offsetX = e.clientX - (e.clientX - offsetX) * (newScale / scale);
+                    offsetY = e.clientY - (e.clientY - offsetY) * (newScale / scale);
+                }
+
+                scale = newScale;
+                lastClickTime = 0; // 3연속 클릭 시 오작동 방지를 위해 초기화
+                return; // 더블클릭 동작을 수행했으므로 아래의 일반 클릭 로직은 무시함
+            }
+
+            lastClickTime = currentTime;
+            lastClickPos = { x: e.clientX, y: e.clientY };
+
+            // 🚨 [추가] 터치(포인터) 배열에 등록
+            activePointers.push({ id: e.pointerId, x: e.clientX, y: e.clientY });
+
+            // 🚨 [추가] 손가락이 2개가 되면 즉시 '제스처 모드'로 전환
+            if (activePointers.length === 2) {
+                isMultiTouch = true;
+                isDrawing = false; // 그리던 선 강제 취소
+                currentPath = null;
+
+                let dx = activePointers[0].x - activePointers[1].x;
+                let dy = activePointers[0].y - activePointers[1].y;
+                initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+                initialScale = scale;
+                lastPinchCenter = {
+                    x: (activePointers[0].x + activePointers[1].x) / 2,
+                    y: (activePointers[0].y + activePointers[1].y) / 2
+                };
+                return;
+            }
+
+            // 1. [기존] 우클릭 이동 (마우스용)
+            if (e.button === 2) {
+                isPanning = true;
+                panStartX = e.clientX - offsetX;
+                panStartY = e.clientY - offsetY;
+                return;
+            }
+
+            // 2. [기존] 좌클릭 판서 (조건에 !isMultiTouch 추가)
+            if (e.button === 0 && !timerActive && isCaptureActive && !isMultiTouch) {
+                const pos = getMousePos(e);
+
+                if (currentTool === 'text') {
+                    let inp = document.createElement('textarea');
+                    inp.style.position = 'fixed';
+                    inp.style.left = e.clientX + 'px';
+                    inp.style.top = (e.clientY - 15) + 'px';
+                    inp.style.color = currentColor;
+                    inp.style.font = 'bold 35px "Malgun Gothic"';
+                    inp.style.background = 'transparent';
+                    inp.style.border = '2px dashed #aaa';
+                    inp.style.outline = 'none';
+                    inp.style.zIndex = '1000';
+                    inp.style.padding = '0 5px';
+                    inp.style.overflow = 'hidden';
+                    inp.style.resize = 'none';
+                    inp.style.lineHeight = '1.2';
+                    inp.style.whiteSpace = 'pre';
+                    inp.style.minWidth = '20px';
+                    inp.style.width = '30px';
+                    inp.style.height = '42px';
+                    let maxWidth = window.innerWidth - e.clientX - 20;
+                    inp.style.maxWidth = Math.max(maxWidth, 50) + 'px';
+
+                    document.body.appendChild(inp);
+                    inp.focus();
+
+                    inp.addEventListener('input', function () {
+                        this.style.width = '30px';
+                        this.style.height = '42px';
+                        this.style.width = this.scrollWidth + 'px';
+                        this.style.height = this.scrollHeight + 'px';
+                    });
+
+                    inp.addEventListener('blur', function () {
+                        if (inp.value.trim() !== '') {
+                            let p = { type: 'text', color: currentColor, points: [pos], text: inp.value };
+                            paths.push(p);
+                        }
+                        inp.remove();
+                    });
+                    return;
+                }
+
+                canvas.setPointerCapture(e.pointerId);
+                isDrawing = true;
+                currentPath = {
+                    type: currentTool,
+                    color: currentColor,
+                    width: currentTool === 'highlighter' ? 16 : lineWidth,
+                    points: [pos]
+                };
+            }
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+            e.preventDefault();
+
+            // 🚨 [추가] 현재 움직인 손가락 좌표 실시간 업데이트
+            let ptrIndex = activePointers.findIndex(p => p.id === e.pointerId);
+            if (ptrIndex !== -1) {
+                activePointers[ptrIndex].x = e.clientX;
+                activePointers[ptrIndex].y = e.clientY;
+            }
+
+            
+            // 🚨 [수정] 멀티 터치 (두 손가락) 모드일 때의 복합 동작(확대+이동) 로직 개선
+            if (activePointers.length === 2 && isMultiTouch) {
+                let currentCenter = {
+                    x: (activePointers[0].x + activePointers[1].x) / 2,
+                    y: (activePointers[0].y + activePointers[1].y) / 2
+                };
+
+                let dx = activePointers[0].x - activePointers[1].x;
+                let dy = activePointers[0].y - activePointers[1].y;
+                let currentDistance = Math.sqrt(dx * dx + dy * dy) || 1;
+
+                // 1. 패닝 (화면 이동): 배율이 1배(원본)이든 확대 상태이든 상관없이, 
+                // 두 손가락 중심점이 이동한 거리만큼 무조건 화면을 밀어줍니다. (마우스 우클릭 조작감과 100% 동일)
+                offsetX += currentCenter.x - lastPinchCenter.x;
+                offsetY += currentCenter.y - lastPinchCenter.y;
+
+                // 2. 새로운 배율 계산 (최소 1.0배, 최대 10배)
+                let newScale = initialScale * (currentDistance / initialPinchDistance);
+                newScale = Math.max(1.0, Math.min(newScale, 10));
+
+                // 3. 줌 보정 (튕김 방지): 손가락의 미세한 떨림으로 인한 화면 텔레포트를 막기 위해,
+                // 의미 있는 배율 변화(0.005 이상)가 일어났을 때만 돋보기 중심점을 계산합니다.
+                if (Math.abs(newScale - scale) > 0.005) {
+                    let scaleRatio = newScale / scale;
+                    offsetX = currentCenter.x - (currentCenter.x - offsetX) * scaleRatio;
+                    offsetY = currentCenter.y - (currentCenter.y - offsetY) * scaleRatio;
+                }
+
+                scale = newScale;
+                lastPinchCenter = currentCenter;
+                return; // 멀티터치 동작 중에는 선 긋기 금지
+            }
+
+            // [기존] 우클릭 패닝
+            if (isPanning) {
+                offsetX = e.clientX - panStartX; offsetY = e.clientY - panStartY;
+            }
+            // [기존] 선 긋기 (멀티터치가 아닐 때만 작동)
+            else if (isDrawing && currentPath && !isMultiTouch) {
+                if (e.shiftKey && currentPath.points.length > 0 && (currentTool === 'pen' || currentTool === 'highlighter' || currentTool === 'eraser')) {
+                    let startPos = currentPath.points[0];
+                    let curPos = getMousePos(e);
+                    let dx = curPos.x - startPos.x; let dy = curPos.y - startPos.y;
+                    let angle = Math.atan2(dy, dx);
+                    let snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    let newX = startPos.x + dist * Math.cos(snappedAngle);
+                    let newY = startPos.y + dist * Math.sin(snappedAngle);
+                    currentPath.points = [startPos, { x: newX, y: newY }];
+                } else {
+                    currentPath.points.push(getMousePos(e));
+                }
+            }
+        });
+
+        canvas.addEventListener('pointerup', (e) => {
+            e.preventDefault(); try { canvas.releasePointerCapture(e.pointerId); } catch (err) { }
+
+            // 🚨 [추가] 터치 배열에서 뗀 손가락 제거 및 모드 해제
+            activePointers = activePointers.filter(p => p.id !== e.pointerId);
+            if (activePointers.length < 2) isMultiTouch = false;
+
+            if (e.button === 2) {
+                isPanning = false;
+            } else if (e.button === 0 && isDrawing) {
+                isDrawing = false;
+                if (currentPath) {
+                    if (isFadeMode && currentPath.type !== 'eraser') {
+                        currentPath.fadeStart = Date.now() + 1000;
+                        currentPath.fadeDuration = 2000;
+                    }
+                    paths.push(currentPath);
+                    currentPath = null;
+                }
+                if (window.pywebview && window.pywebview.api) {
+                    window.pywebview.api.lift_panel();
+                }
+            }
+        });
+
+        // 🚨 [추가] 화면 밖으로 손가락이 나가거나 터치가 끊겼을 때의 안전 장치
+        canvas.addEventListener('pointercancel', (e) => {
+            activePointers = activePointers.filter(p => p.id !== e.pointerId);
+            if (activePointers.length < 2) isMultiTouch = false;
+        });
+
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (timerActive) {
+                if (e.deltaY < 0) timerSeconds += 60;
+                else timerSeconds -= 60;
+                if (timerSeconds < 60) timerSeconds = 60;
+                timerEndTime = Date.now() + timerSeconds * 1000;
+                return;
+            }
+
+            const zoomSensitivity = 0.001;
+            let newScale = scale * Math.exp(-e.deltaY * zoomSensitivity);
+            newScale = Math.max(1.0, Math.min(newScale, 10));
+
+            if (newScale === 1.0) {
+                offsetX = 0; offsetY = 0;
+            } else {
+                offsetX = e.clientX - (e.clientX - offsetX) * (newScale / scale);
+                offsetY = e.clientY - (e.clientY - offsetY) * (newScale / scale);
+            }
+            scale = newScale;
+        }, { passive: false });
+
+        window.addEventListener('keydown', (e) => {
+            if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
+                if (e.key === 'Escape') document.activeElement.blur();
+                return;
+            }
+
+            const key = e.key.toLowerCase();
+
+            if (key === 'escape') {
+                if (timerActive) {
+                    window.toggleTimer('false');
+                    if (window.pywebview) pywebview.api.sync_toolbar_state('feature', 'timer|false');
+                } else {
+                    if (window.pywebview) pywebview.api.toggle_capture(false);
+                }
+            } else if (e.ctrlKey && key === 'z') {
+                window.undo();
+            } else if (key === 'c') {
+                window.clearAll();
+            } else if (key === 'r') {
+                window.setColor('#FF5252'); if (window.pywebview) pywebview.api.sync_toolbar_state('color', 'red');
+            } else if (key === 'b') {
+                window.setColor('#4A90E2'); if (window.pywebview) pywebview.api.sync_toolbar_state('color', 'blue');
+            } else if (key === 'g') {
+                window.setColor('#34A853'); if (window.pywebview) pywebview.api.sync_toolbar_state('color', 'green');
+            } else if (key === 'y') {
+                window.setColor('#F8E71C'); if (window.pywebview) pywebview.api.sync_toolbar_state('color', 'yellow');
+            } else if (key === 'p') {
+                window.setTool('pen'); if (window.pywebview) pywebview.api.sync_toolbar_state('tool', 'pen');
+            } else if (key === 'e') {
+                window.setTool('eraser'); if (window.pywebview) pywebview.api.sync_toolbar_state('tool', 'eraser');
+            } else if (key === 'h') {
+                window.setTool('highlighter'); if (window.pywebview) pywebview.api.sync_toolbar_state('tool', 'highlighter');
+            } else if (key === 'f') {
+                isFadeMode = !isFadeMode;
+                if (window.pywebview) pywebview.api.sync_toolbar_state('feature', 'fade|' + isFadeMode);
+            } else if (key === 't') {
+                window.toggleTimer(timerActive ? 'false' : 'true');
+                if (window.pywebview) pywebview.api.sync_toolbar_state('feature', 'timer|' + timerActive);
+            }
+        });
+    </script>
+</body>
+</html>

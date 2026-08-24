@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이메일 교정 (Pro)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- JSpreadsheet (Jexcel) & JSuites -->
+    <script src="https://bossanova.uk/jspreadsheet/v4/jexcel.js"></script>
+    <link rel="stylesheet" href="https://bossanova.uk/jspreadsheet/v4/jexcel.css" type="text/css" />
+    <script src="https://jsuites.net/v4/jsuites.js"></script>
+    <link rel="stylesheet" href="https://jsuites.net/v4/jsuites.css" type="text/css" />
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;600;700&display=swap');
+        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; }
+        
+        /* JSpreadsheet 가독성 개선 스타일 */
+        .jexcel { font-family: 'Pretendard', sans-serif !important; font-size: 15px; }
+        
+        /* 헤더 스타일 */
+        .jexcel > thead > tr > td { 
+            font-weight: 700 !important; 
+            background-color: #e2e8f0 !important; 
+            color: #1e293b !important;
+            border-bottom: 2px solid #cbd5e1 !important;
+        }
+        
+        /* 셀 텍스트 스타일 */
+        .jexcel > tbody > tr > td { 
+            padding: 6px 8px !important; 
+            color: #0f172a !important;
+            font-weight: 500;
+        }
+
+        /* 교정된 열(B열) 강조 */
+        .corrected-col {
+            background-color: #f0fdf4 !important; 
+            color: #15803d !important; 
+            font-weight: 700 !important;
+        }
+        
+        /* 버튼 스타일 */
+        .btn-primary { background-color: #2563eb; color: white; transition: all 0.2s; }
+        .btn-primary:hover { background-color: #1d4ed8; transform: translateY(-1px); }
+        
+        .btn-success { background-color: #059669; color: white; transition: all 0.2s; }
+        .btn-success:hover { background-color: #047857; transform: translateY(-1px); }
+
+        /* 토스트 및 모달 스타일 */
+        .modal-overlay { background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden relative">
+    
+    <!-- 헤더 영역 -->
+    <header class="flex justify-between items-center p-4 bg-white border-b border-gray-200 shadow-md z-10 shrink-0">
+        <h1 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <i class="fa-solid fa-robot text-indigo-600"></i>
+            스마트 이메일 검수기 Pro
+        </h1>
+        <div class="flex gap-2">
+            <!-- 샘플 데이터 버튼 추가 -->
+            <button onclick="loadSampleData()" class="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition-colors shadow-sm flex items-center gap-2">
+                <i class="fa-solid fa-flask"></i> 샘플 데이터
+            </button>
+            
+            <button onclick="confirmClear()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors shadow-sm">
+                <i class="fa-solid fa-rotate-right text-gray-500"></i> 초기화
+            </button>
+            
+            <div class="w-px h-8 bg-gray-300 mx-1 self-center"></div>
+
+            <button onclick="copyCorrectedResult()" class="btn-success px-5 py-2 text-sm font-bold rounded-lg shadow-sm flex items-center gap-2">
+                <i class="fa-regular fa-copy"></i> 결과 복사
+            </button>
+            <button onclick="processCorrection()" class="btn-primary px-6 py-2 text-sm font-bold rounded-lg shadow-md flex items-center gap-2">
+                <i class="fa-solid fa-magnifying-glass-chart"></i> 정밀 검사 실행
+            </button>
+        </div>
+    </header>
+
+    <!-- 메인 그리드 영역 -->
+    <div class="flex-1 overflow-hidden relative bg-white">
+        <div id="spreadsheet" class="w-full h-full p-2"></div>
+    </div>
+
+    <!-- 커스텀 모달 -->
+    <div id="customModalOverlay" class="fixed inset-0 z-50 hidden flex items-center justify-center modal-overlay transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-96 border border-gray-200 transform scale-100">
+            <div class="mb-4">
+                <h3 id="modalTitle" class="text-lg font-bold text-gray-900 mb-2">알림</h3>
+                <p id="modalMessage" class="text-gray-700 text-sm leading-relaxed"></p>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button id="modalCancelBtn" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg hidden border border-gray-300">취소</button>
+                <button id="modalConfirmBtn" class="px-5 py-2 text-sm font-bold text-white bg-gray-900 hover:bg-black rounded-lg shadow">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 토스트 메시지 -->
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-2xl opacity-0 transition-opacity duration-300 pointer-events-none z-50 flex items-center gap-2 border border-gray-700">
+        <i class="fa-solid fa-circle-check text-green-400"></i>
+        <span id="toastMessage" class="font-medium">작업 완료</span>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. 화이트리스트 (WhiteList) - 이 목록에 없으면 일단 '확인 필요'
+        // ==========================================
+        const WHITELIST_DOMAINS = [
+            // 주요 포털
+            'naver.com', 'gmail.com', 'daum.net', 'hanmail.net', 'nate.com', 'kakao.com',
+            'icloud.com', 'hotmail.com', 'outlook.com', 'outlook.kr', 'yahoo.com',
+            // 공공/교육
+            'korea.kr', 'go.kr', 'or.kr', 'ac.kr', 're.kr', 'sen.go.kr', 'pen.go.kr', 'goe.go.kr',
+            'ice.go.kr', 'dge.go.kr', 'dje.go.kr', 'uje.go.kr', 'sjg.go.kr', 'kwe.go.kr',
+            'cbe.go.kr', 'cne.go.kr', 'jbe.go.kr', 'jne.go.kr', 'gbe.kr', 'gne.go.kr', 'jje.go.kr',
+            'jne.kr', 'cne.kr' // 일부 교육청 단축 도메인 포함
+        ];
+
+        // ==========================================
+        // 2. 오타 교정 DB (Known Typos)
+        // ==========================================
+        const TYPO_DB = {
+            // NAVER
+            'never.com': 'naver.com', 'navor.com': 'naver.com', 'navar.com': 'naver.com',
+            'navere.com': 'naver.com', 'naver.co.kr': 'naver.com', 'naver.net': 'naver.com',
+            'nevar.com': 'naver.com', 'nver.com': 'naver.com', 'naver.c': 'naver.com',
+            
+            // GMAIL
+            'gmial.com': 'gmail.com', 'gamil.com': 'gmail.com', 'gmal.com': 'gmail.com',
+            'g-mail.com': 'gmail.com', 'gmail.co.kr': 'gmail.com', 'gmail.kr': 'gmail.com',
+            'google.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gail.com': 'gmail.com',
+            'gm.com': 'gmail.com', 'gmil.com': 'gmail.com',
+            
+            // DAUM / HANMAIL
+            'daum.com': 'daum.net', 'daum.co.kr': 'daum.net', 'doum.net': 'daum.net',
+            'duam.net': 'daum.net', 'daum.kr': 'daum.net', 'damu.net': 'daum.net',
+            'daun.net': 'daum.net', 'da.net': 'daum.net', 'daum.ne': 'daum.net', 
+            'dum.net': 'daum.net', 'daum.n': 'daum.net', 'dam.net': 'daum.net',
+            
+            'hanmail.com': 'hanmail.net', 'hanmial.net': 'hanmail.net', 'hanmail.co.kr': 'hanmail.net',
+            'hamnail.net': 'hanmail.net', 'han.net': 'hanmail.net', 'hanmail.n': 'hanmail.net',
+            
+            // NATE
+            'nate.co.kr': 'nate.com', 'nate.net': 'nate.com', 'nait.com': 'nate.com',
+            'nate.kr': 'nate.com', 'nate.c': 'nate.com',
+            
+            // KOREA.KR
+            'korea.com': 'korea.kr', 'korea.co.kr': 'korea.kr', 'korea.net': 'korea.kr',
+            'corea.kr': 'korea.kr', 'korea.go': 'korea.kr',
+            
+            // 교육청 오타 예시
+            'sen.go.com': 'sen.go.kr', 'sen.com': 'sen.go.kr',
+            'goe.go.com': 'goe.go.kr', 'goe.com': 'goe.go.kr'
+        };
+
+        // 도메인 유사도 검사를 위한 주요 키워드
+        const MAJOR_PROVIDERS = ['naver', 'gmail', 'daum', 'hanmail', 'nate', 'kakao', 'korea', 'sen', 'goe'];
+
+        let grid;
+        let modalCallback = null;
+
+        // 샘플 데이터 목록 (다양한 오타 케이스)
+        const SAMPLE_DATA = [
+            'hong@never.com',          // 대표적인 오타
+            'kim@gmial.com',           // 지메일 오타
+            'lee@da.net',              // 도메인 앞뒤 잘림 (창의적 교정 필요)
+            'park@hanmail.co',         // 뒤가 잘림
+            'choi@naver.c',            // 뒤가 잘림
+            'kang@korea.com',          // 공직자 메일 오기 (korea.kr)
+            'teacher@sen.go.com',      // 교육청 도메인 오타
+            'student@kakao.net',       // 카카오 오타
+            'abc@daum.ne',             // 끝이 잘림
+            'weird@unknown-domain.xyz',// 듣도 보도 못한 도메인 (확인 필요)
+            'aㅠbc@naver.com',         // 한글 오타 포함
+            'no_at_symbol.com',        // 골뱅이 없음
+            'valid@naver.com',         // 정상
+            'good@gmail.com'           // 정상
+        ];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            let initialData = [];
+            for(let i=0; i<100; i++) initialData.push(['', '', '']);
+
+            grid = jspreadsheet(document.getElementById('spreadsheet'), {
+                data: initialData,
+                columns: [
+                    { type: 'text', title: '입력 이메일 (A열)', width: 320 },
+                    { type: 'text', title: '교정/제안 이메일 (B열)', width: 320, readOnly: true }, 
+                    { type: 'text', title: '상세 검사 결과 (C열)', width: 300, readOnly: true, align: 'left' }
+                ],
+                minDimensions: [3, 20],
+                defaultColAlign: 'left',
+                allowInsertColumn: false,
+                allowManualInsertColumn: false,
+                contextMenu: function(obj, x, y, e) {
+                    var items = [];
+                    if (y == null) return items;
+                    items.push({ title: '복사 (Ctrl+C)', onclick: function() { obj.copy(); } });
+                    items.push({ title: '붙여넣기 (Ctrl+V)', onclick: function() { 
+                        navigator.clipboard.readText().then(text => { if(text) obj.paste(parseInt(x), parseInt(y), text); });
+                    }});
+                    items.push({ type:'line' });
+                    items.push({ title: '행 지우기', onclick: function() { obj.deleteRow(parseInt(y)); } });
+                    return items;
+                }
+            });
+        });
+
+        // ----------------------------------------------------
+        // [핵심] 창의적 검사 로직 (Strict & Fuzzy Logic)
+        // ----------------------------------------------------
+        function processCorrection() {
+            if (!grid) return;
+            const data = grid.getData();
+            let processCount = 0;
+
+            // 한글/특수문자 체크용 정규식 (알파벳, 숫자, 점, 하이픈, 밑줄 외의 문자)
+            const invalidCharRegex = /[^a-zA-Z0-9.\-_@]/;
+
+            data.forEach((row, rowIndex) => {
+                const inputEmail = row[0];
+                if (inputEmail == null || String(inputEmail).trim() === '') {
+                    if (row[1] !== '' || row[2] !== '') {
+                        grid.setValueFromCoords(1, rowIndex, ''); 
+                        grid.setValueFromCoords(2, rowIndex, '');
+                    }
+                    return;
+                }
+
+                processCount++;
+                const cleanedEmail = String(inputEmail).trim();
+                let correctedEmail = cleanedEmail;
+                let note = '';
+                let isCriticalError = false;
+
+                // [Step 1] 치명적 오타 검사 (한글, 공백 등)
+                if (!cleanedEmail.includes('@')) {
+                    correctedEmail = '';
+                    note = '❌ 형식 오류 (@ 없음)';
+                    isCriticalError = true;
+                } else if (invalidCharRegex.test(cleanedEmail)) {
+                    // 한글이 포함된 경우 (예: aㅠ@da.net)
+                    correctedEmail = ''; // 교정 불가로 처리하거나, 한글만 제거 시도할 수 있으나 여기선 위험하므로 오류 처리
+                    note = '❌ 오타 감지 (한글/특수문자 포함)';
+                    isCriticalError = true;
+                } 
+                
+                if (!isCriticalError) {
+                    const parts = cleanedEmail.split('@');
+                    const user = parts[0];
+                    let domain = parts.length > 1 ? parts[1].toLowerCase().trim() : '';
+
+                    if (domain === '') {
+                        correctedEmail = '';
+                        note = '❌ 도메인 누락';
+                    } 
+                    // [Step 2] 화이트리스트 검사 (가장 확실한 것부터 통과)
+                    else if (WHITELIST_DOMAINS.includes(domain)) {
+                        correctedEmail = cleanedEmail;
+                        note = '✅ 정상 (인증된 도메인)';
+                    }
+                    // [Step 3] 알려진 오타 DB 검사 (DB 교정)
+                    else if (TYPO_DB[domain]) {
+                        const fixedDomain = TYPO_DB[domain];
+                        correctedEmail = `${user}@${fixedDomain}`;
+                        note = `✨ 자동 교정 (${domain} → ${fixedDomain})`;
+                    }
+                    // [Step 4] 창의적 추론 (Fuzzy Logic) - DB엔 없지만 의심스러운 것
+                    else {
+                        // 4-1. 점(.)이 없는 경우
+                        if (!domain.includes('.')) {
+                             // 자동완성 시도
+                             let bestMatch = findBestMatch(domain);
+                             if (bestMatch) {
+                                correctedEmail = `${user}@${bestMatch}`;
+                                note = `🔧 불안전 도메인 교정 (.${bestMatch.split('.')[1]} 추가)`;
+                             } else {
+                                correctedEmail = '';
+                                note = '❌ 도메인 형식 오류 (.없음)';
+                             }
+                        } else {
+                            // 4-2. 점은 있지만 화이트리스트가 아닌 경우 (예: da.net, my.home)
+                            // 혹시 유명 도메인의 오타인가? (Levenshtein Distance 개념 약식 적용)
+                            let inferredDomain = inferDomain(domain);
+                            
+                            if (inferredDomain) {
+                                correctedEmail = `${user}@${inferredDomain}`;
+                                note = `💡 유사 도메인 제안 (${domain} → ${inferredDomain})`;
+                            } else {
+                                // **여기가 핵심**: 화이트리스트에도 없고, 추론도 안되면 '확인 필요'
+                                correctedEmail = cleanedEmail; // 원본 유지하되 경고
+                                note = '⚠️ 확인 필요 (낯선 도메인)';
+                            }
+                        }
+                    }
+                }
+
+                // 값 업데이트
+                if (row[1] !== correctedEmail) grid.setValueFromCoords(1, rowIndex, correctedEmail, true);
+                if (row[2] !== note) grid.setValueFromCoords(2, rowIndex, note, true);
+            });
+
+            if (processCount > 0) showToast(`${processCount}건 검사 완료`);
+            else showToast('데이터를 입력해주세요', 'text-yellow-400');
+        }
+
+        // [Helper] 도메인 추론 로직 (da.net -> daum.net)
+        function inferDomain(badDomain) {
+            // 1. 주요 프로바이더 이름이 포함되어 있는지 검사
+            // 예: daum.ne -> daum.net
+            for (let provider of MAJOR_PROVIDERS) {
+                if (badDomain.startsWith(provider)) {
+                    // provider 이름으로 시작하는데 화이트리스트가 아니면, 표준 도메인으로 리턴
+                    // 단, sen.go.kr 처럼 서브도메인이 복잡한건 제외해야 하지만
+                    // 여기서는 간단히 매칭되는 화이트리스트 도메인을 찾음
+                    let target = WHITELIST_DOMAINS.find(w => w.startsWith(provider));
+                    if (target) return target;
+                }
+            }
+            
+            // 2. 짧은 약어 검사 (da.net -> daum.net)
+            if (badDomain === 'da.net') return 'daum.net';
+            if (badDomain === 'na.com') return 'naver.com';
+            if (badDomain === 'gm.com') return 'gmail.com';
+            
+            return null; // 추론 실패
+        }
+
+        // [Helper] 점 없는 도메인 자동완성 (daum -> daum.net)
+        function findBestMatch(noDotDomain) {
+            if (['daum', 'hanmail'].includes(noDotDomain)) return noDotDomain + '.net';
+            if (['naver', 'gmail', 'nate', 'kakao', 'hotmail', 'yahoo'].includes(noDotDomain)) return noDotDomain + '.com';
+            if (['korea', 'go'].includes(noDotDomain)) return 'korea.kr'; // korea -> korea.kr
+            return null;
+        }
+
+        // ----------------------------------------------------
+        // 유틸리티 (복사, 초기화, 모달)
+        // ----------------------------------------------------
+        
+        // 샘플 데이터 로드 함수
+        function loadSampleData() {
+            // 기존 데이터가 있다면 확인
+            const currentData = grid.getData();
+            const hasData = currentData.some(row => row[0] && row[0].trim() !== '');
+
+            const loadAction = () => {
+                // 샘플 데이터를 그리드 형식으로 변환 (A열만 채우고 B,C열 비움)
+                const sampleRows = SAMPLE_DATA.map(email => [email, '', '']);
+                // 남은 줄은 빈 줄로 채우기 (50줄 유지)
+                while(sampleRows.length < 50) sampleRows.push(['', '', '']);
+                
+                grid.setData(sampleRows);
+                showToast('샘플 데이터가 입력되었습니다.', 'text-indigo-400');
+            };
+
+            if (hasData) {
+                showModal('샘플 로드', '기존 내용을 지우고 샘플 데이터를 입력하시겠습니까?', loadAction, true);
+            } else {
+                loadAction();
+            }
+        }
+
+        function copyCorrectedResult() {
+            if (!grid) return;
+            // B열에 값이 있고, C열이 '❌' 또는 '⚠️'가 아닌 것만 복사 추천?
+            // 아니면 사용자가 판단하도록 B열 전체 복사? -> B열 유효값 전체 복사
+            const data = grid.getData();
+            const validEmails = data.map(row => row[1]).filter(email => email && email.trim() !== '').join('\n');
+            
+            if (!validEmails) {
+                showModal('알림', '복사할 유효한 결과가 없습니다.');
+                return;
+            }
+            
+            const textArea = document.createElement("textarea");
+            textArea.value = validEmails;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand("Copy");
+            textArea.remove();
+            showToast('복사되었습니다!', 'text-blue-400');
+        }
+
+        function confirmClear() {
+            showModal('초기화', '모든 내용을 지우시겠습니까?', () => {
+                let emptyData = [];
+                for(let i=0; i<50; i++) emptyData.push(['', '', '']);
+                grid.setData(emptyData);
+                showToast('초기화됨');
+            }, true);
+        }
+
+        const modalOverlay = document.getElementById('customModalOverlay');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        const modalConfirmBtn = document.getElementById('modalConfirmBtn');
+        const modalCancelBtn = document.getElementById('modalCancelBtn');
+
+        function showModal(title, message, onConfirm = null, showCancel = false) {
+            modalTitle.innerText = title;
+            modalMessage.innerText = message;
+            modalCallback = onConfirm;
+            modalCancelBtn.classList.toggle('hidden', !showCancel);
+            modalOverlay.classList.remove('hidden');
+        }
+
+        modalConfirmBtn.onclick = () => { if (modalCallback) modalCallback(); modalOverlay.classList.add('hidden'); };
+        modalCancelBtn.onclick = () => { modalOverlay.classList.add('hidden'); };
+
+        function showToast(msg, colorClass = 'text-green-400') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').innerText = msg;
+            toast.querySelector('i').className = `fa-solid fa-circle-check ${colorClass}`;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => toast.classList.add('opacity-0'), 3000);
+        }
+    </script>
+</body>
+</html>

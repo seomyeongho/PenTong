@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>단일 퍼셉트론 원리 학습기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f8fafc;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .transition-all { transition: all 0.3s ease; }
+        
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 2px solid #3b82f6;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #e2e8f0;
+            border-radius: 4px;
+        }
+        input[type=range]:focus { outline: none; }
+        
+        /* Dynamic classes for SVG */
+        .svg-line { transition: stroke 0.3s, stroke-width 0.3s; }
+        .node-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- Custom Modal -->
+    <div id="custom-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-[32rem] transform transition-transform scale-95" id="modal-content">
+            <div class="flex items-center justify-between mb-4 border-b pb-3">
+                <h3 class="text-xl font-bold text-slate-800" id="modal-title">
+                    <i class="fas fa-book-open text-blue-500 mr-2"></i>단일 퍼셉트론이란?
+                </h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 focus:outline-none">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div id="modal-message" class="text-slate-600 mb-6 leading-relaxed space-y-3">
+                <p><strong>단일 퍼셉트론(Single Perceptron)</strong>은 인간의 뇌 신경세포(뉴런) <strong>단 한 개</strong>가 동작하는 방식을 모방하여 만든 인공지능의 가장 기본 단위입니다.</p>
+                <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-sm mb-2">
+                    <span class="font-bold text-blue-700">💡 왜 '단일' 인가요?</span><br>
+                    중간에 생각하는 과정(은닉층) 없이, 입력된 정보가 즉시 하나의 결과로 연결되기 때문입니다. 구조가 단순하여 복잡한 판단은 어렵지만, 모든 인공지능 신경망의 뼈대가 됩니다.
+                </div>
+                <ul class="list-disc pl-5 space-y-2 mt-2">
+                    <li><span class="font-semibold text-blue-600">입력 (Input):</span> 우리가 고려해야 할 정보들 (예: 맛, 건강)</li>
+                    <li><span class="font-semibold text-green-600">가중치 (Weight):</span> 각 정보가 나에게 얼마나 중요한지 나타내는 정도 (중요도)</li>
+                    <li><span class="font-semibold text-orange-500">편향 (Bias):</span> 외부 정보와 상관없는 나의 기본 성향이나 조건 (예: 원래 배가 고픈 상태)</li>
+                </ul>
+                <p class="mt-3 bg-slate-50 p-3 rounded border border-slate-200 text-sm">
+                    <strong>작동 원리:</strong> 모든 (입력 × 가중치)를 더하고 편향을 합산합니다. 그 결과가 특정 기준(임계값, 보통 0)을 넘으면 행동(1)하고, 넘지 못하면 행동하지 않습니다(0).
+                </p>
+            </div>
+            <div class="flex justify-end">
+                <button onclick="closeModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors shadow-md">
+                    이해했습니다
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activation Function Modal -->
+    <div id="activation-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-[32rem] transform transition-transform scale-95" id="act-modal-content">
+            <div class="flex items-center justify-between mb-4 border-b pb-3">
+                <h3 class="text-xl font-bold text-slate-800">
+                    <i class="fas fa-filter text-blue-500 mr-2"></i>활성화 함수(Activation Function)란?
+                </h3>
+                <button onclick="closeActivationHelp()" class="text-slate-400 hover:text-slate-600 focus:outline-none">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="text-slate-600 mb-6 leading-relaxed space-y-3">
+                <p>퍼셉트론이 계산한 가중합(Σ) 결과를 바탕으로 <strong>최종 행동 여부를 결정하는 스위치</strong>입니다.</p>
+                <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-sm mb-2">
+                    단일 퍼셉트론에서는 주로 <strong>계단 함수(Step Function)</strong>라는 기준을 사용합니다. 특정 기준선(임계값, 여기서는 0)을 넘으면 켜지고, 아니면 꺼지는 단순한 원리입니다.
+                </div>
+                <ul class="list-disc pl-5 space-y-2 mt-2">
+                    <li>종합 점수(가중합)가 <strong>0보다 크면</strong> ➔ <span class="text-blue-600 font-bold">1 (먹는다!)</span></li>
+                    <li>종합 점수(가중합)가 <strong>0 이하이면</strong> ➔ <span class="text-red-500 font-bold">0 (참는다)</span></li>
+                </ul>
+            </div>
+            <div class="flex justify-end">
+                <button onclick="closeActivationHelp()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors shadow-md">
+                    확인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-slate-200 py-4 px-6 flex justify-between items-center shrink-0">
+        <h1 class="text-2xl font-bold text-slate-800 flex items-center gap-3">
+            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                <i class="fas fa-brain text-xl"></i>
+            </div>
+            단일 퍼셉트론 원리 학습기
+        </h1>
+        <div class="flex items-center gap-4">
+            <span class="text-sm text-slate-500 font-medium">단 하나의 인공지능 세포는 어떻게 결정을 내릴까?</span>
+            <button onclick="showHelp()" class="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-full text-sm font-bold transition-colors">
+                <i class="fas fa-question-circle"></i> 개념 설명 보기
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-hidden p-6 flex gap-6 h-full">
+        
+        <!-- Left Panel: Interactive Story & Controls -->
+        <div class="w-[45%] flex flex-col gap-4 overflow-y-auto pr-2">
+            
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 border-l-4 border-l-blue-500">
+                <h2 class="text-lg font-bold text-slate-800 mb-2">상황 설정: "이 햄버거를 먹을까, 말까?"</h2>
+                <p class="text-sm text-slate-600">당신(단일 퍼셉트론)은 눈앞의 음식을 먹을지 말지 결정해야 하는 <strong>단일 신경 세포</strong>입니다. 아래의 요인들을 조절하여 판단이 어떻게 변하는지 관찰해 보세요.</p>
+            </div>
+
+            <!-- Controls -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col gap-6 flex-1">
+                
+                <!-- Input 1 & Weight 1 -->
+                <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="bg-blue-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">X₁</div>
+                        <h3 class="font-bold text-slate-800">요인 1: 음식의 맛</h3>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="flex justify-between text-sm mb-1 font-medium">
+                            <span class="text-slate-600">현재 음식은 얼마나 맛있나요? (입력값)</span>
+                            <span id="val-x1" class="text-blue-600 font-bold">5 점</span>
+                        </div>
+                        <input type="range" id="slide-x1" min="0" max="10" step="1" value="5">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1"><span>맛없음(0)</span><span>최고의 맛(10)</span></div>
+                    </div>
+
+                    <div class="pt-3 border-t border-blue-100">
+                        <div class="flex justify-between text-sm mb-1 font-medium">
+                            <span class="text-slate-600">당신은 '맛'을 얼마나 중요하게 생각하나요? (가중치 W₁)</span>
+                            <span id="val-w1" class="text-green-600 font-bold">1.0</span>
+                        </div>
+                        <input type="range" id="slide-w1" min="-5" max="5" step="0.5" value="1.0">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1"><span>전혀 안 중요함(-5)</span><span>매우 중요함(+5)</span></div>
+                    </div>
+                </div>
+
+                <!-- Input 2 & Weight 2 -->
+                <div class="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="bg-emerald-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">X₂</div>
+                        <h3 class="font-bold text-slate-800">요인 2: 음식의 건강함</h3>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="flex justify-between text-sm mb-1 font-medium">
+                            <span class="text-slate-600">현재 음식은 얼마나 건강한가요? (입력값)</span>
+                            <span id="val-x2" class="text-blue-600 font-bold">2 점</span>
+                        </div>
+                        <input type="range" id="slide-x2" min="0" max="10" step="1" value="2">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1"><span>해로움(0)</span><span>완전 건강식(10)</span></div>
+                    </div>
+
+                    <div class="pt-3 border-t border-emerald-100">
+                        <div class="flex justify-between text-sm mb-1 font-medium">
+                            <span class="text-slate-600">당신은 '건강'을 얼마나 중요하게 생각하나요? (가중치 W₂)</span>
+                            <span id="val-w2" class="text-green-600 font-bold">-0.5</span>
+                        </div>
+                        <input type="range" id="slide-w2" min="-5" max="5" step="0.5" value="-0.5">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1"><span>오히려 싫어함(-5)</span><span>매우 중요함(+5)</span></div>
+                    </div>
+                </div>
+
+                <!-- Bias -->
+                <div class="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="bg-orange-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">b</div>
+                        <h3 class="font-bold text-slate-800">기본 성향: 배고픔 정도 (편향)</h3>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-sm mb-1 font-medium">
+                            <span class="text-slate-600">지금 얼마나 배가 고픈가요? (편향치)</span>
+                            <span id="val-b" class="text-orange-600 font-bold">-2.0</span>
+                        </div>
+                        <input type="range" id="slide-b" min="-10" max="10" step="1" value="-2">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1"><span>배부름(-10)</span><span>보통(0)</span><span>굶주림(+10)</span></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Right Panel: Visualization & Result -->
+        <div class="w-[55%] flex flex-col gap-6">
+            
+            <!-- Calculation Equation -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <i class="fas fa-calculator text-slate-400"></i> 퍼셉트론 내부 계산 (가중합)
+                </h2>
+                
+                <div class="bg-slate-800 text-white rounded-xl p-6 font-mono text-lg flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
+                    
+                    <!-- 변수 수식 추가 -->
+                    <div class="text-slate-400 font-mono text-base mb-3 opacity-80 z-10 font-medium tracking-widest border-b border-slate-600 pb-2 w-full text-center">
+                        (X₁ × W₁) + (X₂ × W₂) + b = Σ
+                    </div>
+
+                    <div class="flex items-center justify-center flex-wrap gap-2 text-center w-full relative z-10">
+                        <span class="text-slate-400">(</span>
+                        <span id="eq-x1" class="text-blue-300 font-bold">5</span>
+                        <span class="text-slate-400">×</span>
+                        <span id="eq-w1" class="text-green-300 font-bold">1.0</span>
+                        <span class="text-slate-400">)</span>
+                        <span class="text-slate-300 mx-2">+</span>
+                        
+                        <span class="text-slate-400">(</span>
+                        <span id="eq-x2" class="text-blue-300 font-bold">2</span>
+                        <span class="text-slate-400">×</span>
+                        <span id="eq-w2" class="text-green-300 font-bold">-0.5</span>
+                        <span class="text-slate-400">)</span>
+                        <span class="text-slate-300 mx-2">+</span>
+                        
+                        <span id="eq-b" class="text-orange-300 font-bold">-2.0</span>
+                        
+                        <span class="text-slate-300 mx-2">=</span>
+                        <span id="eq-sum" class="text-yellow-300 text-3xl font-black bg-slate-700 px-3 py-1 rounded-lg">2.0</span>
+                    </div>
+                    <div class="mt-4 text-sm text-slate-400 font-sans z-10">
+                        (입력1 × 중요도1) + (입력2 × 중요도2) + 기본성향 = 종합 점수(가중합)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visual Neural Network -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex-1 flex flex-col relative overflow-hidden min-h-[350px]">
+                <h2 class="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2 z-10 shrink-0">
+                    <i class="fas fa-project-diagram text-slate-400"></i> 신경망 정보 흐름
+                </h2>
+                
+                <div class="flex-1 relative w-full h-full mt-4">
+                    
+                    <!-- SVG Lines -->
+                    <svg class="absolute inset-0 w-full h-full pointer-events-none z-0">
+                        <defs>
+                            <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" />
+                            </marker>
+                            <marker id="arrow-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+                            </marker>
+                            <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+                            </marker>
+                        </defs>
+                        <!-- To Sum Node -->
+                        <line x1="15%" y1="20%" x2="50%" y2="50%" class="svg-line" id="line-w1" />
+                        <line x1="15%" y1="50%" x2="50%" y2="50%" class="svg-line" id="line-w2" />
+                        <line x1="15%" y1="80%" x2="50%" y2="50%" class="svg-line" id="line-b" />
+                        
+                        <!-- Output Line -->
+                        <line x1="50%" y1="50%" x2="85%" y2="50%" stroke="#475569" stroke-width="3" marker-end="url(#arrow-slate)" />
+                    </svg>
+
+                    <!-- Labels (HTML Elements for better responsiveness than SVG text) -->
+                    <div id="label-w1" class="absolute left-[32.5%] top-[35%] transform -translate-x-1/2 -translate-y-1/2 bg-white/90 px-2 py-0.5 rounded text-xs font-bold text-green-600 z-10 shadow-sm border border-slate-100 whitespace-nowrap">W1</div>
+                    <div id="label-w2" class="absolute left-[32.5%] top-[50%] transform -translate-x-1/2 -translate-y-1/2 bg-white/90 px-2 py-0.5 rounded text-xs font-bold text-green-600 z-10 shadow-sm border border-slate-100 whitespace-nowrap">W2</div>
+                    <div id="label-b" class="absolute left-[32.5%] top-[65%] transform -translate-x-1/2 -translate-y-1/2 bg-white/90 px-2 py-0.5 rounded text-xs font-bold text-orange-500 z-10 shadow-sm border border-slate-100 whitespace-nowrap">b</div>
+                    
+                    <!-- 활성화 함수 라벨에 버튼 추가 -->
+                    <div class="absolute left-[67.5%] top-[42%] transform -translate-x-1/2 -translate-y-1/2 bg-white/90 px-2 py-1 rounded text-xs font-bold text-slate-500 z-10 whitespace-nowrap shadow-sm border border-slate-100 flex items-center gap-1.5 cursor-pointer hover:bg-slate-50 transition-colors" onclick="showActivationHelp()">
+                        활성화 함수
+                        <button class="bg-blue-100 text-blue-600 hover:bg-blue-200 rounded-full w-4 h-4 flex items-center justify-center focus:outline-none transition-colors">
+                            <i class="fas fa-question text-[9px]"></i>
+                        </button>
+                    </div>
+                    <div class="absolute left-[67.5%] top-[57%] transform -translate-x-1/2 -translate-y-1/2 text-[10px] font-medium text-slate-400 z-10 whitespace-nowrap">(종합점수 > 0)</div>
+
+                    <!-- Inputs Nodes -->
+                    <div class="absolute left-[15%] top-[20%] transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10">
+                        <span class="text-xs font-bold text-slate-500 mb-1 whitespace-nowrap">맛 (X₁)</span>
+                        <div id="node-x1" class="w-14 h-14 rounded-full bg-blue-100 border-4 border-blue-400 flex items-center justify-center text-lg font-bold text-blue-700 shadow-md transition-all">5</div>
+                    </div>
+                    <div class="absolute left-[15%] top-[50%] transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10">
+                        <span class="text-xs font-bold text-slate-500 mb-1 whitespace-nowrap">건강 (X₂)</span>
+                        <div id="node-x2" class="w-14 h-14 rounded-full bg-emerald-100 border-4 border-emerald-400 flex items-center justify-center text-lg font-bold text-emerald-700 shadow-md transition-all">2</div>
+                    </div>
+                    <div class="absolute left-[15%] top-[80%] transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10">
+                        <span class="text-xs font-bold text-slate-500 mb-1 whitespace-nowrap">편향 (b)</span>
+                        <div class="w-14 h-14 rounded-full bg-orange-100 border-4 border-orange-400 flex items-center justify-center text-lg font-bold text-orange-700 shadow-md">1</div>
+                    </div>
+
+                    <!-- Summation Node -->
+                    <div class="absolute left-[50%] top-[50%] transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10">
+                        <span class="text-xs font-bold text-slate-500 mb-1 whitespace-nowrap">합산 (Σ)</span>
+                        <div id="node-sum" class="w-20 h-20 rounded-full bg-slate-800 border-4 border-slate-600 flex items-center justify-center text-2xl font-black text-yellow-300 shadow-xl transition-all">2.0</div>
+                    </div>
+
+                    <!-- Final Output Node -->
+                    <div class="absolute left-[85%] top-[50%] transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 w-28 md:w-32">
+                        <span class="text-xs font-bold text-slate-500 mb-1 whitespace-nowrap">최종 결정</span>
+                        <div id="result-box" class="w-full py-4 rounded-xl border-4 flex flex-col items-center justify-center shadow-lg transition-all node-pulse bg-blue-100 border-blue-500 text-blue-700">
+                            <i id="result-icon" class="fas fa-hamburger text-2xl md:text-3xl mb-1 md:mb-2"></i>
+                            <span id="result-text" class="font-black text-sm md:text-lg whitespace-nowrap">먹는다! (1)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activation Threshold Bar -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <h3 class="text-sm font-bold text-slate-600 mb-3 flex justify-between">
+                    <span>판단 게이지 (임계값: 0)</span>
+                    <span id="gauge-text" class="text-blue-600">기준 초과! 행동 실행</span>
+                </h3>
+                <div class="h-6 w-full bg-slate-200 rounded-full relative overflow-hidden flex">
+                    <!-- Base line -->
+                    <div class="absolute left-1/2 top-0 bottom-0 w-1 bg-slate-800 z-10 transform -translate-x-1/2"></div>
+                    <div class="absolute left-1/2 -top-1 font-bold text-xs text-slate-800 transform -translate-x-1/2 -mt-4">0</div>
+                    
+                    <!-- Progress fill -->
+                    <div class="w-1/2 h-full flex justify-end">
+                        <div id="gauge-fill-negative" class="h-full bg-red-400 transition-all w-0"></div>
+                    </div>
+                    <div class="w-1/2 h-full flex justify-start">
+                        <div id="gauge-fill-positive" class="h-full bg-blue-500 transition-all w-0"></div>
+                    </div>
+                </div>
+                <div class="flex justify-between text-xs text-slate-400 mt-2 font-bold">
+                    <span>행동 안함 (결과: 0)</span>
+                    <span>행동 함 (결과: 1)</span>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // Modal Functions
+        function showHelp() {
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('modal-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('modal-content');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        // 활성화 함수 모달 관련 함수 추가
+        function showActivationHelp() {
+            const modal = document.getElementById('activation-modal');
+            const content = document.getElementById('act-modal-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeActivationHelp() {
+            const modal = document.getElementById('activation-modal');
+            const content = document.getElementById('act-modal-content');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        // Initialize and Update Simulator
+        function calculateAndUpdate() {
+            // 1. Get Values
+            const x1 = parseFloat(document.getElementById('slide-x1').value);
+            const w1 = parseFloat(document.getElementById('slide-w1').value);
+            const x2 = parseFloat(document.getElementById('slide-x2').value);
+            const w2 = parseFloat(document.getElementById('slide-w2').value);
+            const b = parseFloat(document.getElementById('slide-b').value);
+
+            // 2. Compute
+            const val1 = x1 * w1;
+            const val2 = x2 * w2;
+            const sum = val1 + val2 + b;
+            const output = sum > 0 ? 1 : 0;
+
+            // 3. Update Text Values
+            document.getElementById('val-x1').innerText = `${x1} 점`;
+            document.getElementById('val-w1').innerText = w1.toFixed(1);
+            document.getElementById('val-x2').innerText = `${x2} 점`;
+            document.getElementById('val-w2').innerText = w2.toFixed(1);
+            document.getElementById('val-b').innerText = b.toFixed(1);
+
+            document.getElementById('eq-x1').innerText = x1;
+            document.getElementById('eq-w1').innerText = w1.toFixed(1);
+            document.getElementById('eq-x2').innerText = x2;
+            document.getElementById('eq-w2').innerText = w2.toFixed(1);
+            document.getElementById('eq-b').innerText = b >= 0 ? `+${b.toFixed(1)}` : b.toFixed(1);
+            
+            document.getElementById('eq-sum').innerText = sum.toFixed(1);
+            
+            // Node updates
+            document.getElementById('node-x1').innerText = x1;
+            document.getElementById('node-x2').innerText = x2;
+            document.getElementById('node-sum').innerText = sum.toFixed(1);
+
+            // 4. Update Colors & Visualization
+            const getLineColor = (val) => val >= 0 ? '#3b82f6' : '#ef4444'; // Blue if positive effect, Red if negative
+            const getLineThickness = (val) => Math.max(2, Math.min(10, Math.abs(val) * 2));
+
+            // Line W1
+            const lineW1 = document.getElementById('line-w1');
+            lineW1.setAttribute('stroke', getLineColor(w1));
+            lineW1.setAttribute('stroke-width', getLineThickness(w1));
+            lineW1.setAttribute('marker-end', w1 >= 0 ? 'url(#arrow-blue)' : 'url(#arrow-red)');
+            document.getElementById('label-w1').innerText = `W1: ${w1.toFixed(1)}`;
+
+            // Line W2
+            const lineW2 = document.getElementById('line-w2');
+            lineW2.setAttribute('stroke', getLineColor(w2));
+            lineW2.setAttribute('stroke-width', getLineThickness(w2));
+            lineW2.setAttribute('marker-end', w2 >= 0 ? 'url(#arrow-blue)' : 'url(#arrow-red)');
+            document.getElementById('label-w2').innerText = `W2: ${w2.toFixed(1)}`;
+
+            // Line Bias
+            const lineB = document.getElementById('line-b');
+            lineB.setAttribute('stroke', getLineColor(b));
+            lineB.setAttribute('stroke-width', Math.max(2, Math.min(10, Math.abs(b))));
+            lineB.setAttribute('marker-end', b >= 0 ? 'url(#arrow-blue)' : 'url(#arrow-red)');
+            document.getElementById('label-b').innerText = `b: ${b.toFixed(1)}`;
+
+            // Sum Node Color
+            const sumNode = document.getElementById('node-sum');
+            if(sum > 0) {
+                sumNode.classList.replace('text-red-400', 'text-yellow-300');
+                document.getElementById('eq-sum').classList.replace('text-red-400', 'text-yellow-300');
+            } else {
+                sumNode.classList.replace('text-yellow-300', 'text-red-400');
+                document.getElementById('eq-sum').classList.replace('text-yellow-300', 'text-red-400');
+            }
+
+            // Gauge Bar Update
+            // Max possible sum roughly is (10*5) + (10*5) + 10 = 110, Min is (10*-5) + (10*-5) - 10 = -110
+            // Let's normalize it to max 50 for gauge visual
+            const maxGauge = 50; 
+            const gaugePercent = Math.min(100, (Math.abs(sum) / maxGauge) * 100);
+            
+            const fillPos = document.getElementById('gauge-fill-positive');
+            const fillNeg = document.getElementById('gauge-fill-negative');
+            const gaugeText = document.getElementById('gauge-text');
+
+            if (sum > 0) {
+                fillPos.style.width = `${gaugePercent}%`;
+                fillNeg.style.width = `0%`;
+                gaugeText.innerText = "기준 초과! 행동 실행";
+                gaugeText.className = "text-blue-600";
+            } else {
+                fillPos.style.width = `0%`;
+                fillNeg.style.width = `${gaugePercent}%`;
+                gaugeText.innerText = "기준 미달... 행동 안함";
+                gaugeText.className = "text-red-500";
+            }
+
+            // Final Result Update
+            const resultBox = document.getElementById('result-box');
+            const resultIcon = document.getElementById('result-icon');
+            const resultText = document.getElementById('result-text');
+
+            if (output === 1) {
+                resultBox.className = "w-full py-4 rounded-xl border-4 flex flex-col items-center justify-center shadow-lg transition-all node-pulse bg-blue-100 border-blue-500 text-blue-700";
+                resultIcon.className = "fas fa-hamburger text-3xl mb-2";
+                resultText.innerText = "먹는다! (1)";
+            } else {
+                resultBox.className = "w-full py-4 rounded-xl border-4 flex flex-col items-center justify-center shadow-lg transition-all bg-slate-100 border-slate-400 text-slate-500 opacity-80";
+                resultIcon.className = "fas fa-times-circle text-3xl mb-2";
+                resultText.innerText = "참는다 (0)";
+            }
+        }
+
+        // Attach Event Listeners
+        const inputs = ['slide-x1', 'slide-w1', 'slide-x2', 'slide-w2', 'slide-b'];
+        inputs.forEach(id => {
+            document.getElementById(id).addEventListener('input', calculateAndUpdate);
+        });
+
+        // Initialize on load
+        window.onload = () => {
+            calculateAndUpdate();
+        };
+    </script>
+</body>
+</html>

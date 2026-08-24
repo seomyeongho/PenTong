@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>문서 취합</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            user-select: none;
+            background-color: white;
+        }
+
+        .drag-handle {
+            cursor: grab;
+        }
+
+            .drag-handle:active {
+                cursor: grabbing;
+            }
+
+        .ghost {
+            opacity: 0.5;
+            background: #e2e8f0;
+            border: 1px dashed #3b82f6;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+
+        /* 드래그 오버레이 */
+        #dragOverlay {
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+
+            #dragOverlay.active {
+                pointer-events: auto;
+                opacity: 1;
+            }
+    </style>
+</head>
+<body class="h-full flex flex-col overflow-hidden relative">
+
+    <!-- Main Content -->
+    <main class="flex-1 min-h-0 flex flex-col p-4 gap-3 relative z-10">
+
+        <!-- [1] 제목 영역 -->
+        <div class="shrink-0 px-1 border-b border-gray-100 pb-2">
+            <h2 class="text-2xl font-bold text-gray-800 tracking-tight flex items-center gap-2">
+                <span class="text-blue-600">📄</span> 한글 파일 취합하기
+            </h2>
+        </div>
+
+        <!-- [2] 컨트롤 툴바 (버튼 모음) -->
+        <div class="bg-white p-2 rounded-lg border border-gray-200 shadow-sm flex flex-wrap gap-2 justify-between items-center shrink-0">
+            <!-- 왼쪽: 파일 추가/정렬/초기화 -->
+            <div class="flex gap-2 items-center">
+                <button onclick="addFiles()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded shadow-sm flex items-center gap-1 transition font-bold text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    파일 추가
+                </button>
+
+                <div class="h-6 w-px bg-gray-300 mx-1"></div>
+
+                <div class="flex border border-gray-300 rounded overflow-hidden">
+                    <button onclick="sortFiles('asc')" class="bg-white hover:bg-gray-50 text-gray-700 px-2 py-1.5 text-xs border-r border-gray-300 flex items-center gap-1" title="이름 오름차순">
+                        이름 ▲
+                    </button>
+                    <button onclick="sortFiles('desc')" class="bg-white hover:bg-gray-50 text-gray-700 px-2 py-1.5 text-xs flex items-center gap-1" title="이름 내림차순">
+                        이름 ▼
+                    </button>
+                </div>
+
+                <button onclick="clearList()" class="bg-gray-400 hover:bg-gray-500 text-white px-2 py-1.5 rounded shadow-sm text-xs transition">
+                    초기화
+                </button>
+            </div>
+
+            <!-- 오른쪽: 파일 개수 및 취합 버튼 -->
+            <div class="flex items-center gap-3">
+                <div class="text-xs text-gray-500 text-right hidden sm:block">
+                    <div class="font-bold text-blue-600"><span id="fileCount">0</span>개</div>
+                    <div class="text-[10px] text-gray-400">파일 선택됨</div>
+                </div>
+                <!-- 도움말 버튼 -->
+                <button onclick="openHelpModal()" class="bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-2 rounded-lg border border-gray-300 shadow-sm transition flex items-center gap-1.5 font-bold text-sm">
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    도움말
+                </button>
+                <!-- [핵심] 취합 시작 버튼 -->
+                <button onclick="initiateMerge()" id="mergeBtn" class="bg-[#2563eb] hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg shadow-md transform active:scale-95 transition flex items-center gap-2 font-bold text-sm">
+                    <span>취합 시작하기</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- [3] 파일 리스트 영역 -->
+        <div class="bg-white flex-1 min-h-0 rounded-lg border border-gray-200 shadow-sm flex flex-col relative overflow-hidden">
+            <div class="bg-gray-100 p-2 border-b border-gray-200 grid grid-cols-12 text-xs font-bold text-gray-500 uppercase tracking-wide shrink-0 z-10">
+                <div class="col-span-1 text-center">No.</div>
+                <div class="col-span-10 pl-2">파일 정보 (경로 > 파일명)</div>
+                <div class="col-span-1 text-center">삭제</div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-1 flex flex-col relative" id="listContainer">
+                <ul id="fileList" class="space-y-1 w-full hidden"></ul>
+
+                <!-- 빈 상태 안내 -->
+                <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-white z-0">
+                    <div class="w-16 h-16 mb-3 rounded-full bg-gray-50 flex items-center justify-center border-2 border-dashed border-gray-300">
+                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    </div>
+                    <p class="text-sm font-bold text-gray-500">파일 추가 버튼을 누르거나 파일을 이곳에 끌어다 놓으세요</p>
+                    <p class="text-xs text-gray-400 mt-1">한글(HWP, HWPX) 파일 지원</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 드래그 오버레이 -->
+    <div id="dragOverlay" class="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm bg-blue-500 bg-opacity-10 border-4 border-dashed border-blue-500 m-4 rounded-2xl pointer-events-none">
+        <div class="bg-white p-8 rounded-2xl shadow-xl text-center">
+            <div class="w-20 h-20 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">여기에 한글 파일을 놓으세요</h2>
+            <p class="text-gray-500">여러 개의 .hwp, .hwpx 파일을 한 번에 추가할 수 있습니다.</p>
+        </div>
+    </div>
+
+    <!-- 커스텀 모달 (알림창 대체) -->
+    <div id="customModal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-40 transition-opacity" onclick="closeModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="bg-white rounded-lg shadow-xl w-80 transform transition-all pointer-events-auto p-5 text-center">
+                <div id="modalIcon" class="mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-blue-100 mb-3"></div>
+                <h3 id="modalTitle" class="text-base leading-6 font-bold text-gray-900 mb-1">알림</h3>
+                <div class="mt-1"><p id="modalMessage" class="text-sm text-gray-500 break-words whitespace-pre-wrap">내용</p></div>
+                <div class="mt-4">
+                    <button onclick="closeModal()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none transition">확인</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 도움말 모달 -->
+    <div id="helpModal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-40 transition-opacity" onclick="closeHelpModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-full flex flex-col transform transition-all pointer-events-auto overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        한글 파일 취합 도움말
+                    </h3>
+                    <button onclick="closeHelpModal()" class="text-gray-400 hover:text-gray-600 hover:bg-gray-200 p-1 rounded-full focus:outline-none transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="p-5 overflow-y-auto text-sm text-gray-600 space-y-4">
+                    <div>
+                        <h4 class="font-bold text-gray-800 mb-1 flex items-center gap-1.5"><span class="bg-gray-200 text-gray-700 w-5 h-5 rounded-full inline-flex items-center justify-center text-xs">1</span> 파일 추가</h4>
+                        <p class="pl-6 leading-relaxed">상단의 <span class="bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-semibold text-xs border border-green-200">파일 추가</span> 버튼을 누르거나 <strong>파일을 화면에 드래그 앤 드롭</strong>하여 한글 문서를 선택합니다.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-800 mb-1 flex items-center gap-1.5"><span class="bg-gray-200 text-gray-700 w-5 h-5 rounded-full inline-flex items-center justify-center text-xs">2</span> 순서 변경 및 정렬</h4>
+                        <p class="pl-6 leading-relaxed">목록에서 항목을 <strong class="text-blue-600">마우스로 드래그</strong>하여 위아래로 순서를 바꿀 수 있습니다. 목록 위에서부터 아래 순서로 문서가 합쳐집니다.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-800 mb-1 flex items-center gap-1.5"><span class="bg-gray-200 text-gray-700 w-5 h-5 rounded-full inline-flex items-center justify-center text-xs">3</span> 취합 실행</h4>
+                        <p class="pl-6 leading-relaxed">순서가 정해지면 <span class="bg-blue-600 text-white px-1.5 py-0.5 rounded font-semibold text-xs">취합 시작하기</span> 버튼을 누릅니다.</p>
+                    </div>
+
+                    <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200 text-yellow-800 text-xs mt-2 shadow-sm">
+                        <strong class="flex items-center gap-1.5 mb-2 text-yellow-900 text-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                            중요: 보안 경고창 발생 시
+                        </strong>
+                        <p class="leading-relaxed">
+                            취합 과정 중 한글 프로그램에서 <strong>"위 파일에 접근하려는 시도가 있습니다..."</strong> 라는 경고창이 나타날 수 있습니다.<br>
+                            이는 정상적인 과정이므로 반드시 <strong class="bg-white border border-gray-300 px-1.5 py-1 rounded text-gray-800 font-bold shadow-sm inline-block mt-1 mx-0.5">모두 허용(N)</strong> 버튼을 클릭해 주셔야 취합이 완료됩니다.
+                        </p>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 shrink-0">
+                    <button onclick="closeHelpModal()" class="w-full justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-bold text-gray-700 hover:bg-gray-50 focus:outline-none transition active:scale-[0.98]">확인 및 닫기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로딩바 -->
+    <div id="loading" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm mx-4">
+            <div class="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-t-blue-600 mx-auto mb-4"></div>
+            <h2 class="text-lg font-bold text-gray-800 mb-1">문서 취합 중...</h2>
+            <p class="text-xs text-gray-500">잠시만 기다려주세요.</p>
+        </div>
+    </div>
+
+    <input type="file" id="browserFileInput" multiple class="hidden" accept=".hwp,.hwpx">
+
+    <script>
+        // pywebview 객체 연동
+        function getApi() {
+            if (window.pywebview) return window.pywebview;
+            if (window.parent && window.parent.pywebview) return window.parent.pywebview;
+            return null;
+        }
+
+        const fileListEl = document.getElementById('fileList');
+        const emptyState = document.getElementById('empty-state');
+        const fileCountEl = document.getElementById('fileCount');
+        const mergeBtn = document.getElementById('mergeBtn');
+        const loadingEl = document.getElementById('loading');
+        const browserFileInput = document.getElementById('browserFileInput');
+
+        // 커스텀 모달 엘리먼트
+        const customModal = document.getElementById('customModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        const modalIcon = document.getElementById('modalIcon');
+
+        let files = [];
+
+        // 드래그로 순서 변경
+        new Sortable(fileListEl, {
+            animation: 150,
+            ghostClass: 'ghost',
+            handle: '.drag-handle',
+            onEnd: function () { updateFileArrayFromDOM(); renderList(); }
+        });
+
+        function getFileName(path) { return path.split(/[\\/]/).pop(); }
+        function getDirName(path) {
+            const name = getFileName(path);
+            let dir = path.slice(0, -name.length);
+            if (dir.endsWith('\\') || dir.endsWith('/')) dir = dir.slice(0, -1);
+            return dir;
+        }
+
+        function updateUI() {
+            if (files.length === 0) {
+                emptyState.classList.remove('hidden');
+                fileListEl.classList.add('hidden');
+                mergeBtn.disabled = true;
+            } else {
+                emptyState.classList.add('hidden');
+                fileListEl.classList.remove('hidden');
+                mergeBtn.disabled = false;
+            }
+            fileCountEl.innerText = files.length;
+        }
+
+        function renderList() {
+            fileListEl.innerHTML = '';
+            files.forEach((path, index) => {
+                const fileName = getFileName(path);
+                const dirName = getDirName(path);
+                const li = document.createElement('li');
+                li.className = 'bg-white border border-gray-200 rounded p-1.5 flex items-center hover:shadow-sm transition group select-none text-sm z-10 relative';
+                li.dataset.path = path;
+                li.innerHTML = `
+                                    <div class="w-8 text-center cursor-grab drag-handle text-gray-400 font-mono text-xs flex-shrink-0 h-full flex items-center justify-center">${index + 1}</div>
+                                    <div class="flex-1 flex items-center overflow-hidden px-2 cursor-grab drag-handle h-full">
+                                        <div class="text-xs text-gray-400 truncate max-w-[40%] mr-2 font-mono" title="${dirName}">${dirName}</div>
+                                        <span class="text-gray-300 mr-2">/</span>
+                                        <div class="font-bold text-gray-700 truncate" title="${fileName}">${fileName}</div>
+                                    </div>
+                                    <button onclick="removeFile(${index})" class="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition flex-shrink-0" title="삭제">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>`;
+                fileListEl.appendChild(li);
+            });
+            updateUI();
+        }
+
+        function sortFiles(order) {
+            files.sort((a, b) => {
+                const nameA = getFileName(a).toLowerCase();
+                const nameB = getFileName(b).toLowerCase();
+                if (nameA < nameB) return order === 'asc' ? -1 : 1;
+                if (nameA > nameB) return order === 'asc' ? 1 : -1;
+                return 0;
+            });
+            renderList();
+        }
+
+        // [수동 파일 추가] 파이썬 API를 호출하여 진짜 절대 경로를 받아옴
+        async function addFiles() {
+            const pyApi = getApi();
+            if (pyApi) {
+                try {
+                    const selectedFiles = await pyApi.api.select_files();
+                    if (selectedFiles && selectedFiles.length > 0) {
+                        window.addDroppedFiles(selectedFiles);
+                    }
+                } catch (e) { showModal("오류", "파일 선택 기능을 실행할 수 없습니다.", true); }
+            } else {
+                browserFileInput.click();
+            }
+        }
+
+        // ==========================================
+        // [드래그 앤 드롭 프론트엔드 제어]
+        // ==========================================
+        const dragOverlay = document.getElementById('dragOverlay');
+
+        document.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            // [핵심] 마우스가 iframe 안으로 들어오면, 부모 창(index.html)의 투명 방패를 강제로 활성화합니다.
+            if (window.parent && window.parent.document) {
+                const shield = window.parent.document.getElementById('global-drop-zone');
+                if (shield) {
+                    shield.classList.add('active');
+                }
+            }
+            dragOverlay.classList.remove('hidden'); // 내부 파란색 안내창 켜기
+        });
+
+        document.addEventListener('dragover', (e) => e.preventDefault());
+
+        document.addEventListener('dragleave', (e) => {
+            dragOverlay.classList.add('hidden'); // 내부 안내창 끄기
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragOverlay.classList.add('hidden');
+            // 부모 방패가 덮이기 전에 아주 빠르게 드롭된 경우, 브라우저가 파일을 여는 것만 방지
+        });
+
+        // 🛑 파이썬에서 진짜 절대 경로를 추출해 이 함수를 찔러줍니다!
+        window.addDroppedFiles = function (paths) {
+            let addedCount = 0;
+            paths.forEach(path => {
+                const lowerPath = path.toLowerCase();
+                if (lowerPath.endsWith('.hwp') || lowerPath.endsWith('.hwpx')) {
+                    if (!files.includes(path)) {
+                        files.push(path);
+                        addedCount++;
+                    }
+                }
+            });
+            if (addedCount > 0) renderList();
+            else showModal("알림", "추가할 수 있는 한글 파일이 없거나 이미 목록에 있습니다.", true);
+        };
+
+        // 브라우저 환경 테스트용 fallback (실제 데스크톱 앱에선 거의 안 쓰임)
+        browserFileInput.addEventListener('change', function (e) {
+            let newPaths = [];
+            Array.from(e.target.files).forEach(file => {
+                newPaths.push(file.path || file.name);
+            });
+            window.addDroppedFiles(newPaths);
+            this.value = '';
+        });
+
+        function removeFile(index) { files.splice(index, 1); renderList(); }
+        function clearList() { files = []; renderList(); }
+
+        function updateFileArrayFromDOM() {
+            const newOrder = [];
+            fileListEl.querySelectorAll('li').forEach(item => { if (item.dataset.path) newOrder.push(item.dataset.path); });
+            files = newOrder;
+        }
+
+        // 커스텀 모달 제어
+        function showModal(title, message, isError = false) {
+            modalTitle.innerText = title;
+            modalMessage.innerText = message;
+
+            if (isError) {
+                modalIcon.className = "mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-red-100 mb-3";
+                modalIcon.innerHTML = `<svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+            } else {
+                modalIcon.className = "mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-blue-100 mb-3";
+                modalIcon.innerHTML = `<svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+            }
+            customModal.classList.remove('hidden');
+        }
+
+        function closeModal() { customModal.classList.add('hidden'); }
+
+        async function initiateMerge() {
+            if (files.length < 2) {
+                showModal("알림", "최소 2개 이상의 파일이 필요합니다.", true);
+                return;
+            }
+            const pyApi = getApi();
+            if (pyApi) {
+                try {
+                    loadingEl.classList.remove('hidden');
+                    setTimeout(async () => {
+                        try {
+                            const result = await pyApi.api.merge_hwp_files(files);
+                            loadingEl.classList.add('hidden');
+                            if (result.success) {
+                                showModal("완료", "한글 프로그램 창이 열렸습니다.\n내용을 확인하세요.");
+                            } else {
+                                showModal("실패", `오류가 발생했습니다.\n${result.message}`, true);
+                            }
+                        } catch (innerErr) {
+                            loadingEl.classList.add('hidden');
+                            showModal("실패", "작업 중 오류 발생: " + innerErr, true);
+                        }
+                    }, 100);
+                } catch (error) {
+                    loadingEl.classList.add('hidden');
+                    showModal("시스템 오류", "알 수 없는 오류 발생", true);
+                }
+            } else {
+                loadingEl.classList.remove('hidden');
+                setTimeout(() => {
+                    loadingEl.classList.add('hidden');
+                    showModal("테스트 알림", "[주의] 실제 앱(Python) 환경에서 실행해야 정상 병합됩니다.");
+                }, 1000);
+            }
+        }
+
+        function openHelpModal() { document.getElementById('helpModal').classList.remove('hidden'); }
+        function closeHelpModal() { document.getElementById('helpModal').classList.add('hidden'); }
+
+        updateUI();
+    </script>
+</body>
+</html>

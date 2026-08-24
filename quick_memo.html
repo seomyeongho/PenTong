@@ -1,0 +1,1073 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>퀵 메모</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: #e9ecef;
+            overflow-y: auto; /* 아래로 길어지면 세로 스크롤 생성 */
+            overflow-x: hidden; /* 가로 스크롤은 방지 */
+            min-height: 100vh; /* 고정 높이 대신 최소 높이로 변경 */
+            position: relative;
+            background-image: radial-gradient(#d1d5db 1px, transparent 1px), radial-gradient(#d1d5db 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+            /* 메인 화면 전체 스크롤바 디자인 */
+            body::-webkit-scrollbar {
+                width: 10px;
+            }
+
+            body::-webkit-scrollbar-thumb {
+                background-color: rgba(0,0,0,0.3);
+                border-radius: 5px;
+            }
+
+            body::-webkit-scrollbar-track {
+                background: transparent;
+            }
+        /* 상단 툴바 */
+        .toolbar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 9999;
+            display: flex; /* 버튼들을 가로로 나란히 배치 */
+            gap: 10px; /* 버튼 사이의 간격 */
+        }
+
+        .add-btn {
+            background-color: #217346;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .add-btn:hover { background-color: #1a5c38; }
+        .add-btn:active { transform: scale(0.95); }
+
+        /* 메모장 컨테이너 (보드) */
+        #board {
+            width: 100vw;
+            min-height: 100vh; /* 변경 */
+            position: relative;
+        }
+
+        /* 포스트잇 (메모) 스타일 */
+        .memo {
+            position: absolute;
+            /* width, height는 이제 JS에서 인라인으로 직접 제어합니다 */
+            min-width: 50px; /* 너무 작아지지 않도록 제한 */
+            min-height: 50px;
+            background-color: #ffeaa7; /* 기본 노란색 */
+            box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.2);
+            border-radius: 2px;
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow 0.2s;
+            resize: both; /* 우측 하단 드래그로 크기 조절 허용 */
+            overflow: hidden; /* 크기 조절 핸들을 표시하기 위해 필수 */
+        }
+
+        .memo.dragging {
+            box-shadow: 8px 12px 20px rgba(0, 0, 0, 0.4);
+            opacity: 0.9;
+        }
+
+        /* 드래그 가능한 헤더 영역 */
+        .memo-header {
+            height: 30px;
+            background-color: rgba(0, 0, 0, 0.05);
+            cursor: grab;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0 5px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .memo-header:active { cursor: grabbing; }
+
+        /* 메모장 컨트롤 버튼들: 공간 확보를 위해 평소엔 아예 제거 */
+        .memo-controls {
+            display: none; /* 공간 차지 안 함 */
+            gap: 2px;
+            align-items: center;
+        }
+
+        /* 호버 시에만 아이콘들이 나타나며 제목 영역이 자연스럽게 줄어듦 */
+        .memo:hover .memo-controls {
+            display: flex;
+        }
+
+        /* 제목 입력창 스타일 보완 */
+        .memo-title-input {
+            flex: 1;
+            font-size: 12px;
+            color: #333;
+            padding: 0 5px;
+            font-weight: bold;
+            background: transparent;
+            border: 1px solid transparent;
+            outline: none;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+            min-width: 0; /* flex 환경에서 width 100% 확장을 위해 필수 */
+        }
+
+            /* 평상시에는 힌트(제목 입력)를 완벽하게 숨김 */
+            .memo-title-input::placeholder {
+                opacity: 0 !important;
+                color: #999;
+                transition: opacity 0.2s; /* 스르륵 나타나게 부드러운 효과 추가 */
+            }
+
+        /* 마우스를 올렸을 때만 힌트가 나타남 */
+        .memo:hover .memo-title-input::placeholder {
+            opacity: 1 !important;
+        }
+
+        /* 잠금 상태일 때는 마우스를 빼도 자물쇠가 살짝 보이게 유지 */
+        .memo.locked:not(:hover) .memo-controls {
+            opacity: 0.5;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+
+        .icon-btn:hover { background-color: rgba(0, 0, 0, 0.1); }
+        .delete-btn { color: #d63031; }
+        .color-btn { color: #0984e3; }
+
+
+        /* 텍스트 입력 영역 */
+        .memo-content {
+            flex: 1;
+            padding: 10px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* 내용이 길어져도 메모장 밖으로 뚫고 나가지 않게 방지 */
+        }
+
+        .memo-textarea {
+            width: 100%;
+            flex: 1;
+            border: none;
+            background: transparent;
+            resize: none;
+            font-family: 'Malgun Gothic', sans-serif;
+            font-size: 15px;
+            line-height: 1.5;
+            color: #2d3436;
+            outline: none;
+            overflow-y: auto; /* 내용이 넘치면 마우스 휠 스크롤 활성화 */
+        }
+
+        /* --- 메모 접기(롤업) 관련 스타일 --- */
+        .memo.folded {
+            height: 30px !important; /* 헤더 높이만큼만 남김 */
+            min-height: 30px !important; /* 최소 높이 제한 무시 */
+            resize: none !important; /* 접혀있을 때는 크기 조절 금지 */
+            padding-bottom: 0;
+        }
+
+            .memo.folded .memo-content {
+                display: none; /* 접혀있을 때는 내용 영역을 완전히 숨김 */
+            }
+
+        .fold-btn {
+            color: #636e72;
+            font-weight: bold;
+        }
+
+        /* --- 커스텀 모달 (팝업) 스타일 --- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-box {
+            background-color: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+            min-width: 300px;
+            transform: translateY(-20px);
+            transition: transform 0.2s ease;
+        }
+
+        .modal-overlay.active .modal-box { transform: translateY(0); }
+        .modal-title { font-size: 18px; font-weight: bold; color: #333; margin-top: 0; margin-bottom: 10px; }
+        .modal-desc { font-size: 14px; color: #666; margin-bottom: 25px; }
+        .modal-buttons { display: flex; justify-content: center; gap: 10px; }
+        
+        .btn {
+            padding: 8px 20px; border: none; border-radius: 4px;
+            cursor: pointer; font-size: 14px; font-weight: bold; transition: background-color 0.2s;
+        }
+        .btn-cancel { background-color: #f1f1f1; color: #333; }
+        .btn-cancel:hover { background-color: #e0e0e0; }
+        .btn-confirm { background-color: #d63031; color: white; }
+        .btn-confirm:hover { background-color: #c0392b; }
+
+        /* --- 체크리스트 관련 스타일 --- */
+        .checklist-container {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            display: none;
+            box-sizing: border-box;
+        }
+
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+
+            .check-item input[type="checkbox"] {
+                width: 16px;
+                height: 16px;
+                cursor: pointer;
+                flex-shrink: 0;
+                margin: 0;
+            }
+
+            .check-item input[type="text"] {
+                flex: 1;
+                border: none;
+                background: transparent;
+                outline: none;
+                font-family: 'Malgun Gothic', sans-serif;
+                font-size: 15px;
+                color: #2d3436;
+                min-width: 0;
+            }
+
+        .check-item.done input[type="text"] {
+            text-decoration: line-through;
+            color: #a4b0be;
+        }
+
+        /* --- 커스텀 스크롤바 디자인 (마우스 호버 시에만 표시) --- */
+        .memo-textarea::-webkit-scrollbar,
+        .checklist-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .memo-textarea::-webkit-scrollbar-thumb,
+        .checklist-container::-webkit-scrollbar-thumb {
+            background-color: transparent; /* 평소에는 투명하게 숨김 */
+            border-radius: 3px;
+        }
+
+        /* 메모장에 마우스를 올렸을 때만 스크롤바 색상을 입혀서 보여줌 */
+        .memo:hover .memo-textarea::-webkit-scrollbar-thumb,
+        .memo:hover .checklist-container::-webkit-scrollbar-thumb {
+            background-color: rgba(0,0,0,0.2);
+        }
+
+        .memo-textarea::-webkit-scrollbar-track,
+        .checklist-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+
+        /* --- 내용 잠금 관련 스타일 --- */
+        .memo.locked {
+            resize: none !important; /* 잠기면 크기 조절 금지 */
+        }
+
+            .memo.locked .delete-btn,
+            .memo.locked .color-btn,
+            .memo.locked .check-btn,
+            .memo.locked .opacity-btn {
+                display: none; /* 잠기면 투명도 조절 버튼도 숨김 */
+            }
+
+            .memo.locked .memo-textarea {
+                cursor: default;
+            }
+
+            .memo.locked .check-item input[type="text"],
+            .memo.locked .check-item input[type="checkbox"] {
+                pointer-events: none; /* 잠기면 체크리스트 클릭 방지 */
+            }
+        /* --- 메모 제목 스타일 (인라인 수정 가능) --- */
+        .memo-title-input {
+            flex: 1;
+            font-size: 12px;
+            color: #333;
+            padding: 0 5px;
+            font-weight: bold;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 3px;
+            outline: none;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+            min-width: 0;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+            .memo-title-input:focus {
+                background-color: rgba(255, 255, 255, 0.7);
+                border-color: rgba(0, 0, 0, 0.2);
+            }
+
+            .memo-title-input::placeholder {
+                color: #777; /* 직접 쓴 제목이 없을 때 보여줄 첫 줄 색상 */
+                font-weight: normal;
+            }
+
+        .memo.folded .memo-title {
+            display: block; /* 접혔을 때만 표시 */
+        }
+
+        /* 3. 더보기 메뉴 클래스 (복잡함 해소용) */
+        .more-menu {
+            display: none; /* 평소엔 숨김 */
+            position: absolute;
+            top: 30px;
+            right: 5px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            padding: 5px 0;
+            min-width: 100px;
+        }
+
+            .more-menu.active {
+                display: block;
+            }
+
+        .more-item {
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .more-item:hover {
+                background: #f1f1f1;
+            }
+
+        /* 4. 툴바 버튼 추가 스타일 */
+        .sort-btn {
+            background-color: #636e72 !important;
+        }
+        /* --- 색상 팔레트 및 컬러 피커 스타일 --- */
+        .color-palette {
+            display: flex;
+            gap: 8px;
+            padding: 5px 10px;
+            align-items: center;
+            background: transparent;
+        }
+
+        .color-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 1px solid rgba(0,0,0,0.15);
+            transition: transform 0.1s;
+        }
+
+            .color-dot:hover {
+                transform: scale(1.2);
+                border-color: rgba(0,0,0,0.5);
+            }
+
+        .custom-color-wrap {
+            position: relative;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+            border: 1px solid rgba(0,0,0,0.2);
+            transition: transform 0.1s;
+        }
+
+            .custom-color-wrap:hover {
+                transform: scale(1.2);
+            }
+
+        .custom-color-input {
+            opacity: 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="toolbar">
+        <button class="add-btn" onclick="addMemo()">➕ 새 메모 추가</button>
+        <button class="add-btn sort-btn" onclick="alignMemos()">🧹 전체 정렬</button>
+    </div>
+
+    <div id="board"></div>
+    <div id="customModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3 class="modal-title">메모 삭제</h3>
+            <p class="modal-desc">이 메모를 정말 삭제하시겠습니까?</p>
+            <div class="modal-buttons">
+                <button class="btn btn-cancel" onclick="closeModal()">취소</button>
+                <button class="btn btn-confirm" id="confirmDeleteBtn">삭제</button>
+            </div>
+        </div>
+    </div>
+
+   
+
+    <script>
+        const board = document.getElementById('board');
+        const colors = ['#ffeaa7', '#81ecec', '#fab1a0', '#55efc4', '#74b9ff', '#dfe6e9'];
+
+        let highestZIndex = 100;
+        let memoToDelete = null; // 삭제할 메모의 ID 저장용
+        let saveTimeout = null;  // 디바운싱(타이핑 중 잦은 저장 방지)용
+
+        // iframe 환경에 맞춰 부모 창의 pywebview api 연결
+        const pyApi = window.parent.pywebview ? window.parent.pywebview.api : null;
+
+        // 1. 메모 로드 (Python에서 불러오기)
+        setTimeout(function () {
+            if (pyApi && pyApi.get_memos) {
+                pyApi.get_memos().then(memos => {
+                    if (memos && memos.length > 0) {
+                        memos.forEach(memo => createMemoElement(memo));
+                    } else {
+                        addMemo(); // 메모가 없으면 기본 1개 생성
+                    }
+                }).catch(err => {
+                    console.error("메모 불러오기 실패:", err);
+                    addMemo();
+                });
+            } else {
+                loadFromLocalStorage();
+            }
+        }, 300);
+
+
+        // 2. 새 메모 추가 버튼 클릭 시
+        function addMemo() {
+            const newMemo = {
+                id: 'memo_' + Date.now(),
+                title: '',       // 직접 설정한 제목
+                fontSize: 15,    // 글자 크기 기본값
+                x: Math.floor(Math.random() * 100) + 50,
+                y: Math.floor(Math.random() * 100) + 80,
+                width: 250,
+                height: 250,
+                color: colors[0],
+                text: '',
+                zIndex: ++highestZIndex,
+                isFolded: false,
+                isChecklist: false,
+                isLocked: false,
+                opacity: 1.0 // 투명도 초기값
+            };
+            createMemoElement(newMemo);
+            triggerSave();
+        }
+
+        // 3. 화면에 포스트잇(DOM 요소) 생성하는 함수
+        function createMemoElement(data) {
+            const memoEl = document.createElement('div');
+            memoEl.className = 'memo';
+            memoEl.id = data.id;
+
+            // --- 해상도 변화 대비: 화면 밖 탈출 방지 로직 ---
+            let memoWidth = data.width || 250;
+            let memoHeight = data.height || 250;
+            let safeX = data.x;
+            let safeY = data.y;
+
+            if (safeX + memoWidth > window.innerWidth) safeX = Math.max(0, window.innerWidth - memoWidth - 20);
+            // 아래쪽 화면 밖으로 나가는 제한(innerHeight) 삭제
+            if (safeX < 0) safeX = 20;
+            if (safeY < 0) safeY = 20;
+
+            memoEl.style.left = safeX + 'px';
+            memoEl.style.top = safeY + 'px';
+            memoEl.style.width = memoWidth + 'px';
+            memoEl.style.height = memoHeight + 'px';
+            memoEl.style.backgroundColor = data.color;
+            memoEl.style.opacity = data.opacity || 1.0;
+            if (data.zIndex > highestZIndex) highestZIndex = data.zIndex;
+            memoEl.style.zIndex = data.zIndex;
+
+            // 사용자 지정 제목이 있다면 DOM 속성에 보관
+            if (data.title) memoEl.setAttribute('data-custom-title', data.title);
+
+            // 크기 조절 감지
+            const resizeObserver = new ResizeObserver(() => {
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(triggerSave, 500);
+            });
+            resizeObserver.observe(memoEl);
+
+            
+            // HTML 구조 조립 (더보기 메뉴 적용)
+            memoEl.innerHTML = `
+                <div class="memo-header">
+                    <input type="text" class="memo-title-input" title="메모 제목 (비워두면 본문 첫 줄 반영)">
+                    <div class="memo-controls">
+                            <button class="icon-btn font-btn" title="글자 크기 변경">A</button>
+                            <button class="icon-btn lock-btn" title="잠금/해제">🔓</button>
+                            <button class="icon-btn more-btn" title="더보기">⋮</button>
+                            <button class="icon-btn fold-btn" title="접기/펴기">➖</button>
+                            <button class="icon-btn delete-btn" title="삭제">✕</button>
+                        </div>
+                        <div class="more-menu">
+                            <div class="color-palette">
+                                <div class="color-dot" style="background:#ffeaa7;" data-color="#ffeaa7" title="노랑"></div>
+                                <div class="color-dot" style="background:#81ecec;" data-color="#81ecec" title="민트"></div>
+                                <div class="color-dot" style="background:#fab1a0;" data-color="#fab1a0" title="핑크"></div>
+                                <div class="color-dot" style="background:#74b9ff;" data-color="#74b9ff" title="파랑"></div>
+                                <div class="color-dot" style="background:#dfe6e9;" data-color="#dfe6e9" title="회색"></div>
+                                <div class="custom-color-wrap" title="직접 선택">
+                                    <input type="color" class="custom-color-input" value="${data.color || '#ffeaa7'}">
+                                </div>
+                            </div>
+                            <div class="more-item check-item-btn">☑️ 체크리스트 전환</div>
+                            <div class="more-item opacity-item">👻 투명도 조절</div>
+                        </div>
+                    </div>
+                    <div class="memo-content">
+                        <textarea class="memo-textarea" style="font-size:${data.fontSize || 15}px;">${data.text || ''}</textarea>
+                        <div class="checklist-container"></div>
+                    </div>
+                `;
+
+            board.appendChild(memoEl);
+
+            // --- 이벤트 리스너 요소 찾기 ---
+            const header = memoEl.querySelector('.memo-header');
+            const textarea = memoEl.querySelector('.memo-textarea');
+            const foldBtn = memoEl.querySelector('.fold-btn');
+            const deleteBtn = memoEl.querySelector('.delete-btn');
+            const lockBtn = memoEl.querySelector('.lock-btn');
+            const fontBtn = memoEl.querySelector('.font-btn');
+            const moreBtn = memoEl.querySelector('.more-btn');
+            const moreMenu = memoEl.querySelector('.more-menu');
+
+            // 더보기 메뉴 안의 항목들 (클래스 이름 주의)
+            const checkBtn = memoEl.querySelector('.check-item-btn');
+            const opacityBtn = memoEl.querySelector('.opacity-item');
+
+
+            // --- 1. 제목 인라인 수정 및 업데이트 로직 ---
+            const titleInput = memoEl.querySelector('.memo-title-input');
+
+            // 저장된 수동 제목이 있으면 입력창에 값 넣기
+            if (data.title) {
+                titleInput.value = data.title;
+            }
+
+            const updateTitle = () => {
+                const customTitle = memoEl.getAttribute('data-custom-title');
+                const isFolded = memoEl.classList.contains('folded');
+
+                if (isFolded) {
+                    // 1) 메모가 접혔을 때
+                    if (customTitle && customTitle.trim() !== '') {
+                        titleInput.value = customTitle; // 직접 쓴 제목 표시
+                    } else {
+                        // 제목이 없으면 본문 첫 줄 표시
+                        let firstLine = memoEl.classList.contains('checklist-mode')
+                            ? (memoEl.querySelector('.check-item input[type="text"]')?.value || '')
+                            : textarea.value.split('\n')[0];
+                        titleInput.value = firstLine || '';
+                    }
+                } else {
+                    // 2) 메모가 펼쳐졌을 때: 중복 방지를 위해 직접 쓴 제목만 표시 (없으면 비움)
+                    titleInput.value = customTitle || '';
+                }
+
+                // 힌트 문구 설정
+                titleInput.placeholder = "제목 입력...";
+            };
+
+            textarea.addEventListener('input', updateTitle);
+            setTimeout(updateTitle, 50);
+
+            // 1-1. 제목을 직접 타이핑할 때 자동 저장
+            titleInput.addEventListener('input', (e) => {
+                memoEl.setAttribute('data-custom-title', e.target.value);
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(triggerSave, 500);
+            });
+
+            // 1-2. ★중요: 입력창 클릭/더블클릭 시 헤더(드래그, 접기)가 작동하는 것 완벽 차단!
+            titleInput.addEventListener('mousedown', (e) => e.stopPropagation());
+            titleInput.addEventListener('dblclick', (e) => e.stopPropagation());
+            titleInput.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (memoEl.classList.contains('locked')) titleInput.blur(); // 잠겼으면 포커스 해제
+            });
+
+
+            // --- 2. 글자 크기 변경 기능 ---
+            fontBtn.onclick = (e) => {
+                e.stopPropagation();
+                let sizes = [12, 15, 20, 25];
+                let current = data.fontSize || 15;
+                let next = sizes[(sizes.indexOf(current) + 1) % sizes.length];
+                data.fontSize = next;
+                textarea.style.fontSize = next + 'px';
+                memoEl.querySelectorAll('.check-item input[type="text"]').forEach(i => i.style.fontSize = next + 'px');
+                triggerSave();
+            };
+
+            // --- 3. 더보기 메뉴 토글 ---
+            moreBtn.onclick = (e) => {
+                e.stopPropagation();
+                moreMenu.classList.toggle('active');
+            };
+            // 팝업 외부 클릭 시 메뉴 닫기
+            document.addEventListener('click', () => moreMenu.classList.remove('active'));
+
+            // --- 4. 접기/펴기 기능 ---
+            if (data.isFolded) {
+                memoEl.classList.add('folded');
+                foldBtn.innerText = '➕';
+            }
+            // 접기/펴기 동작 함수
+            const toggleFold = (e) => {
+                if (e) e.stopPropagation();
+                const isFolded = memoEl.classList.toggle('folded');
+                foldBtn.innerText = isFolded ? '➕' : '➖';
+
+                updateTitle(); // ★ 이 줄을 추가: 상태 변화에 따라 제목 표시 전환
+
+                triggerSave();
+            };
+            foldBtn.addEventListener('click', toggleFold);
+            header.addEventListener('dblclick', toggleFold);
+
+            // ▼ 이 한 줄을 추가하세요 (버튼 영역 더블클릭 시 헤더로 신호가 넘어가는 것 차단) ▼
+            memoEl.querySelector('.memo-controls').addEventListener('dblclick', (e) => e.stopPropagation());
+
+            // --- 5. 잠금 기능 ---
+            if (data.isLocked) {
+                memoEl.classList.add('locked');
+                lockBtn.innerText = '🔒';
+                textarea.readOnly = true;
+            }
+            const toggleLock = (e) => {
+                if (e) e.stopPropagation();
+                const isLocked = memoEl.classList.toggle('locked');
+                lockBtn.innerText = isLocked ? '🔒' : '🔓';
+                textarea.readOnly = isLocked;
+                triggerSave();
+            };
+            lockBtn.addEventListener('click', toggleLock);
+
+            // --- 6. 투명도 조절 기능 (더보기 내부) ---
+            opacityBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (memoEl.classList.contains('locked')) return;
+
+                let currentOpacity = parseFloat(memoEl.style.opacity) || 1.0;
+                currentOpacity = Math.round((currentOpacity - 0.2) * 10) / 10;
+                if (currentOpacity < 0.3) currentOpacity = 1.0;
+
+                memoEl.style.opacity = currentOpacity;
+                moreMenu.classList.remove('active');
+                triggerSave();
+            });
+
+            // --- 7. 색상 변경 (팔레트 & 직접 선택) ---
+            const colorDots = memoEl.querySelectorAll('.color-dot');
+            const customColorInput = memoEl.querySelector('.custom-color-input');
+
+            // 1) 기본 팔레트 색상 클릭 시
+            colorDots.forEach(dot => {
+                dot.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const newColor = dot.getAttribute('data-color');
+                    memoEl.style.backgroundColor = newColor;
+                    customColorInput.value = newColor; // 컬러 피커 색상도 동기화
+                    moreMenu.classList.remove('active');
+                    triggerSave();
+                });
+            });
+
+            // 2) 컬러 피커로 나만의 색상 선택 시
+            customColorInput.addEventListener('input', (e) => {
+                e.stopPropagation();
+                memoEl.style.backgroundColor = e.target.value;
+                triggerSave();
+            });
+
+            // 컬러 피커를 클릭했을 때 메뉴가 바로 닫히지 않도록 이벤트 전파 차단
+            customColorInput.addEventListener('click', (e) => e.stopPropagation());
+
+            // --- 8. 메모 삭제 팝업 (내용 없으면 바로 삭제) ---
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                let isEmpty = false;
+                if (memoEl.classList.contains('checklist-mode')) {
+                    // 체크리스트 모드일 경우: 모든 항목의 텍스트를 합쳐서 비어있는지 확인
+                    const items = memoEl.querySelectorAll('.check-item input[type="text"]');
+                    let textContent = '';
+                    items.forEach(item => textContent += item.value.trim());
+                    isEmpty = (textContent === '');
+                } else {
+                    // 일반 텍스트 모드일 경우
+                    isEmpty = (textarea.value.trim() === '');
+                }
+
+                if (isEmpty) {
+                    // 내용이 없으면 바로 삭제하고 저장
+                    memoEl.remove();
+                    triggerSave();
+                } else {
+                    // 내용이 있으면 실수 방지를 위해 팝업 띄우기
+                    memoToDelete = memoEl.id;
+                    document.getElementById('customModal').classList.add('active');
+                }
+            });
+
+            // --- 9. 체크리스트 기능 (더보기 내부) ---
+            const checklistContainer = memoEl.querySelector('.checklist-container');
+            if (data.isChecklist) {
+                memoEl.classList.add('checklist-mode');
+                textarea.style.display = 'none';
+                checklistContainer.style.display = 'block';
+                renderChecklist();
+            }
+
+            checkBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isMode = memoEl.classList.toggle('checklist-mode');
+                if (isMode) {
+                    let lines = textarea.value.split('\n').filter(line => line.trim() !== '');
+                    let newText = lines.map(line => {
+                        if (!line.startsWith('[v] ') && !line.startsWith('[ ] ')) return '[ ] ' + line;
+                        return line;
+                    });
+                    textarea.value = newText.join('\n');
+                    textarea.style.display = 'none';
+                    checklistContainer.style.display = 'block';
+                    renderChecklist();
+                } else {
+                    textarea.style.display = 'block';
+                    checklistContainer.style.display = 'none';
+                }
+                moreMenu.classList.remove('active');
+                triggerSave();
+            });
+
+            function renderChecklist() {
+                checklistContainer.innerHTML = '';
+                const lines = textarea.value.split('\n');
+                let hasItems = false;
+                lines.forEach(line => {
+                    if (line.trim() === '') return;
+                    hasItems = true;
+                    let isDone = line.startsWith('[v] ');
+                    let content = (line.startsWith('[v] ') || line.startsWith('[ ] ')) ? line.substring(4) : line;
+                    createCheckItem(content, isDone);
+                });
+                if (!hasItems) createCheckItem('', false);
+            }
+
+            function createCheckItem(content, isDone, focus = false) {
+                const div = document.createElement('div');
+                div.className = 'check-item' + (isDone ? ' done' : '');
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = isDone;
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = content;
+                input.style.fontSize = (data.fontSize || 15) + 'px'; // 폰트 크기 동기화 적용
+
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Backspace' && input.value === '') {
+                        e.preventDefault(); div.remove(); syncToTextarea();
+                    }
+                    if (e.key === 'Enter') {
+                        e.preventDefault(); createCheckItem('', false, true); syncToTextarea();
+                    }
+                });
+
+                cb.onchange = () => { div.classList.toggle('done', cb.checked); syncToTextarea(); };
+                input.oninput = () => {
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(syncToTextarea, 500);
+                    updateTitle();
+                };
+
+                div.appendChild(cb); div.appendChild(input);
+                checklistContainer.appendChild(div);
+                if (focus) input.focus();
+            }
+
+            function syncToTextarea() {
+                if (!memoEl.classList.contains('checklist-mode')) return;
+                const items = checklistContainer.querySelectorAll('.check-item');
+                let newText = [];
+                items.forEach(item => {
+                    const isDone = item.querySelector('input[type="checkbox"]').checked;
+                    const text = item.querySelector('input[type="text"]').value;
+                    newText.push((isDone ? '[v] ' : '[ ] ') + text);
+                });
+                textarea.value = newText.join('\n');
+                triggerSave();
+            }
+
+            // 텍스트 입력 시 자동 저장
+            textarea.addEventListener('input', () => {
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(triggerSave, 500);
+            });
+
+            // 클릭 시 제일 위로 가져오기
+            memoEl.addEventListener('mousedown', () => {
+                memoEl.style.zIndex = ++highestZIndex;
+                triggerSave();
+            });
+
+            // 마우스 드래그
+            makeDraggable(memoEl, header);
+        }
+
+        // --- 모달 제어 함수들 ---
+        function closeModal() {
+            document.getElementById('customModal').classList.remove('active');
+            memoToDelete = null;
+        }
+
+        document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+            if (memoToDelete) {
+                const el = document.getElementById(memoToDelete);
+                if (el) el.remove();
+                triggerSave();
+            }
+            closeModal();
+        });
+
+       
+
+        // --- 기타 보조 로직 ---
+        function makeDraggable(element, handle) {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            handle.onmousedown = dragMouseDown;
+
+            function dragMouseDown(e) {
+                e.preventDefault();
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
+                element.classList.add('dragging');
+            }
+
+            function elementDrag(e) {
+                e.preventDefault();
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+
+                let newTop = element.offsetTop - pos2;
+                let newLeft = element.offsetLeft - pos1;
+
+                if (newTop < 0) newTop = 0; // 위쪽 천장은 못 뚫게 방지
+                if (newLeft < 0) newLeft = 0; // 좌측 벽 못 뚫게 방지
+
+                // 하단(innerHeight) 제한 코드는 삭제하여 아래로 무한히 드래그 가능하게 만듦!
+
+                // 우측 벽 못 뚫게 방지 (가로 스크롤 생김 방지)
+                if (newLeft + element.offsetWidth > window.innerWidth - 20) newLeft = window.innerWidth - element.offsetWidth - 20;
+
+                element.style.top = newTop + "px";
+                element.style.left = newLeft + "px";
+            }
+
+            function closeDragElement() {
+                document.onmouseup = null;
+                document.onmousemove = null;
+                element.classList.remove('dragging');
+                triggerSave();
+            }
+        }
+
+        function triggerSave() {
+            const memos = [];
+            document.querySelectorAll('.memo').forEach(memoEl => {
+                memos.push({
+                    id: memoEl.id,
+                    title: memoEl.getAttribute('data-custom-title') || '', // 제목 저장 추가!
+                    fontSize: parseInt(memoEl.querySelector('.memo-textarea').style.fontSize) || 15, // 글자크기 저장 추가!
+                    x: parseInt(memoEl.style.left) || 0,
+                    y: parseInt(memoEl.style.top) || 0,
+                    width: parseInt(memoEl.style.width) || 250,
+                    height: parseInt(memoEl.style.height) || 250,
+                    color: rgb2hex(memoEl.style.backgroundColor),
+                    text: memoEl.querySelector('.memo-textarea').value,
+                    zIndex: parseInt(memoEl.style.zIndex) || 1,
+                    isFolded: memoEl.classList.contains('folded'),
+                    isChecklist: memoEl.classList.contains('checklist-mode'),
+                    isLocked: memoEl.classList.contains('locked'),
+                    opacity: parseFloat(memoEl.style.opacity) || 1.0
+                });
+            });
+
+            if (pyApi && pyApi.save_memos) {
+                pyApi.save_memos(memos).catch(e => console.error("메모 저장 실패:", e));
+            } else {
+                localStorage.setItem('pentong_memos', JSON.stringify(memos));
+            }
+        }
+
+        function rgb2hex(rgb) {
+            if (/^#[0-9A-F]{6}$/i.test(rgb)) return rgb;
+            rgb = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+            if (!rgb) return colors[0];
+            function hex(x) { return ("0" + parseInt(x).toString(16)).slice(-2); }
+            return "#" + hex(rgb[1]) + hex(rgb[2]) + hex(rgb[3]);
+        }
+
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem('pentong_memos');
+            if (saved) {
+                JSON.parse(saved).forEach(memo => createMemoElement(memo));
+            } else {
+                addMemo();
+            }
+        }
+
+        // 전체 정렬 기능 (메모 크기 유지 + 빈 공간 최소화 테트리스 알고리즘)
+        function alignMemos() {
+            const memos = document.querySelectorAll('.memo');
+            const gap = 20;      // 메모 사이의 간격
+            const startX = 20;
+            const startY = 80;
+            const screenWidth = window.innerWidth;
+
+            const placed = []; // 배치 완료된 메모들의 좌표와 크기 저장
+
+            // 겹침 판별 함수: 새로 놓을 자리가 기존 메모들과 겹치는지 확인
+            function isOverlapping(x, y, w, h) {
+                // 화면 오른쪽을 벗어나는지 확인
+                if (x + w > screenWidth - 20) return true;
+
+                // 기존에 배치된 메모들과 겹치는지 검사 (간격 gap 포함)
+                for (let p of placed) {
+                    if (x < p.x + p.w + gap &&
+                        x + w + gap > p.x &&
+                        y < p.y + p.h + gap &&
+                        y + h + gap > p.y) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            memos.forEach((memo) => {
+                // 핵심: 메모의 원래 크기(너비, 높이)를 그대로 가져옴! (크기 수정 안 함)
+                const w = memo.offsetWidth;
+                const h = memo.offsetHeight;
+
+                let placedMemo = false;
+
+                // Y 좌표 후보군: 맨 윗줄(80) + 이미 배치된 메모들의 바로 아래쪽
+                let candidateYs = [startY];
+                placed.forEach(p => candidateYs.push(p.y + p.h + gap));
+
+                // 위에서부터 아래로 채우기 위해 오름차순 정렬 및 중복 제거
+                candidateYs = [...new Set(candidateYs)].sort((a, b) => a - b);
+
+                for (let y of candidateYs) {
+                    // X 좌표 후보군: 맨 왼쪽(20) + 이미 배치된 메모들의 바로 오른쪽
+                    let candidateXs = [startX];
+                    placed.forEach(p => {
+                        // 현재 Y 높이 선상에서 겹칠 가능성이 있는 메모들만 고려
+                        if (p.y < y + h + gap && p.y + p.h + gap > y) {
+                            candidateXs.push(p.x + p.w + gap);
+                        }
+                    });
+
+                    // 왼쪽에서 오른쪽으로 스캔하기 위해 오름차순 정렬
+                    candidateXs = [...new Set(candidateXs)].sort((a, b) => a - b);
+
+                    for (let x of candidateXs) {
+                        // 겹치는 메모가 없고 화면 안쪽이라면 그 자리가 최적의 자리!
+                        if (!isOverlapping(x, y, w, h)) {
+                            memo.style.left = x + 'px';
+                            memo.style.top = y + 'px';
+                            placed.push({ x, y, w, h }); // 자리 차지함 기록
+                            placedMemo = true;
+                            break;
+                        }
+                    }
+                    if (placedMemo) break;
+                }
+            });
+            triggerSave(); // 정렬된 위치 저장
+        }
+
+    </script>
+
+
+</body>
+</html>

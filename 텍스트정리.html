@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>텍스트 정리 도구</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
+        body { font-family: 'Pretendard', sans-serif; }
+        .btn-tool { @apply px-3 py-2 rounded-lg transition-all duration-200 text-xs font-medium border flex items-center justify-center gap-1 bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300 active:scale-95; }
+        .btn-accent { @apply bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-sm; }
+        .btn-danger { @apply bg-red-50 text-red-600 border-red-100 hover:bg-red-100; }
+        .stat-card { @apply flex flex-col items-center justify-center bg-white rounded-xl p-3 border border-gray-100 shadow-sm min-w-[90px]; }
+        .input-field { @apply text-xs border border-gray-200 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none w-full; }
+        
+        textarea::-webkit-scrollbar { width: 8px; }
+        textarea::-webkit-scrollbar-track { background: #f1f5f9; }
+        textarea::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        textarea::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <!-- 헤더 -->
+        <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-900">텍스트 정리 도구</h1>
+                <p class="text-slate-500 mt-1 font-medium">공백, 줄바꿈, 중복 데이터 등을 한 번에 깔끔하게 가공하세요.</p>
+            </div>
+            
+            <div class="flex gap-3">
+                <div class="stat-card">
+                    <span class="text-[10px] text-slate-400 font-bold uppercase">글자 수</span>
+                    <span id="charCount" class="text-lg font-bold text-blue-600">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="text-[10px] text-slate-400 font-bold uppercase">단어 수</span>
+                    <span id="wordCount" class="text-lg font-bold text-slate-700">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="text-[10px] text-slate-400 font-bold uppercase">줄 수</span>
+                    <span id="lineCount" class="text-lg font-bold text-slate-700">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- 왼쪽: 편집 영역 -->
+            <div class="lg:col-span-8 space-y-4">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[700px]">
+                    <div class="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center px-6">
+                        <div class="flex items-center gap-4">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Editor</span>
+                            <div class="flex items-center gap-1 border-l pl-4 border-slate-200">
+                                <button onclick="undo()" id="undoBtn" class="p-2 text-slate-400 hover:text-blue-600 disabled:opacity-30" title="되돌리기 (Ctrl+Z)" disabled>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l5-5m-5 5l5 5" /></svg>
+                                </button>
+                                <button onclick="redo()" id="redoBtn" class="p-2 text-slate-400 hover:text-blue-600 disabled:opacity-30" title="다시 실행 (Ctrl+Y)" disabled>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-5-5m5 5l-5 5" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                             <button onclick="copyToClipboard()" class="btn-tool btn-accent px-4 py-2 text-sm">텍스트 복사</button>
+                             <button onclick="handleClearAll()" class="btn-tool btn-danger px-4 py-2 text-sm">전체 삭제</button>
+                        </div>
+                    </div>
+                    <textarea 
+                        id="inputText" 
+                        class="flex-1 w-full p-8 focus:ring-0 border-none resize-none outline-none text-slate-800 leading-relaxed text-lg"
+                        placeholder="이곳에 텍스트를 입력하거나 붙여넣으세요..."></textarea>
+                </div>
+            </div>
+
+            <!-- 오른쪽: 도구 패널 -->
+            <div class="lg:col-span-4 space-y-6">
+                <!-- 찾기 및 바꾸기 -->
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">찾기 및 바꾸기</h3>
+                    <div class="space-y-3">
+                        <input type="text" id="findInput" class="input-field" placeholder="찾을 텍스트">
+                        <input type="text" id="replaceInput" class="input-field" placeholder="바꿀 텍스트">
+                        <button onclick="processText(findAndReplace)" class="w-full btn-tool btn-accent py-2.5">일괄 바꾸기</button>
+                    </div>
+                </div>
+
+                <!-- 머리말/꼬리말 -->
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-900 mb-4">라인별 머리말/꼬리말</h3>
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="text" id="prefixInput" class="input-field" placeholder="앞에 추가">
+                            <input type="text" id="suffixInput" class="input-field" placeholder="뒤에 추가">
+                        </div>
+                        <button onclick="processText(addPrefixSuffix)" class="w-full btn-tool bg-slate-800 text-white hover:bg-slate-900 py-2.5">일괄 적용</button>
+                    </div>
+                </div>
+
+                <!-- 정리 및 변환 -->
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-900 mb-4">정리 및 변환</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="processText(removeExtraSpaces)" class="btn-tool" title="연속된 공백을 하나로">연속 공백 제거</button>
+                        <button onclick="processText(removeAllSpaces)" class="btn-tool" title="모든 공백 제거">모든 공백 제거</button>
+                        <button onclick="processText(trimLines)" class="btn-tool">양끝 공백 정리</button>
+                        <button onclick="processText(removeEmptyLines)" class="btn-tool">빈 줄 제거</button>
+                        <button onclick="processText(joinLines)" class="btn-tool">모든 줄 합치기</button>
+                        <button onclick="processText(removeNumbers)" class="btn-tool">앞자리 기호 제거</button>
+                        <button onclick="processText(removeDuplicates)" class="btn-tool font-bold text-blue-600">중복 라인 제거</button>
+                        <button onclick="processText(removeHtmlTags)" class="btn-tool">HTML 태그 제거</button>
+                        <button onclick="processText(removeSpecialChars)" class="btn-tool">특수문자 제거</button>
+                        <button onclick="processText(sortAsc)" class="btn-tool">가나다 정렬 (↑)</button>
+                        <button onclick="processText(sortDesc)" class="btn-tool">가나다 정렬 (↓)</button>
+                        <button onclick="processText(shuffleLines)" class="btn-tool">무작위 섞기</button>
+                        <button onclick="processText(addLineNumbers)" class="btn-tool">라인 번호 매기기</button>
+                        <button onclick="processText(splitBySentence)" class="btn-tool">문장별 줄바꿈</button>
+                        <button onclick="processText(toUpperCase)" class="btn-tool">대문자로</button>
+                        <button onclick="processText(toLowerCase)" class="btn-tool">소문자로</button>
+                    </div>
+                </div>
+
+                <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <h4 class="text-blue-800 font-bold text-xs mb-1">단축키 안내</h4>
+                    <p class="text-blue-600 text-[11px] leading-relaxed">
+                        • 되돌리기: Ctrl + Z<br>
+                        • 다시 실행: Ctrl + Y (또는 Ctrl+Shift+Z)
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 알림 메시지 -->
+        <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-2xl text-sm opacity-0 transition-all duration-300 pointer-events-none shadow-2xl z-50 flex items-center gap-3">
+            <span id="toastMsg">복사되었습니다!</span>
+        </div>
+    </div>
+
+    <script>
+        const textarea = document.getElementById('inputText');
+        const charCount = document.getElementById('charCount');
+        const wordCount = document.getElementById('wordCount');
+        const lineCount = document.getElementById('lineCount');
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toastMsg');
+
+        let undoStack = [""];
+        let redoStack = [];
+        const maxStack = 100;
+
+        function saveState() {
+            const currentText = textarea.value;
+            if (undoStack[undoStack.length - 1] !== currentText) {
+                undoStack.push(currentText);
+                if (undoStack.length > maxStack) undoStack.shift();
+                redoStack = [];
+                updateHistoryButtons();
+            }
+        }
+
+        function undo() {
+            if (undoStack.length > 1) {
+                redoStack.push(undoStack.pop());
+                textarea.value = undoStack[undoStack.length - 1];
+                updateUI();
+                updateHistoryButtons();
+            }
+        }
+
+        function redo() {
+            if (redoStack.length > 0) {
+                const nextState = redoStack.pop();
+                undoStack.push(nextState);
+                textarea.value = nextState;
+                updateUI();
+                updateHistoryButtons();
+            }
+        }
+
+        function updateHistoryButtons() {
+            undoBtn.disabled = undoStack.length <= 1;
+            redoBtn.disabled = redoStack.length === 0;
+        }
+
+        let typingTimer;
+        textarea.addEventListener('input', () => {
+            updateUI();
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(saveState, 500);
+        });
+
+        function processText(func) {
+            saveState();
+            func();
+            updateUI();
+            saveState();
+        }
+
+        function updateUI() {
+            const text = textarea.value;
+            charCount.textContent = text.length.toLocaleString();
+            wordCount.textContent = text.trim() ? text.trim().split(/\s+/).length.toLocaleString() : 0;
+            lineCount.textContent = text ? text.split('\n').length.toLocaleString() : 0;
+        }
+
+        function findAndReplace() {
+            const find = document.getElementById('findInput').value;
+            const replace = document.getElementById('replaceInput').value;
+            if (!find) return showToast("찾을 단어를 입력해주세요.");
+            const escapedFind = find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            textarea.value = textarea.value.replace(new RegExp(escapedFind, 'g'), replace);
+            showToast("변경 완료");
+        }
+
+        function addPrefixSuffix() {
+            const prefix = document.getElementById('prefixInput').value;
+            const suffix = document.getElementById('suffixInput').value;
+            textarea.value = textarea.value.split('\n').map(line => prefix + line + suffix).join('\n');
+        }
+
+        function removeExtraSpaces() {
+            textarea.value = textarea.value.replace(/[ ]+/g, ' ');
+        }
+
+        function removeAllSpaces() {
+            textarea.value = textarea.value.replace(/\s+/g, '');
+        }
+
+        function removeEmptyLines() {
+            textarea.value = textarea.value.split('\n').filter(line => line.trim() !== '').join('\n');
+        }
+
+        function joinLines() {
+            textarea.value = textarea.value.split('\n').map(l => l.trim()).join(' ').replace(/\s+/g, ' ');
+        }
+
+        function removeNumbers() {
+            textarea.value = textarea.value.split('\n').map(line => {
+                return line.replace(/^\s*(\d+[\.\)\-:]|\d+|[\-\*\>•])\s*/, '');
+            }).join('\n');
+        }
+
+        function trimLines() {
+            textarea.value = textarea.value.split('\n').map(line => line.trim()).join('\n');
+        }
+
+        function removeDuplicates() {
+            textarea.value = [...new Set(textarea.value.split('\n'))].join('\n');
+            showToast("중복 제거 완료");
+        }
+
+        function removeHtmlTags() {
+            textarea.value = textarea.value.replace(/<[^>]*>?/gm, '');
+        }
+
+        function removeSpecialChars() {
+            textarea.value = textarea.value.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9\s\n]/g, '');
+            showToast("특수문자 제거 완료");
+        }
+
+        function addLineNumbers() {
+            textarea.value = textarea.value.split('\n').map((line, idx) => `${idx + 1}. ${line}`).join('\n');
+        }
+
+        function splitBySentence() {
+            textarea.value = textarea.value.replace(/([.?!])\s+/g, "$1\n");
+        }
+
+        function sortAsc() {
+            textarea.value = textarea.value.split('\n').sort((a, b) => a.localeCompare(b, 'ko')).join('\n');
+        }
+
+        function sortDesc() {
+            textarea.value = textarea.value.split('\n').sort((a, b) => b.localeCompare(a, 'ko')).join('\n');
+        }
+
+        function shuffleLines() {
+            const lines = textarea.value.split('\n');
+            for (let i = lines.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [lines[i], lines[j]] = [lines[j], lines[i]];
+            }
+            textarea.value = lines.join('\n');
+        }
+
+        function toUpperCase() { textarea.value = textarea.value.toUpperCase(); }
+        function toLowerCase() { textarea.value = textarea.value.toLowerCase(); }
+
+        function handleClearAll() {
+            if (textarea.value) {
+                saveState();
+                textarea.value = '';
+                updateUI();
+                saveState();
+                showToast("삭제되었습니다.");
+            }
+        }
+
+        function copyToClipboard() {
+            if (!textarea.value) return showToast("내용이 없습니다.");
+            textarea.select();
+            document.execCommand('copy');
+            showToast("복사되었습니다!");
+            window.getSelection().removeAllRanges();
+        }
+
+        function showToast(msg) {
+            toastMsg.textContent = msg;
+            toast.style.opacity = '1';
+            toast.style.transform = 'translate(-50%, -20px)';
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(-50%, 0)';
+            }, 2000);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                undo();
+            }
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) {
+                e.preventDefault();
+                redo();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,684 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pentong 신구대조표 생성기</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Diff Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.1.0/diff.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f3f4f6; overflow-x: hidden; }
+        .editor-area { resize: none; outline: none; border: 1px solid #d1d5db; font-size: 14px; line-height: 1.6; white-space: pre-wrap; user-select: text; }
+        .editor-area:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+        
+        .diff-container { 
+            background-color: white; 
+            padding: 60px 50px; 
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); 
+            min-height: 297mm; 
+            height: auto;      
+            margin-bottom: 50px; 
+        }
+
+        /* 행 선택 및 드래그 관련 */
+        tr { cursor: pointer; transition: background-color 0.1s; position: relative; }
+        tr.selected { background-color: #eff6ff !important; }
+        tr.selected td { border-color: #3b82f6 !important; border-width: 2px !important; position: relative; z-index: 10; }
+        
+        /* 드래그 중 텍스트 선택 방지 */
+        .dragging-mode { user-select: none !important; }
+
+        /* 플로팅 액션 메뉴 */
+        #actionMenu {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            padding: 8px;
+            flex-direction: row;
+            gap: 6px;
+            animation: fadeIn 0.15s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        #actionMenu button {
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        #actionMenu button:disabled { opacity: 0.3; cursor: not-allowed; color: #999 !important; background: transparent !important; border-color: transparent !important; }
+        #actionMenu .btn-delete { color: #ef4444; border: 1px solid transparent; }
+        #actionMenu .btn-delete:hover:not(:disabled) { background: #fef2f2; border-color: #fca5a5; }
+        #actionMenu .btn-primary { color: #2563eb; border: 1px solid transparent; }
+        #actionMenu .btn-primary:hover:not(:disabled) { background: #eff6ff; border-color: #93c5fd; }
+        
+        /* 모달 스타일 */
+        .modal-wrap { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 2000; justify-content: center; align-items: center; }
+        .modal-wrap.active { display: flex; }
+        .modal-box { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); max-width: 500px; width: 90%; max-height: 80vh; display: flex; flex-direction: column; }
+        
+        #toast {
+            visibility: hidden; min-width: 250px; background-color: #1f2937; color: #fff; text-align: center;
+            border-radius: 8px; padding: 12px 24px; position: fixed; z-index: 3000; left: 50%;
+            bottom: 30px; transform: translateX(-50%); font-size: 14px; font-weight: 500;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); opacity: 0; transition: all 0.3s;
+        }
+        #toast.show { visibility: visible; opacity: 1; bottom: 40px; }
+
+        .no-copy { user-select: none; }
+        .merged-row-indicator { font-size: 10px; color: #3b82f6; display: block; margin-top: 4px; font-weight: normal; }
+    </style>
+</head>
+<body class="h-screen flex flex-col" onmousedown="handleGlobalMouseDown(event)" onmouseup="handleGlobalMouseUp(event)" onclick="handleGlobalClick(event)">
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
+        <div class="flex items-center">
+            <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded mr-2 font-bold uppercase tracking-wider shadow-sm">Pentong</span>
+            <h1 class="text-xl font-bold text-gray-800">신구대조표 생성기</h1>
+        </div>
+        <div id="headerActionButtons" class="space-x-2 flex">
+            <button onclick="loadSample()" class="px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-lg text-sm transition font-medium">샘플 입력</button>
+            <button onclick="clearAll()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition font-medium">초기화</button>
+            <button onclick="generateStandardDiff()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition font-bold shadow-md">대조표 생성</button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden">
+        <!-- 1. 입력 섹션 -->
+        <div id="inputSection" class="flex-1 flex flex-col w-full h-full bg-white">
+            <div class="flex-1 flex w-full">
+                <div class="flex-1 flex flex-col p-4 border-r border-gray-200">
+                    <label class="text-sm font-bold text-gray-700 flex items-center mb-2"><span class="w-2 h-2 bg-gray-500 rounded-full mr-2"></span>현행 규정</label>
+                    <textarea id="oldText" class="editor-area flex-1 p-4 rounded bg-gray-50 text-gray-800" placeholder="변경 전 내용을 이곳에 붙여넣으세요..."></textarea>
+                </div>
+                <div class="flex-1 flex flex-col p-4">
+                    <label class="text-sm font-bold text-blue-600 flex items-center mb-2"><span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>개정 규정안</label>
+                    <textarea id="newText" class="editor-area flex-1 p-4 rounded bg-blue-50 text-gray-800" placeholder="변경 후 내용을 이곳에 붙여넣으세요..."></textarea>
+                </div>
+            </div>
+            <!-- 안내 문구 (입력 화면 하단) -->
+            <div class="px-6 py-3 border-t border-gray-200 bg-gray-50 text-sm text-gray-500 font-medium flex justify-center space-x-6">
+                <span>※ 본 신구대조표는 참고용으로만 활용하시기 바랍니다.</span>
+                <span class="text-gray-300">|</span>
+                <span>※ 법령 및 자치법규 개정에는 사용할 수 없습니다.</span>
+            </div>
+        </div>
+
+        <!-- 2. 결과 섹션 -->
+        <div id="resultSection" class="hidden flex-col w-full h-full bg-gray-100 relative overflow-hidden">
+            <div class="p-3 border-b border-gray-200 flex justify-between items-center bg-white shadow-sm z-10">
+                <div class="flex items-center space-x-3 ml-2">
+                    <span id="diffStats" class="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">분석중...</span>
+                    <div class="flex items-center space-x-2 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+                        <span class="text-sm font-bold text-blue-700">필터:</span>
+                        <label class="flex items-center text-sm text-gray-700 cursor-pointer">
+                            <input type="radio" name="viewOption" value="all" checked onchange="renderTable()" class="mr-1 accent-blue-600"> 전체
+                        </label>
+                        <label class="flex items-center text-sm text-gray-700 cursor-pointer">
+                            <input type="radio" name="viewOption" value="changed" onchange="renderTable()" class="mr-1 accent-blue-600"> 변경항목
+                        </label>
+                    </div>
+                    <button id="btnRestore" onclick="openRestoreModal()" class="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-sm hover:bg-amber-100 transition flex items-center">
+                        <span class="mr-1.5">♻️</span> 삭제 취소 <span id="deletedCount" class="ml-1 font-bold">0</span>
+                    </button>
+                </div>
+                
+                <div class="space-x-2 flex items-center">
+                    <span class="text-xs text-gray-500 mr-2 font-medium">💡 세부적인 수정은 표를 복사하여 한글(HWP) 프로그램 등에서 하시기 바랍니다.</span>
+                    <button onclick="backToEdit()" class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded text-sm transition font-medium">다시 수정</button>
+                    <button onclick="copyTable()" class="px-6 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition shadow-lg font-bold flex items-center">
+                        <span class="mr-2">📋</span> 표 복사하기
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto p-8 flex justify-center items-start bg-gray-200" id="scrollContainer">
+                <div class="diff-container w-full max-w-4xl relative" id="tableWrapper">
+                    <h2 class="text-3xl font-bold text-center mb-10" style="font-family: 'Batang', serif;">신 · 구 조 문 대 비 표</h2>
+                    <table id="diffTable" class="diff-table" style="width: 100%; table-layout: fixed; border-collapse: collapse; font-family: 'Batang', 'Malgun Gothic', serif; font-size: 15px; color: #000; margin: 0 auto; border: 1px solid #000;">
+                        <colgroup>
+                            <col style="width: 42%;">
+                            <col style="width: 42%;">
+                            <col style="width: 16%;">
+                        </colgroup>
+                        <thead>
+                            <tr style="background-color: #f3f3f3;">
+                                <th style="border: 1px solid #000; padding: 12px; text-align: center; font-weight: bold; font-size: 16px; width: 42%;">현 행</th>
+                                <th style="border: 1px solid #000; padding: 12px; text-align: center; font-weight: bold; font-size: 16px; width: 42%;">개 정 안</th>
+                                <th style="border: 1px solid #000; padding: 12px; text-align: center; font-weight: bold; font-size: 16px; width: 16%;">비 고</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultBody"></tbody>
+                    </table>
+                    
+                    <!-- 안내 문구 (결과 대조표 하단 - 복사되지 않음) -->
+                    <div class="mt-8 pt-4 text-sm text-gray-500 font-medium text-center no-copy">
+                        <p>※ 본 신구대조표는 참고용으로만 활용하시기 바랍니다.</p>
+                        <p>※ 법령 및 자치법규 개정에는 사용할 수 없습니다.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 플로팅 액션 메뉴 -->
+    <div id="actionMenu" class="no-copy">
+        <button id="btnMerge" class="btn-primary" onclick="handleMerge()">병합</button>
+        <button id="btnUnmerge" class="btn-primary" onclick="handleUnmerge()">병합취소</button>
+        <button id="btnDelete" class="btn-delete" onclick="handleDelete()">삭제</button>
+        <div class="w-px h-6 bg-gray-200 mx-1 self-center"></div>
+        <button class="text-gray-400 hover:text-gray-600" onclick="clearSelection()">취소</button>
+    </div>
+
+    <!-- 삭제 내역 모달 -->
+    <div id="restoreModal" class="modal-wrap">
+        <div class="modal-box">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex justify-between items-center">
+                <span>삭제된 항목 내역</span>
+                <span class="text-xs font-normal text-gray-500">원래 위치로 복구됩니다.</span>
+            </h3>
+            <div id="deletedList" class="flex-1 overflow-y-auto space-y-1 mb-6 pr-2"></div>
+            <div class="flex justify-between items-center">
+                <button onclick="clearDeletedHistory()" class="text-xs text-red-500 hover:underline">내역 비우기</button>
+                <button onclick="closeRestoreModal()" class="px-5 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition text-sm">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="customModal" class="modal-wrap">
+        <div class="modal-box">
+            <h3 class="text-lg font-bold text-gray-800 mb-2" id="modalTitle">알림</h3>
+            <div id="modalContent"></div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeModal()" class="px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition">확인</button>
+            </div>
+        </div>
+    </div>
+    <div id="toast">알림 메시지</div>
+
+    <script>
+        let currentData = []; 
+        let deletedItems = []; 
+        let selectedIndices = new Set();
+        let lastSelectedIndex = -1;
+        
+        let isDragging = false;
+        let dragStartIndex = -1;
+
+        function showModal(title, msg) {
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalContent').innerHTML = `<p class="text-gray-600">${msg}</p>`;
+            document.getElementById('customModal').classList.add('active');
+        }
+
+        function closeModal() { document.getElementById('customModal').classList.remove('active'); }
+
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            toast.innerText = message;
+            toast.className = "show";
+            setTimeout(() => toast.className = toast.className.replace("show", ""), 2500);
+        }
+
+        function clearAll() {
+            document.getElementById('oldText').value = '';
+            document.getElementById('newText').value = '';
+            backToEdit();
+        }
+
+        function backToEdit() {
+            document.getElementById('inputSection').classList.remove('hidden');
+            document.getElementById('inputSection').classList.add('flex');
+            document.getElementById('resultSection').classList.add('hidden');
+            document.getElementById('resultSection').classList.remove('flex');
+            document.getElementById('headerActionButtons').classList.remove('hidden');
+            document.getElementById('headerActionButtons').classList.add('flex');
+            clearSelection();
+        }
+
+        function getTextSimilarity(s1, s2) {
+            if (!s1 || !s2) return 0;
+            if (s1 === s2) return 1;
+            const getBigrams = (str) => {
+                const bg = new Map();
+                for (let i = 0; i < str.length - 1; i++) {
+                    const pair = str.substring(i, i + 2);
+                    bg.set(pair, (bg.get(pair) || 0) + 1);
+                }
+                return bg;
+            };
+            const map1 = getBigrams(s1);
+            const map2 = getBigrams(s2);
+            let intersection = 0, total = 0;
+            for (const [bg, count1] of map1.entries()) {
+                if (map2.has(bg)) intersection += Math.min(count1, map2.get(bg));
+                total += count1;
+            }
+            for (const count2 of map2.values()) total += count2;
+            return total === 0 ? 0 : (2.0 * intersection) / total;
+        }
+
+        function alignLinesDP(oldLines, newLines) {
+            const getMarker = (text) => {
+                const m = text.trim().match(/^(제\s*\d+\s*조(?:의\s*\d+)?|부\s*칙|[①-⑳]|\d+\.\s?|[가-하]\.\s?)/);
+                return m ? m[1].replace(/\s/g, '') : null;
+            };
+
+            const dp = Array(oldLines.length + 1).fill(null).map(() => Array(newLines.length + 1).fill(0));
+            for(let i=1; i<=oldLines.length; i++) dp[i][0] = i * 2.5;
+            for(let j=1; j<=newLines.length; j++) dp[0][j] = j * 2.5;
+
+            for(let i=1; i<=oldLines.length; i++) {
+                for(let j=1; j<=newLines.length; j++) {
+                    const l1 = oldLines[i-1]; const l2 = newLines[j-1];
+                    const sim = getTextSimilarity(l1, l2);
+                    let cost_sub = (l1 === l2) ? 0 : 5.0 * (1.0 - sim); 
+                    const m1 = getMarker(l1); const m2 = getMarker(l2);
+                    if (m1 && m2) {
+                        if (m1 === m2) cost_sub -= 2.0;
+                        else if (sim > 0.6) cost_sub -= 1.0;
+                    }
+                    if (cost_sub < 0.1 && l1 !== l2) cost_sub = 0.1;
+                    dp[i][j] = Math.min(dp[i-1][j] + 2.5, dp[i][j-1] + 2.5, dp[i-1][j-1] + cost_sub);
+                }
+            }
+
+            const result = [];
+            let i = oldLines.length; let j = newLines.length;
+            while(i > 0 || j > 0) {
+                if (i > 0 && j > 0) {
+                    const l1 = oldLines[i-1]; const l2 = newLines[j-1];
+                    const sim = getTextSimilarity(l1, l2);
+                    let cost_sub = (l1 === l2) ? 0 : 5.0 * (1.0 - sim);
+                    const m1 = getMarker(l1); const m2 = getMarker(l2);
+                    if (m1 && m2) {
+                        if (m1 === m2) cost_sub -= 2.0;
+                        else if (sim > 0.6) cost_sub -= 1.0;
+                    }
+                    if (cost_sub < 0.1 && l1 !== l2) cost_sub = 0.1;
+
+                    if (Math.abs(dp[i][j] - (dp[i-1][j-1] + cost_sub)) < 0.0001) {
+                        result.unshift({ type: l1 === l2 ? 'equal' : 'modify', old: l1, new: l2 });
+                        i--; j--; continue;
+                    } else if (Math.abs(dp[i][j] - (dp[i-1][j] + 2.5)) < 0.0001) {
+                        result.unshift({ type: 'delete', old: l1, new: null });
+                        i--; continue;
+                    } else {
+                        result.unshift({ type: 'insert', old: null, new: newLines[j-1] });
+                        j--; continue;
+                    }
+                } else if (i > 0) {
+                    result.unshift({ type: 'delete', old: oldLines[i-1], new: null });
+                    i--;
+                } else {
+                    result.unshift({ type: 'insert', old: null, new: newLines[j-1] });
+                    j--;
+                }
+            }
+            return result;
+        }
+
+        function generateStandardDiff() {
+            const oldLines = document.getElementById('oldText').value.replace(/\r\n/g, "\n").split('\n').map(l => l.trimEnd()).filter(l => l.trim() !== "");
+            const newLines = document.getElementById('newText').value.replace(/\r\n/g, "\n").split('\n').map(l => l.trimEnd()).filter(l => l.trim() !== "");
+
+            if (oldLines.length === 0 && newLines.length === 0) {
+                showModal('입력 오류', '비교할 내용이 없습니다.');
+                return;
+            }
+
+            currentData = alignLinesDP(oldLines, newLines);
+            renderTable();
+            
+            document.getElementById('inputSection').classList.add('hidden');
+            document.getElementById('inputSection').classList.remove('flex');
+            document.getElementById('resultSection').classList.remove('hidden');
+            document.getElementById('resultSection').classList.add('flex');
+            document.getElementById('headerActionButtons').classList.add('hidden');
+            document.getElementById('headerActionButtons').classList.remove('flex');
+        }
+
+        function formatText(text) {
+            if (!text) return "";
+            return text.replace(/\n/g, "<br>");
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('resultBody');
+            if (!tbody) return;
+            const viewOption = document.querySelector('input[name="viewOption"]:checked').value;
+            tbody.innerHTML = '';
+            
+            let stats = { total: 0, modify: 0, delete: 0, insert: 0 };
+
+            currentData.forEach((row, idx) => {
+                if (viewOption === 'changed' && row.type === 'equal') return;
+
+                stats.total++;
+                const tr = document.createElement('tr');
+                tr.dataset.index = idx;
+                tr.className = selectedIndices.has(idx) ? "selected" : "";
+                
+                tr.onmousedown = (e) => handleRowMouseDown(idx, e);
+                tr.onmouseenter = (e) => handleRowMouseEnter(idx, e);
+                tr.onclick = (e) => e.stopPropagation();
+
+                const tdOld = document.createElement('td'); 
+                const tdNew = document.createElement('td');
+                const tdRemark = document.createElement('td');
+                
+                [tdOld, tdNew, tdRemark].forEach(td => {
+                    td.style.border = "1px solid #000"; td.style.padding = "10px";
+                    td.style.verticalAlign = "top"; td.style.lineHeight = "1.8";
+                    td.style.wordBreak = "keep-all"; td.style.overflowWrap = "break-word";
+                });
+                
+                tdRemark.style.textAlign = "center";
+                tdRemark.style.fontSize = "14px";
+
+                if (row.type === 'equal') {
+                    tdOld.innerHTML = formatText(row.old); 
+                    tdNew.innerHTML = formatText(row.new);
+                    tdRemark.innerHTML = "<span style='color: #aaa;'>현행 유지</span>";
+                } else if (row.type === 'modify') {
+                    stats.modify++;
+                    if (typeof Diff !== 'undefined') {
+                        const charDiff = Diff.diffChars(row.old || "", row.new || "");
+                        charDiff.forEach(part => {
+                            const span = document.createElement('span');
+                            span.innerHTML = formatText(part.value);
+                            if (part.added) { span.style.color = "blue"; span.style.fontWeight = "bold"; }
+                            else if (part.removed) { span.style.color = "red"; span.style.textDecoration = "line-through"; }
+                            if (!part.added) tdOld.appendChild(span.cloneNode(true));
+                            if (!part.removed) tdNew.appendChild(span);
+                        });
+                    } else {
+                        tdOld.innerHTML = formatText(row.old); tdNew.innerHTML = formatText(row.new);
+                    }
+                    tdRemark.innerHTML = "<span class='text-blue-600 font-bold'>수 정</span>";
+                } else if (row.type === 'delete') {
+                    stats.delete++;
+                    tdOld.innerHTML = formatText(row.old);
+                    tdNew.innerHTML = "<span style='color:#999; font-style:italic;'>&lt;삭 제&gt;</span>";
+                    tdRemark.innerHTML = "<span class='text-red-600 font-bold'>삭 제</span>";
+                } else if (row.type === 'insert') {
+                    stats.insert++;
+                    tdOld.innerHTML = "<span style='color:#999; font-style:italic;'>&lt;신 설&gt;</span>";
+                    tdNew.innerHTML = formatText(row.new);
+                    tdRemark.innerHTML = "<span class='text-green-600 font-bold'>신 설</span>";
+                }
+
+                if (row.mergedFrom) {
+                    tdRemark.innerHTML += "<span class='merged-row-indicator'>(병합됨)</span>";
+                }
+
+                tr.appendChild(tdOld); tr.appendChild(tdNew); tr.appendChild(tdRemark);
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('diffStats').innerHTML = `<b>${stats.total}</b>건 (수정:${stats.modify} 신설:${stats.insert} 삭제:${stats.delete})`;
+            document.getElementById('deletedCount').innerText = deletedItems.length;
+            updateActionMenu();
+        }
+
+        function handleGlobalMouseDown(event) {}
+
+        function handleRowMouseDown(index, event) {
+            isDragging = true;
+            dragStartIndex = index;
+            document.body.classList.add('dragging-mode');
+
+            if (event.shiftKey && lastSelectedIndex !== -1) {
+                const start = Math.min(lastSelectedIndex, index);
+                const end = Math.max(lastSelectedIndex, index);
+                for (let i = start; i <= end; i++) selectedIndices.add(i);
+            } else if (event.ctrlKey || event.metaKey) {
+                if (selectedIndices.has(index)) selectedIndices.delete(index);
+                else selectedIndices.add(index);
+            } else {
+                selectedIndices.clear();
+                selectedIndices.add(index);
+            }
+            
+            lastSelectedIndex = index;
+            renderTable();
+        }
+
+        function handleRowMouseEnter(index, event) {
+            if (!isDragging) return;
+            const start = Math.min(dragStartIndex, index);
+            const end = Math.max(dragStartIndex, index);
+            if (!event.ctrlKey && !event.metaKey) selectedIndices.clear();
+            for (let i = start; i <= end; i++) selectedIndices.add(i);
+            renderTable();
+        }
+
+        function handleGlobalMouseUp(event) {
+            if (isDragging) {
+                isDragging = false;
+                document.body.classList.remove('dragging-mode');
+                if (selectedIndices.size > 0) showFloatingMenu(event);
+            }
+        }
+
+        function handleGlobalClick(event) {
+            const table = document.getElementById('diffTable');
+            const menu = document.getElementById('actionMenu');
+            if (table && !table.contains(event.target) && menu && !menu.contains(event.target)) clearSelection();
+        }
+
+        function clearSelection() {
+            selectedIndices.clear();
+            lastSelectedIndex = -1;
+            renderTable();
+            document.getElementById('actionMenu').style.display = 'none';
+        }
+
+        function showFloatingMenu(event) {
+            const menu = document.getElementById('actionMenu');
+            menu.style.display = 'flex';
+            let x = event.clientX + 5;
+            let y = event.clientY + 5;
+            if (x + 250 > window.innerWidth) x = window.innerWidth - 260;
+            if (y + 120 > window.innerHeight) y = window.innerHeight - 130;
+            menu.style.left = `${x}px`;
+            menu.style.top = `${y}px`;
+        }
+
+        function updateActionMenu() {
+            const btnMerge = document.getElementById('btnMerge');
+            const btnUnmerge = document.getElementById('btnUnmerge');
+            const btnDelete = document.getElementById('btnDelete');
+            const count = selectedIndices.size;
+            btnMerge.disabled = count < 2;
+            
+            let hasMerged = false;
+            selectedIndices.forEach(idx => {
+                if (currentData[idx] && currentData[idx].mergedFrom) hasMerged = true;
+            });
+            btnDelete.disabled = count === 0 || hasMerged;
+
+            let canUnmerge = false;
+            if (count === 1) {
+                const idx = Array.from(selectedIndices)[0];
+                if (currentData[idx] && currentData[idx].mergedFrom) canUnmerge = true;
+            }
+            btnUnmerge.disabled = !canUnmerge;
+        }
+
+        function handleMerge() {
+            if (selectedIndices.size < 2) return;
+            const sortedIndices = Array.from(selectedIndices).sort((a, b) => a - b);
+            const firstIdx = sortedIndices[0];
+            let mergedOld = "";
+            let mergedNew = "";
+            let originalRows = [];
+            sortedIndices.forEach(idx => {
+                const row = currentData[idx];
+                originalRows.push({...row});
+                if (row.old) mergedOld += (mergedOld ? "\n\n" : "") + row.old;
+                if (row.new) mergedNew += (mergedNew ? "\n\n" : "") + row.new;
+            });
+            let newType = (mergedOld === mergedNew) ? 'equal' : 'modify';
+            if (!mergedOld) newType = 'insert';
+            else if (!mergedNew) newType = 'delete';
+            
+            const newRow = { type: newType, old: mergedOld, new: mergedNew, mergedFrom: originalRows };
+            for (let i = sortedIndices.length - 1; i >= 0; i--) { currentData.splice(sortedIndices[i], 1); }
+            currentData.splice(firstIdx, 0, newRow);
+            showToast('항목을 병합했습니다.');
+            clearSelection();
+        }
+
+        function handleUnmerge() {
+            const idx = Array.from(selectedIndices)[0];
+            const row = currentData[idx];
+            if (!row || !row.mergedFrom) return;
+            currentData.splice(idx, 1, ...row.mergedFrom);
+            showToast('병합을 취소했습니다.');
+            clearSelection();
+        }
+
+        function handleDelete() {
+            const sortedIndices = Array.from(selectedIndices).sort((a, b) => b - a);
+            
+            // 삭제 시점의 인덱스를 포함하여 백업
+            const backupItems = sortedIndices.map(idx => ({
+                data: currentData[idx],
+                originalIndex: idx
+            })).reverse(); // 원래 순서(오름차순)로 보관
+
+            deletedItems.push({ 
+                timestamp: new Date().toLocaleTimeString(), 
+                items: backupItems
+            });
+
+            sortedIndices.forEach(idx => currentData.splice(idx, 1));
+            showToast('항목을 삭제했습니다.');
+            clearSelection();
+        }
+
+        function openRestoreModal() {
+            const list = document.getElementById('deletedList');
+            list.innerHTML = '';
+            if (deletedItems.length === 0) {
+                list.innerHTML = '<div class="text-center py-10 text-gray-400 text-sm">삭제된 내역이 없습니다.</div>';
+            } else {
+                [...deletedItems].reverse().forEach((group, gIdx) => {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = "deleted-item rounded border-l-4 border-amber-400 pl-3 mb-2 bg-amber-50/30";
+                    const title = group.items.length > 1 ? `${group.items[0].data.old || group.items[0].data.new}... 외 ${group.items.length-1}건` : (group.items[0].data.old || group.items[0].data.new || "내용없음").substring(0, 30);
+                    groupDiv.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <div class="text-sm font-medium text-gray-700 truncate w-4/5">${title}</div>
+                            <div class="text-[10px] text-gray-400">${group.timestamp}</div>
+                        </div>
+                        <div class="mt-2">
+                            <button onclick="restoreItems(${deletedItems.length - 1 - gIdx})" class="text-xs bg-amber-500 text-white px-3 py-1 rounded hover:bg-amber-600 transition">제자리로 복구</button>
+                        </div>
+                    `;
+                    list.appendChild(groupDiv);
+                });
+            }
+            document.getElementById('restoreModal').classList.add('active');
+        }
+
+        function closeRestoreModal() { document.getElementById('restoreModal').classList.remove('active'); }
+
+        function restoreItems(groupIndex) {
+            const group = deletedItems[groupIndex];
+            
+            // 인덱스 순서대로(오름차순) 정렬하여 차례대로 끼워넣기
+            const sortedGroup = [...group.items].sort((a, b) => a.originalIndex - b.originalIndex);
+            
+            sortedGroup.forEach(item => {
+                currentData.splice(item.originalIndex, 0, item.data);
+            });
+            
+            deletedItems.splice(groupIndex, 1);
+            renderTable();
+            showToast('원래 위치로 복구되었습니다.');
+            if (deletedItems.length === 0) closeRestoreModal();
+            else openRestoreModal();
+        }
+
+        function clearDeletedHistory() {
+            if (confirm('삭제 내역을 비우시겠습니까?')) {
+                deletedItems = []; renderTable(); closeRestoreModal();
+            }
+        }
+
+        function copyTable() {
+            const table = document.getElementById('diffTable');
+            const clone = table.cloneNode(true);
+            
+            // UI 전용 요소(액션바 등) 제거
+            clone.querySelectorAll('.no-copy').forEach(el => el.remove());
+            
+            // 한글 여백 맞춤을 위한 인라인 스타일 강력 주입
+            clone.style.width = "100%";
+            clone.style.tableLayout = "fixed";
+            clone.style.borderCollapse = "collapse";
+            clone.style.border = "1px solid black";
+            clone.setAttribute("width", "100%");
+            clone.setAttribute("border", "1");
+            clone.setAttribute("cellspacing", "0");
+            clone.setAttribute("cellpadding", "10");
+
+            // 모든 셀에 테두리 스타일 명시 (HWP 호환성)
+            clone.querySelectorAll('th, td').forEach(cell => {
+                cell.style.border = "1px solid black";
+            });
+
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute'; tempDiv.style.left = '-9999px';
+            tempDiv.appendChild(clone);
+            document.body.appendChild(tempDiv);
+
+            const range = document.createRange();
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            range.selectNode(clone); // table 전체(제목행 포함) 선택
+            selection.addRange(range);
+
+            try {
+                document.execCommand('copy');
+                showToast('표(제목행 포함)를 복사하였습니다. 한글(HWP)에서 붙여넣기 하세요.');
+            } catch (err) {
+                showModal('오류', '복사에 실패했습니다.');
+            }
+            selection.removeAllRanges();
+            document.body.removeChild(tempDiv);
+        }
+
+        function loadSample() {
+            document.getElementById('oldText').value = `제1조(목적) 이 규정은 펜통 시스템의 운영에 관한 사항을 규정함을 목적으로 한다.
+제2조(정의) 이 규정에서 사용하는 용어의 뜻은 다음과 같다.
+1. "펜통"이란 교육행정 업무 지원 시스템을 말한다.
+2. "사용자"란 시스템에 접속하여 기능을 사용하는 교직원을 말한다.
+3. "관리자"란 시스템을 총괄하여 관리하는 자를 말한다.
+제3조(위원회 구성) ① 시스템의 원활한 운영을 위하여 펜통운영위원회를 둔다.
+제4조(운영시간) ① 시스템의 운영시간은 평일 09:00부터 18:00까지로 한다.
+제5조(비밀유지) 사용자는 업무상 알게 된 개인정보를 누설하여서는 아니 된다.`;
+
+            document.getElementById('newText').value = `제1조(목적) 이 규정은 펜통(PenTong) 시스템의 운영 및 관리에 관한 사항을 규정함을 목적으로 한다.
+제2조(정의) 이 규정에서 사용하는 용어의 뜻은 다음과 같다.
+1. "펜통"이란 교육행정 업무 지원 시스템을 말한다.
+2. "관리자"란 시스템을 총괄하여 관리하는 자를 말한다.
+제3조(운영시간) ① 시스템의 운영시간은 평일 08:30부터 17:30까지로 한다.
+제4조(비밀유지) 사용자는 업무상 알게 된 개인정보를 무단으로 누설하여서는 아니 된다.
+부 칙
+제1조(시행일) 이 규정은 2026년 3월 1일부터 시행한다.`;
+            showToast('샘플 데이터를 로드했습니다.');
+        }
+    </script>
+</body>
+</html>

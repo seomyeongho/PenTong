@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>증명사진 보정</title>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- OpenCV.js CDN -->
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+
+    <!-- MediaPipe Face Mesh CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <!-- MediaPipe 배경 분리(누끼) AI 엔진 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #f8f9fa;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        header {
+            background: #ffffff;
+            padding: 15px 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+            header h1 {
+                font-size: 18px;
+                font-weight: 700;
+                color: #2c3e50;
+                margin: 0;
+            }
+
+            header .header-actions button {
+                background: #3498db;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: bold;
+                transition: background 0.2s;
+            }
+
+                header .header-actions button:hover {
+                    background: #2980b9;
+                }
+
+                header .header-actions button:disabled {
+                    background: #bdc3c7;
+                    cursor: not-allowed;
+                }
+
+        main {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 55px);
+        }
+
+        .preview-section {
+            flex: 1;
+            display: flex;
+            overflow: hidden; /* 💡 스크롤바 완벽 차단 */
+            position: relative;
+            align-items: center;
+            justify-content: center;
+            background: #e9ecef;
+            padding: 20px;
+            min-width: 0;
+            min-height: 0;
+        }
+
+        /* 💡 신규 추가: 마우스 우클릭 이동(패닝)을 담당하는 독립 래퍼 */
+        #pan-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transform-origin: center center;
+            will-change: transform;
+        }
+
+        #zoom-wrapper {
+            transform-origin: center center;
+            transition: transform 0.1s ease-out;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+            min-width: 0;
+            min-height: 0;
+        }
+
+        .image-container {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: transparent;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            transition: all 0.3s;
+            min-width: 0;
+            min-height: 0; /* 💡 사진 잘림 완벽 차단 */
+        }
+
+            .image-container.dragover {
+                border: 2px solid #3498db;
+                background-color: #e3f2fd;
+            }
+
+        /* 💡 1픽셀 오차 없이 사진, 마스크, 캔버스를 묶어주는 래퍼 */
+        .sync-wrapper {
+            position: relative;
+            display: none;
+            margin: auto;
+            max-width: 100%;
+            max-height: 100%;
+            min-width: 0;
+            min-height: 0;
+        }
+
+            .sync-wrapper img {
+                display: block;
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                user-select: none;
+                -webkit-user-drag: none;
+            }
+
+        .upload-prompt {
+            text-align: center;
+            color: #6c757d;
+            cursor: pointer;
+            padding: 20px;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+            .upload-prompt i {
+                font-size: 40px;
+                margin-bottom: 15px;
+                color: #adb5bd;
+                transition: color 0.3s;
+            }
+
+            .upload-prompt p {
+                font-size: 14px;
+                margin-bottom: 5px;
+                font-weight: bold;
+            }
+
+            .upload-prompt .sub-text {
+                font-size: 12px;
+                color: #adb5bd;
+            }
+
+        #file-input {
+            display: none;
+        }
+
+        /* 툴 패널 */
+        .tools-section {
+            width: 340px;
+            background: #ffffff;
+            border-left: 1px solid #dee2e6;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.02);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            padding: 15px 15px 0 15px;
+            background: #f1f3f5;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: #e9ecef;
+            border: 1px solid #ced4da;
+            border-bottom: none;
+            padding: 12px 0;
+            border-radius: 8px 8px 0 0;
+            font-size: 13px;
+            font-weight: 700;
+            color: #868e96;
+            transition: all 0.2s;
+            box-shadow: inset 0 -3px 5px rgba(0,0,0,0.02);
+            cursor: pointer;
+        }
+
+            .tab-btn:hover {
+                background: #f8f9fa;
+                color: #495057;
+            }
+
+            .tab-btn.active {
+                background: #ffffff;
+                color: #3498db;
+                border-color: #3498db;
+                border-bottom: 2px solid #ffffff;
+                margin-bottom: -2px;
+                box-shadow: 0 -3px 8px rgba(0,0,0,0.05);
+                padding-top: 14px;
+            }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: none;
+        }
+
+            .tab-content.active {
+                display: block;
+            }
+
+        .control-group {
+            margin-bottom: 25px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+            .control-group label {
+                display: block;
+                font-size: 14px;
+                font-weight: 700;
+                color: #2c3e50;
+                margin-bottom: 12px;
+                text-align: center;
+            }
+
+        .click-btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .click-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.1s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+            .click-btn:active {
+                transform: scale(0.96);
+            }
+
+            .click-btn.btn-minus {
+                background: #fff;
+                border: 1px solid #ced4da;
+                color: #495057;
+            }
+
+                .click-btn.btn-minus:hover {
+                    background: #e9ecef;
+                }
+
+            .click-btn.btn-plus {
+                background: #e3f2fd;
+                border: 1px solid #3498db;
+                color: #3498db;
+            }
+
+                .click-btn.btn-plus:hover {
+                    background: #bbdefb;
+                }
+
+        .reset-btn {
+            width: 100%;
+            background: #fff;
+            border: 1px solid #ced4da;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            color: #6c757d;
+            margin-top: 15px;
+            transition: background 0.2s;
+        }
+
+            .reset-btn:hover {
+                background: #f8f9fa;
+                color: #495057;
+            }
+
+        /* 모달 및 토스트 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.4);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .modal-box {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            width: 300px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            transform: translateY(-20px);
+            transition: transform 0.2s;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+            opacity: 1;
+        }
+
+            .modal-overlay.show .modal-box {
+                transform: translateY(0);
+            }
+
+        .modal-message {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 20px;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .modal-btn {
+            padding: 8px 20px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .btn-confirm {
+            background: #3498db;
+            color: white;
+        }
+
+        #toast-container {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(44, 62, 80, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s, bottom 0.3s;
+        }
+
+            #toast-container.show {
+                opacity: 1;
+                bottom: 50px;
+            }
+
+        #brush-cursor {
+            position: fixed;
+            border: 1.5px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 3px rgba(0,0,0,0.5);
+            border-radius: 50%;
+            pointer-events: none;
+            display: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .checkerboard-bg {
+            background-image: linear-gradient(45deg, #ddd 25%, transparent 25%), linear-gradient(-45deg, #ddd 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ddd 75%), linear-gradient(-45deg, transparent 75%, #ddd 75%);
+            background-size: 14px 14px;
+            background-position: 0 0, 0 7px, 7px -7px, -7px 0px;
+            background-color: white;
+        }
+
+        .view-label {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(44, 62, 80, 0.8);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 50;
+            pointer-events: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .color-palette {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .color-btn {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            border: 2px solid #ced4da;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 11px;
+            font-weight: bold;
+            color: #555;
+        }
+
+            .color-btn:hover {
+                transform: scale(1.1);
+            }
+
+            .color-btn.active {
+                border: 3px solid #3498db;
+                box-shadow: 0 0 8px rgba(52,152,219,0.5);
+            }
+
+        .bg-transparent {
+            background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: 10px 10px;
+            background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
+            background-color: white;
+        }
+
+        .custom-gradient-picker {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #f8f9fa;
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 2px solid #ced4da;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+            .custom-gradient-picker:hover {
+                transform: scale(1.05);
+            }
+
+            .custom-gradient-picker.active {
+                border: 3px solid #3498db;
+                box-shadow: 0 0 8px rgba(52,152,219,0.5);
+            }
+
+            .custom-gradient-picker input[type="color"] {
+                width: 22px;
+                height: 22px;
+                border: none;
+                padding: 0;
+                border-radius: 50%;
+                overflow: hidden;
+                cursor: pointer;
+            }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <h1>증명사진 보정</h1>
+            <span id="status-text" style="font-size: 13px; font-weight: bold; color: #e74c3c; opacity: 0; transition: opacity 0.2s;">
+                <i class="fas fa-spinner fa-spin"></i> 처리 중...
+            </span>
+        </div>
+        <div class="header-actions">
+            <span id="zoom-indicator" onclick="resetZoomPan()" style="display: none; background: #ecf0f1; color: #2c3e50; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; cursor: pointer; margin-right: 10px; border: 1px solid #bdc3c7; user-select: none;" data-tooltip="클릭 시 화면에 맞게 꽉 채움">🔍 100%</span>
+            <button onclick="triggerUpload()" id="btn-upload" disabled><i class="fas fa-folder-open"></i> 사진 불러오기</button>
+            <button onclick="toggleCompareMode()" id="btn-compare" style="margin-left: 5px; background: #7f8c8d; display: none;"><i class="fas fa-columns"></i> 원본 비교</button>
+            <button onclick="copyToClipboard()" style="margin-left: 5px; background: #f39c12;"><i class="fas fa-copy"></i> 복사</button>
+            <button onclick="saveImage()" style="margin-left: 5px; background: #2ecc71;"><i class="fas fa-download"></i> 저장</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- 마우스 휠 이벤트 상시 활성화 -->
+        <section class="preview-section" id="preview-section" onwheel="handleWheelZoom(event)">
+
+            <!-- 💡 패닝 래퍼로 줌 래퍼를 감싸줍니다 -->
+            <div id="pan-wrapper">
+                <div id="zoom-wrapper">
+                    <!-- 왼쪽: 원본 이미지 뷰어 -->
+                    <div id="original-section" style="display: none; flex: 1; flex-direction: column; height: 100%; min-width: 0; min-height: 0;">
+                        <!-- (이하 기존 original-section 내부 내용 동일) -->
+                        <div style="text-align: center; font-size: 13px; font-weight: bold; color: #7f8c8d; margin-bottom: 8px;">원본</div>
+                        <div class="image-container" style="border: none;">
+                            <div id="original-working-area" class="sync-wrapper">
+                                <img id="original-preview" src="" alt="" draggable="false">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 오른쪽: 보정 이미지 뷰어 -->
+                    <div id="edited-section" style="display: flex; flex: 1; flex-direction: column; height: 100%; min-width: 0; min-height: 0;">
+                        <!-- (이하 기존 edited-section 내부 내용 동일) -->
+                        <div id="edited-title" style="display: none; text-align: center; font-size: 13px; font-weight: bold; color: #2ecc71; margin-bottom: 8px;">보정본</div>
+                        <div class="image-container" id="image-container">
+                            <div class="upload-prompt" id="upload-prompt" onclick="triggerUpload()">
+                                <i class="fas fa-spinner fa-spin" id="loading-icon" style="font-size: 50px; color: #3498db;"></i>
+                                <p id="upload-prompt-text" style="font-size: 26px; color: #3498db; margin-top: 15px;">AI 엔진 및 필터 준비 중...</p>
+                                <span class="sub-text" id="upload-sub-text" style="font-size: 15px; color: #7f8c8d; margin-top: 10px;">잠시만 기다려주세요 (최초 1회)</span>
+                            </div>
+                            <div id="working-area" class="sync-wrapper">
+                                <img id="photo-preview" src="" alt="" draggable="false"
+                                     onmousedown="startBlemishDraw(event)" onmousemove="drawBlemish(event)"
+                                     onmouseup="endBlemishDraw(event)" onmouseleave="leaveBlemishDraw(event)">
+                                <svg id="mask-editor" xmlns="http://www.w3.org/2000/svg"
+                                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; pointer-events: none;"></svg>
+                                <canvas id="crop-layer"
+                                        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 150; display: none; cursor: crosshair;"></canvas>
+                            </div>
+                            <input type="file" id="file-input" accept="image/jpeg, image/png" onchange="handleFileSelect(event)">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 잡티 제거용 브러시 -->
+            <div id="brush-cursor"></div>
+        </section>
+
+        <aside class="tools-section">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('skin')"><i class="fas fa-magic"></i> 피부</button>
+                <button class="tab-btn" onclick="switchTab('face')"><i class="fas fa-smile"></i> 이목구비</button>
+                <button class="tab-btn" onclick="switchTab('bg')"><i class="fas fa-fill-drip"></i> 배경</button>
+                <button class="tab-btn" onclick="switchTab('crop')"><i class="fas fa-crop-alt"></i> 규격</button>
+            </div>
+
+            <!-- 피부 보정 탭 -->
+            <div class="tab-content active" id="tab-skin">
+                <div class="control-group" style="border-left: 4px solid #9b59b6;">
+                    <label>피부 보정 영역(마스크) 조절</label>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="reset-btn" id="mask-toggle-btn" onclick="toggleMaskEditMode()" style="margin-top: 0; flex: 3; border-color: #9b59b6; color: #9b59b6;">
+                            <i class="fas fa-draw-polygon"></i> 윤곽선 미세 조정 (OFF)
+                        </button>
+                        <button class="reset-btn" onclick="resetMaskOutline()" style="margin-top: 0; flex: 1; border-color: #e67e22; color: #e67e22;" data-tooltip="AI 원본으로 되돌리기">
+                            <i class="fas fa-sync-alt"></i> 초기화
+                        </button>
+                    </div>
+                    <p style="font-size: 11px; color: #999; margin-top: 8px; text-align: center;">AI가 잡은 얼굴 윤곽이 어색하다면 점을 끌어 맞추세요.</p>
+                </div>
+                <div class="control-group" style="border-left: 4px solid #3498db;">
+                    <label>잡티 및 흉터 제거</label>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="reset-btn" id="blemish-toggle-btn" onclick="toggleBlemishMode()" style="margin-top: 0; flex: 3; border-color: #3498db; color: #3498db;">
+                            <i class="fas fa-mouse-pointer"></i> 직접 선택 모드 (OFF)
+                        </button>
+                        <button class="reset-btn" onclick="undoBlemish()" style="margin-top: 0; flex: 1; border-color: #e74c3c; color: #e74c3c;" data-tooltip="최근 지우기 취소">
+                            <i class="fas fa-undo"></i> 취소
+                        </button>
+                    </div>
+                    <div id="brush-control" style="display: none; margin-top: 15px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <label style="font-size: 12px; color: #666; margin:0;">브러시 크기</label>
+                            <span id="brush-size-val" style="font-size:12px; font-weight:bold; color:#3498db;">15px</span>
+                        </div>
+                        <input type="range" id="brush-size" min="3" max="50" value="15" oninput="updateBrushCursor(event)" style="width: 100%;">
+                        <p style="font-size: 11px; color: #999; margin-top: 8px; text-align: center;">마우스 휠을 돌려 이미지를 확대/축소할 수 있습니다.</p>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>피부 결 부드럽게</label>
+                    <div class="click-btn-group">
+                        <button class="click-btn btn-minus" onclick="adjustEffect('smooth', -1)"><i class="fas fa-minus"></i> 한 단계 빼기</button>
+                        <button class="click-btn btn-plus" onclick="adjustEffect('smooth', 1)"><i class="fas fa-plus"></i> 효과 더하기</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>피부 톤 맑게</label>
+                    <div class="click-btn-group">
+                        <button class="click-btn btn-minus" onclick="adjustEffect('bright', -1)"><i class="fas fa-minus"></i> 한 단계 빼기</button>
+                        <button class="click-btn btn-plus" onclick="adjustEffect('bright', 1)"><i class="fas fa-plus"></i> 효과 더하기</button>
+                    </div>
+                </div>
+
+                <button class="reset-btn" onclick="resetAllEffects()"><i class="fas fa-undo"></i> 피부결/톤 효과 초기화</button>
+            </div>
+
+            <!-- 이목구비 보정 탭 -->
+            <div id="tab-face" class="tab-content">
+                <div class="control-group" style="border-left: 4px solid #f39c12;">
+                    <label>눈동자 선명화 (눈빛 보정)</label>
+                    <div class="click-btn-group">
+                        <button class="click-btn btn-minus" onclick="adjustEffect('eye', -1)"><i class="fas fa-minus"></i> 한 단계 빼기</button>
+                        <button class="click-btn btn-plus" onclick="adjustEffect('eye', 1)"><i class="fas fa-plus"></i> 효과 더하기</button>
+                    </div>
+                </div>
+                <div class="control-group" style="border-left: 4px solid #e74c3c;">
+                    <label>입술 생기 (혈색 부여)</label>
+                    <div class="click-btn-group">
+                        <button class="click-btn btn-minus" onclick="adjustEffect('lip', -1)"><i class="fas fa-minus"></i> 한 단계 빼기</button>
+                        <button class="click-btn btn-plus" onclick="adjustEffect('lip', 1)"><i class="fas fa-plus"></i> 효과 더하기</button>
+                    </div>
+                </div>
+                <button class="reset-btn" onclick="resetAllEffects()"><i class="fas fa-undo"></i> 모든 효과 초기화</button>
+            </div>
+
+            <!-- 배경 탭 -->
+            <div id="tab-bg" class="tab-content">
+                <div class="control-group" style="border-left: 4px solid #2ecc71;">
+                    <label>단색 배경</label>
+                    <div class="color-palette">
+                        <div class="color-btn active" style="background: #f8f9fa;" onclick="changeBackground('none', this)">원본</div>
+                        <div class="color-btn bg-transparent" onclick="changeBackground('transparent', this)"></div>
+                        <div class="color-btn" style="background: #ffffff;" onclick="changeBackground('#ffffff', this)"></div>
+                        <div class="color-btn" style="background: #e0f7fa;" onclick="changeBackground('#e0f7fa', this)"></div>
+                        <div class="color-btn" style="background: #3498db;" onclick="changeBackground('#3498db', this)"></div>
+                        <label class="color-btn" style="background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red); cursor: pointer;">
+                            <input type="color" id="custom-bg-color" style="opacity: 0; width: 0; height: 0;" onchange="changeBackground('custom', this.parentNode)">
+                        </label>
+                    </div>
+                </div>
+                <div class="control-group" style="border-left: 4px solid #e74c3c;">
+                    <label>그라데이션 배경</label>
+                    <div class="color-palette">
+                        <div class="color-btn" style="background: linear-gradient(to bottom, #8e9eab, #eef2f3);" onclick="changeBackground('grad_gray', this)"></div>
+                        <div class="color-btn" style="background: linear-gradient(to bottom, #a1c4fd, #c2e9fb);" onclick="changeBackground('grad_blue', this)"></div>
+                        <div class="color-btn" style="background: linear-gradient(to bottom, #d4a373, #faedcd);" onclick="changeBackground('grad_brown', this)"></div>
+                        <div class="custom-gradient-picker">
+                            <input type="color" id="grad-color-1" value="#ff9a9e" onchange="changeBackground('grad_custom', this.parentNode)">
+                            <span style="font-size:12px; color:#999; font-weight:bold;">~</span>
+                            <input type="color" id="grad-color-2" value="#fecfef" onchange="changeBackground('grad_custom', this.parentNode)">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 규격 탭 -->
+            <div id="tab-crop" class="tab-content">
+                <div class="control-group" style="border-left: 4px solid #f1c40f;">
+                    <label>사진 규격 선택 및 추출</label>
+                    <div class="click-btn-group" style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px;">
+                        <button class="click-btn btn-minus" onclick="setCropRatio(3.5 / 4.5)" style="background:#fff9e6; border-color:#f1c40f; color:#d35400;">여권·주민증·수능 (3.5 x 4.5)</button>
+                        <button class="click-btn btn-minus" onclick="setCropRatio(3 / 4)">반명함 (3 x 4)</button>
+                        <button class="click-btn btn-minus" onclick="setCropRatio(2.5 / 3)">증명 (2.5 x 3)</button>
+                        <button class="click-btn btn-minus" onclick="setCropRatio(5 / 7)">명함 (5 x 7)</button>
+                        <button class="click-btn btn-minus" onclick="setCropRatio(5 / 5)">미국 비자 (5 x 5)</button>
+                        <button class="click-btn btn-minus" onclick="setCropRatio(0)">자유 비율 (비율 제한 없음)</button>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="reset-btn" onclick="copyCropArea()" style="margin-top: 0; flex: 1; background: #f39c12; color: white; border-color: #f39c12;"><i class="fas fa-copy"></i> 영역 복사</button>
+                        <button class="reset-btn" onclick="saveCropArea()" style="margin-top: 0; flex: 1; background: #2ecc71; color: white; border-color: #2ecc71;"><i class="fas fa-download"></i> 영역 저장</button>
+                    </div>
+                    <p style="font-size: 11px; color: #999; margin-top: 15px; text-align: center;">어두운 영역을 제외한 밝은 부분만 복사되거나 저장됩니다.</p>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <div class="modal-overlay" id="custom-modal">
+        <div class="modal-box">
+            <div class="modal-message" id="modal-msg-text">메시지</div>
+            <div class="modal-buttons"><button class="modal-btn btn-confirm" onclick="closeModal()">확인</button></div>
+        </div>
+    </div>
+    <div id="toast-container">메시지</div>
+
+    <script>
+        // 전역 변수
+        let cvReady = false;
+        let originalMat = null, baseMat = null, maskMat = null, eyeMaskMat = null, lipMaskMat = null;
+        let levels = { smooth: 0, bright: 0, eye: 0, lip: 0 };
+        const MAX_LEVEL = 10;
+        let isBlemishMode = false, isCompareMode = false, zoomLevel = 1.0;
+        let blemishHistory = [];
+        let isMaskEditMode = false, customOvalPoints = [], draggedPointIndex = -1;
+        let bgMode = 'none', rawBgMaskCanvas = null;
+        let isCropMode = false, cropRatio = 3.5 / 4.5, cropRect = { x: 0, y: 0, w: 0, h: 0 };
+        let cropDragAction = 'none', cropDragStart = { x: 0, y: 0 }, cropStartRect = { x: 0, y: 0, w: 0, h: 0 };
+
+        function setProcessingStatus(isProcessing, text = '처리 중...') {
+            const status = document.getElementById('status-text');
+            const tools = document.querySelector('.tools-section');
+            const preview = document.getElementById('photo-preview');
+            if (isProcessing) {
+                status.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${text}`; status.style.opacity = '1';
+                tools.style.pointerEvents = 'none'; preview.style.pointerEvents = 'none';
+            } else {
+                status.style.opacity = '0'; tools.style.pointerEvents = 'auto'; preview.style.pointerEvents = 'auto';
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`.tab-btn[onclick="switchTab('${tabId}')"]`).classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            if (tabId === 'crop') startCropMode(); else stopCropMode();
+        }
+
+        const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        faceMesh.onResults(onFaceMeshResults);
+
+        const selfieSegmentation = new SelfieSegmentation({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}` });
+        selfieSegmentation.setOptions({ modelSelection: 0 });
+        selfieSegmentation.onResults((results) => {
+            if (!rawBgMaskCanvas) rawBgMaskCanvas = document.createElement('canvas');
+            rawBgMaskCanvas.width = results.segmentationMask.width; rawBgMaskCanvas.height = results.segmentationMask.height;
+            rawBgMaskCanvas.getContext('2d').drawImage(results.segmentationMask, 0, 0);
+        });
+
+        function onOpenCvReady() {
+            cvReady = true;
+            const canvas = document.createElement('canvas'); canvas.width = 10; canvas.height = 10; canvas.getContext('2d').fillRect(0, 0, 10, 10);
+
+            // 🌟 준비 완료 시 UI를 변경하는 공통 함수
+            const setReadyUI = () => {
+                const icon = document.getElementById('loading-icon');
+                icon.className = 'fas fa-cloud-upload-alt';
+                icon.style.fontSize = '40px';
+                icon.style.color = '#adb5bd';
+
+                const promptText = document.getElementById('upload-prompt-text');
+                promptText.innerText = "사진을 클릭하거나 드래그하세요";
+                promptText.style.fontSize = '16px';  // 원래 크기로 원상 복구
+                promptText.style.color = '#6c757d';
+
+                // 🌟 "잠시만 기다려주세요" 문구를 화면에서 완전히 숨김
+                document.getElementById('upload-sub-text').style.display = 'none';
+
+                document.getElementById('btn-upload').disabled = false;
+            };
+
+            // AI 모델이 준비되면 setReadyUI 실행
+            faceMesh.send({ image: canvas }).then(setReadyUI).catch(setReadyUI);
+        }
+
+        function triggerUpload() { if (cvReady) document.getElementById('file-input').click(); }
+        const dropZone = document.getElementById('image-container');
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); if (cvReady) dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+        dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); if (cvReady && e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); });
+        function handleFileSelect(event) { if (event.target.files[0]) processFile(event.target.files[0]); }
+
+        function processFile(file) {
+            if (!file.type.startsWith('image/')) { showCustomModal('이미지 파일만 업로드 가능합니다.'); return; }
+            setProcessingStatus(true, 'AI 분석 중...');
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = async () => {
+                    try {
+                        if (isBlemishMode) toggleBlemishMode();
+                        if (isMaskEditMode) toggleMaskEditMode();
+
+                        const safeDelete = (m) => { try { if (m && !m.isDeleted()) m.delete(); } catch (e) { } };
+                        safeDelete(originalMat); originalMat = null; safeDelete(maskMat); maskMat = null;
+                        safeDelete(baseMat); baseMat = null; safeDelete(eyeMaskMat); eyeMaskMat = null; safeDelete(lipMaskMat); lipMaskMat = null;
+                        blemishHistory.forEach(m => safeDelete(m)); blemishHistory = [];
+                        levels = { smooth: 0, bright: 0, eye: 0, lip: 0 }; customOvalPoints = []; window.currentLandmarks = null;
+
+                        zoomLevel = 1.0; document.getElementById('zoom-wrapper').style.transform = `scale(1.0)`;
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+                        canvas.getContext('2d').drawImage(img, 0, 0);
+
+                        originalMat = cv.imread(canvas); cv.cvtColor(originalMat, originalMat, cv.COLOR_RGBA2RGB); baseMat = originalMat.clone();
+
+                        document.getElementById('original-preview').src = canvas.toDataURL('image/png');
+                        await faceMesh.send({ image: canvas });
+
+                        bgMode = 'none'; document.querySelectorAll('.color-palette .color-btn').forEach(b => b.classList.remove('active'));
+                        const ob = document.querySelector('.color-palette .color-btn'); if (ob) ob.classList.add('active');
+                        await selfieSegmentation.send({ image: canvas });
+
+                        // 💡 [핵심 해결] 캔버스와 사진이 동일한 픽셀과 비율로 완벽히 일치하도록 설정
+                        const b64 = canvas.toDataURL('image/png');
+                        document.getElementById('photo-preview').src = b64;
+                        document.getElementById('btn-compare').style.display = 'inline-block';
+                        document.getElementById('upload-prompt').style.display = 'none';
+                        document.getElementById('image-container').classList.add('has-image');
+
+                        const wa = document.getElementById('working-area');
+                        wa.style.aspectRatio = `${baseMat.cols} / ${baseMat.rows}`;
+                        wa.style.display = 'block';
+
+                        const origWa = document.getElementById('original-working-area');
+                        origWa.style.aspectRatio = `${baseMat.cols} / ${baseMat.rows}`;
+                        origWa.style.display = 'block';
+
+                        document.getElementById('mask-editor').setAttribute('viewBox', `0 0 ${baseMat.cols} ${baseMat.rows}`);
+                        const cropCanvas = document.getElementById('crop-layer');
+                        cropCanvas.width = baseMat.cols; cropCanvas.height = baseMat.rows;
+
+                        resetZoomPan();
+
+                    } catch (err) { showCustomModal(`오류: ${err}`); } finally { setProcessingStatus(false); }
+                };
+                img.onerror = () => { setProcessingStatus(false); showCustomModal('손상된 파일입니다.'); };
+                img.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function onFaceMeshResults(results) {
+            if (!originalMat) return;
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                window.currentLandmarks = results.multiFaceLandmarks[0];
+                const OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+                customOvalPoints = OVAL.map(idx => ({ x: window.currentLandmarks[idx].x, y: window.currentLandmarks[idx].y }));
+                [0, 1, 2, 3, 4, 35, 34, 33, 32].forEach(i => { customOvalPoints[i].y -= 0.02; });
+                generateMasks();
+            } else { window.currentLandmarks = null; generateMasks(); }
+        }
+
+        function generateMasks() {
+            if (!originalMat) return;
+            const w = originalMat.cols, h = originalMat.rows;
+            const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h; const ctx = canvas.getContext('2d');
+            const L_EYE = [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7];
+            const R_EYE = [362, 398, 384, 385, 386, 387, 388, 466, 263, 249, 390, 373, 374, 380, 381, 382];
+            const L_OUT = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146];
+            const L_IN = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95];
+            const drawPoly = (idx) => { ctx.beginPath(); idx.forEach((i, n) => { const p = window.currentLandmarks[i]; if (n === 0) ctx.moveTo(p.x * w, p.y * h); else ctx.lineTo(p.x * w, p.y * h); }); ctx.closePath(); ctx.fill(); };
+
+            ctx.fillStyle = 'black'; ctx.fillRect(0, 0, w, h);
+            if (customOvalPoints.length > 0) {
+                ctx.fillStyle = 'white'; ctx.shadowBlur = 0; ctx.beginPath();
+                customOvalPoints.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x * w, p.y * h); else ctx.lineTo(p.x * w, p.y * h); });
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = 'black'; drawPoly(L_EYE); drawPoly(R_EYE); drawPoly(L_OUT);
+            } else { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, w, h); }
+            if (maskMat) maskMat.delete(); let tm = cv.imread(canvas); maskMat = new cv.Mat(); cv.cvtColor(tm, maskMat, cv.COLOR_RGBA2GRAY); tm.delete();
+
+            ctx.fillStyle = 'black'; ctx.fillRect(0, 0, w, h);
+            if (window.currentLandmarks) { ctx.fillStyle = 'white'; drawPoly(L_EYE); drawPoly(R_EYE); }
+            if (eyeMaskMat) eyeMaskMat.delete(); tm = cv.imread(canvas); eyeMaskMat = new cv.Mat(); cv.cvtColor(tm, eyeMaskMat, cv.COLOR_RGBA2GRAY); tm.delete();
+
+            ctx.fillStyle = 'black'; ctx.fillRect(0, 0, w, h);
+            if (window.currentLandmarks) { ctx.fillStyle = 'white'; drawPoly(L_OUT); ctx.fillStyle = 'black'; drawPoly(L_IN); }
+            if (lipMaskMat) lipMaskMat.delete(); tm = cv.imread(canvas); lipMaskMat = new cv.Mat(); cv.cvtColor(tm, lipMaskMat, cv.COLOR_RGBA2GRAY); tm.delete();
+        }
+
+        function resetMaskOutline() {
+            if (!window.currentLandmarks || !baseMat) { showToast('초기화 데이터가 없습니다.'); return; }
+            const OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+            customOvalPoints = OVAL.map(idx => ({ x: window.currentLandmarks[idx].x, y: window.currentLandmarks[idx].y }));
+            [0, 1, 2, 3, 4, 35, 34, 33, 32].forEach(i => { customOvalPoints[i].y -= 0.02; });
+            setProcessingStatus(true, '초기화 중...'); setTimeout(() => { generateMasks(); if (isMaskEditMode) renderMaskEditor(); applyFilters(); setProcessingStatus(false); }, 30);
+        }
+
+        function toggleMaskEditMode() {
+            if (!baseMat || !window.currentLandmarks) { showCustomModal('얼굴 인식이 불가능합니다.'); return; }
+            isMaskEditMode = !isMaskEditMode;
+            const btn = document.getElementById('mask-toggle-btn'), svg = document.getElementById('mask-editor');
+            if (isMaskEditMode) {
+                if (isBlemishMode) toggleBlemishMode();
+                btn.innerHTML = '<i class="fas fa-draw-polygon"></i> 윤곽선 (ON)'; btn.style.background = '#9b59b6'; btn.style.color = '#fff';
+                svg.style.display = 'block'; renderMaskEditor();
+            } else {
+                btn.innerHTML = '<i class="fas fa-draw-polygon"></i> 윤곽선 (OFF)'; btn.style.background = '#fff'; btn.style.color = '#9b59b6';
+                svg.style.display = 'none';
+            }
+        }
+
+        // ==========================================
+        // 💡 [신규] 마우스 우클릭 패닝(이동) 및 비율 제어 로직
+        // ==========================================
+        let panX = 0, panY = 0;
+        let isPanning = false, startPanX = 0, startPanY = 0;
+
+        // 브라우저 기본 우클릭 팝업 메뉴 차단 (뷰어 내에서만)
+        document.addEventListener('contextmenu', event => {
+            if (event.target.closest('#preview-section')) event.preventDefault();
+        });
+
+        const previewSection = document.getElementById('preview-section');
+        previewSection.addEventListener('mousedown', (e) => {
+            if (e.button === 2 && baseMat) { // 2 = 우클릭
+                isPanning = true;
+                startPanX = e.clientX - panX;
+                startPanY = e.clientY - panY;
+                previewSection.style.cursor = 'grabbing';
+                e.preventDefault();
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                panX = e.clientX - startPanX;
+                panY = e.clientY - startPanY;
+                document.getElementById('pan-wrapper').style.transform = `translate(${panX}px, ${panY}px)`;
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 2 && isPanning) {
+                isPanning = false;
+                previewSection.style.cursor = 'default';
+            }
+        });
+
+        // 💡 디스플레이 확대 비율 계산 (화면 픽셀 / 원본 픽셀)
+        function updateZoomDisplay() {
+            if (!baseMat) return;
+            const wa = document.getElementById('working-area');
+            const ind = document.getElementById('zoom-indicator');
+            if (!wa || wa.style.display === 'none') { ind.style.display = 'none'; return; }
+
+            // 현재 화면에 출력되는 사진 픽셀 크기가 원본 대비 몇 %인지 산출
+            const ratio = Math.round(((wa.clientWidth * zoomLevel) / baseMat.cols) * 100);
+            ind.innerHTML = `<i class="fas fa-search"></i> ${ratio}%`;
+            ind.style.display = 'inline-block';
+        }
+
+        // 💡 100% 원래 화면 크기로 복구
+        function resetZoomPan() {
+            if (!baseMat) return;
+            zoomLevel = 1.0; panX = 0; panY = 0;
+
+            const zw = document.getElementById('zoom-wrapper');
+            zw.style.transformOrigin = `center center`;
+            zw.style.transform = `scale(1.0)`;
+
+            document.getElementById('pan-wrapper').style.transform = `translate(0px, 0px)`;
+
+            updateZoomDisplay();
+            updateBrushCursor();
+            if (isMaskEditMode) renderMaskEditor();
+            if (isCropMode) drawCropLayer();
+        }
+
+        // [핵심 해결] 마우스 휠 위치 기준 언제든 확대/축소 (최대 8배/최소 제한 적용)
+        function handleWheelZoom(e) {
+            if (!originalMat) return;
+            e.preventDefault();
+
+            const wrapper = document.getElementById('zoom-wrapper');
+            const rect = wrapper.getBoundingClientRect();
+
+            // 확대/축소 기준점을 마우스 포인터 위치로 설정
+            const x = ((e.clientX - rect.left) / rect.width) * 100;
+            const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+            const zoomFactor = 0.15;
+            const wa = document.getElementById('working-area');
+
+            // 최대 제한: 원본 사진 픽셀 대비 최대 8배(800%)까지만 허용
+            const maxZoom = 8.0 / (wa.clientWidth / baseMat.cols);
+            // 최소 제한: 너무 작아져서 사라지는 것을 방지 (화면 크기의 20%까지)
+            const minZoom = 0.2;
+
+            if (e.deltaY < 0) zoomLevel = Math.min(maxZoom, zoomLevel + zoomFactor);
+            else zoomLevel = Math.max(minZoom, zoomLevel - zoomFactor);
+
+            wrapper.style.transformOrigin = `${x}% ${y}%`;
+            wrapper.style.transform = `scale(${zoomLevel})`;
+
+            updateZoomDisplay();
+            updateBrushCursor();
+            if (isMaskEditMode) renderMaskEditor();
+            if (isCropMode) drawCropLayer();
+        }
+
+        // 창 크기 변경 시 비율 텍스트 동기화 추가
+        window.addEventListener('resize', () => {
+            if (isCropMode) drawCropLayer();
+            if (isMaskEditMode) renderMaskEditor();
+            updateZoomDisplay();
+        });
+
+        function toggleBlemishMode() {
+            if (!baseMat) return;
+            isBlemishMode = !isBlemishMode;
+            const btn = document.getElementById('blemish-toggle-btn'), bc = document.getElementById('brush-control'), img = document.getElementById('photo-preview');
+            if (isBlemishMode) {
+                if (isMaskEditMode) toggleMaskEditMode();
+                btn.innerHTML = '<i class="fas fa-crosshairs"></i> 잡티 (ON)'; btn.style.background = '#3498db'; btn.style.color = '#fff';
+                bc.style.display = 'block'; img.style.cursor = 'none';
+            } else {
+                btn.innerHTML = '<i class="fas fa-mouse-pointer"></i> 잡티 (OFF)'; btn.style.background = '#fff'; btn.style.color = '#3498db';
+                bc.style.display = 'none'; img.style.cursor = 'default'; document.getElementById('brush-cursor').style.display = 'none';
+            }
+        }
+
+        // 💡 마우스 위치 정밀 계산 (확대 시 픽셀 왜곡 방지)
+        function getNormalizedPos(element, e) {
+            const rect = element.getBoundingClientRect();
+            return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+        }
+
+        function renderMaskEditor() {
+            if (!isMaskEditMode || customOvalPoints.length === 0) return;
+            const svg = document.getElementById('mask-editor'); svg.innerHTML = '';
+            const rect = svg.getBoundingClientRect(); if (rect.width === 0) return;
+            const w = baseMat.cols, h = baseMat.rows;
+            const scale = rect.width / w; // 실제 화면 확대 비율
+
+            let pts = ''; customOvalPoints.forEach(p => { pts += `${p.x * w},${p.y * h} `; });
+            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            poly.setAttribute('points', pts.trim()); poly.setAttribute('fill', 'rgba(155,89,182,0.2)'); poly.setAttribute('stroke', '#9b59b6');
+            poly.setAttribute('stroke-width', 2 / scale); poly.setAttribute('stroke-dasharray', `${4 / scale},${4 / scale}`); svg.appendChild(poly);
+
+            customOvalPoints.forEach((p, i) => {
+                const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                c.setAttribute('cx', p.x * w); c.setAttribute('cy', p.y * h); c.setAttribute('r', 6 / scale);
+                c.setAttribute('fill', '#9b59b6'); c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', 2 / scale);
+                c.style.cursor = 'pointer'; c.style.pointerEvents = 'auto';
+                c.onmousedown = (e) => { draggedPointIndex = i; e.stopPropagation(); e.preventDefault(); };
+                svg.appendChild(c);
+            });
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            if (draggedPointIndex > -1 && isMaskEditMode) {
+                const pos = getNormalizedPos(document.getElementById('mask-editor'), e);
+                customOvalPoints[draggedPointIndex].x = Math.max(0, Math.min(1, pos.x));
+                customOvalPoints[draggedPointIndex].y = Math.max(0, Math.min(1, pos.y));
+                renderMaskEditor();
+            }
+        });
+        window.addEventListener('mouseup', () => { if (draggedPointIndex > -1) { draggedPointIndex = -1; generateMasks(); applyFilters(); } });
+
+        let isDrawingBlemish = false, strokeMask = null, lastDrawPoint = null;
+        function startBlemishDraw(e) {
+            if (!isBlemishMode || !baseMat) return; e.preventDefault();
+            isDrawingBlemish = true; lastDrawPoint = null;
+            if (blemishHistory.length >= 10) { blemishHistory[0].delete(); blemishHistory.shift(); }
+            blemishHistory.push(baseMat.clone());
+            strokeMask = new cv.Mat.zeros(baseMat.rows, baseMat.cols, cv.CV_8UC1);
+            drawOnMask(e);
+        }
+        function drawBlemish(e) {
+            if (isBlemishMode) {
+                const c = document.getElementById('brush-cursor'); c.style.display = 'block'; c.style.left = e.clientX + 'px'; c.style.top = e.clientY + 'px';
+                updateBrushCursor();
+            }
+            if (!isDrawingBlemish || !strokeMask) return; drawOnMask(e);
+        }
+        function drawOnMask(e) {
+            const pos = getNormalizedPos(document.getElementById('photo-preview'), e);
+            const x = Math.round(pos.x * baseMat.cols), y = Math.round(pos.y * baseMat.rows);
+            const r = parseInt(document.getElementById('brush-size').value); const pt = new cv.Point(x, y);
+            if (lastDrawPoint) cv.line(strokeMask, lastDrawPoint, pt, new cv.Scalar(255, 255, 255, 255), r * 2, cv.LINE_8, 0);
+            cv.circle(strokeMask, pt, r, new cv.Scalar(255, 255, 255, 255), -1);
+            lastDrawPoint = pt;
+        }
+        function endBlemishDraw() { if (isDrawingBlemish) { isDrawingBlemish = false; applyInpaintStroke(); } }
+        function leaveBlemishDraw() { document.getElementById('brush-cursor').style.display = 'none'; if (isDrawingBlemish) { isDrawingBlemish = false; applyInpaintStroke(); } }
+        function applyInpaintStroke() {
+            if (!strokeMask) return; setProcessingStatus(true, '전파 중...');
+            setTimeout(() => {
+                let m = new cv.Mat(); cv.inpaint(baseMat, strokeMask, m, parseInt(document.getElementById('brush-size').value), cv.INPAINT_NS);
+                m.copyTo(baseMat); applyFilters(); strokeMask.delete(); strokeMask = null; m.delete(); setProcessingStatus(false);
+            }, 10);
+        }
+        function undoBlemish() {
+            if (!isBlemishMode || blemishHistory.length === 0) { showToast('작업 내역이 없습니다.'); return; }
+            baseMat.delete(); baseMat = blemishHistory.pop(); setProcessingStatus(true, '취소 중...');
+            setTimeout(() => { applyFilters(); setProcessingStatus(false); }, 10);
+        }
+
+        function updateBrushCursor() {
+            if (!isBlemishMode || !originalMat) return;
+            const r = parseInt(document.getElementById('brush-size').value); document.getElementById('brush-size-val').innerText = r + 'px';
+            const rect = document.getElementById('photo-preview').getBoundingClientRect();
+            const scale = rect.width / baseMat.cols;
+            const c = document.getElementById('brush-cursor'); c.style.width = (r * 2 * scale) + 'px'; c.style.height = (r * 2 * scale) + 'px';
+        }
+
+        function adjustEffect(type, change) {
+            if (!baseMat || !maskMat) return;
+            let n = levels[type] + change; if (n < 0 || n > MAX_LEVEL) return;
+            levels[type] = n; setProcessingStatus(true, '적용 중...'); setTimeout(() => { applyFilters(); setProcessingStatus(false); }, 30);
+        }
+        function resetAllEffects() {
+            if (!baseMat) return; levels = { smooth: 0, bright: 0, eye: 0, lip: 0 }; setProcessingStatus(true, '초기화...'); setTimeout(() => { applyFilters(); setProcessingStatus(false); }, 30);
+        }
+
+        function applyFilters() {
+            let out = baseMat.clone();
+            if (levels.smooth === 0 && levels.bright === 0 && levels.eye === 0 && levels.lip === 0) { showResult(out); out.delete(); return; }
+            if (levels.smooth > 0 || levels.bright > 0) {
+                let sf = baseMat.clone();
+                if (levels.bright > 0) cv.convertScaleAbs(sf, sf, 1.0, levels.bright * 7.0);
+                if (levels.smooth > 0) { let d = levels.smooth * 3 + 5, sig = levels.smooth * 15, t = new cv.Mat(); cv.bilateralFilter(sf, t, d, sig, sig, cv.BORDER_DEFAULT); t.copyTo(sf); t.delete(); }
+                if (maskMat) sf.copyTo(out, maskMat); else sf.copyTo(out); sf.delete();
+            }
+            if (levels.eye > 0 && eyeMaskMat) { let e = new cv.Mat(); cv.convertScaleAbs(out, e, 1.0 + levels.eye * 0.15, 0); e.copyTo(out, eyeMaskMat); e.delete(); }
+            if (levels.lip > 0 && lipMaskMat) {
+                let l = new cv.Mat(), tint = new cv.Mat(out.rows, out.cols, out.type(), new cv.Scalar(255, 60, 80));
+                cv.addWeighted(out, 1.0 - (levels.lip * 0.05), tint, levels.lip * 0.05, 0.0, l); l.copyTo(out, lipMaskMat); l.delete(); tint.delete();
+            }
+            showResult(out); out.delete();
+        }
+
+        function showResult(mat) {
+            const tCanvas = document.createElement('canvas'); cv.imshow(tCanvas, mat);
+            const img = document.getElementById('photo-preview');
+            if (bgMode !== 'none' && rawBgMaskCanvas) {
+                const fc = document.createElement('canvas'); fc.width = tCanvas.width; fc.height = tCanvas.height; const ctx = fc.getContext('2d');
+                if (bgMode === 'transparent') { ctx.clearRect(0, 0, fc.width, fc.height); img.classList.add('checkerboard-bg'); } else {
+                    img.classList.remove('checkerboard-bg');
+                    if (bgMode === 'custom') ctx.fillStyle = document.getElementById('custom-bg-color').value;
+                    else if (bgMode.startsWith('grad_')) {
+                        const g = ctx.createLinearGradient(0, 0, 0, fc.height);
+                        if (bgMode === 'grad_gray') { g.addColorStop(0, '#8e9eab'); g.addColorStop(1, '#eef2f3'); }
+                        else if (bgMode === 'grad_blue') { g.addColorStop(0, '#a1c4fd'); g.addColorStop(1, '#c2e9fb'); }
+                        else if (bgMode === 'grad_brown') { g.addColorStop(0, '#d4a373'); g.addColorStop(1, '#faedcd'); }
+                        else if (bgMode === 'grad_custom') { g.addColorStop(0, document.getElementById('grad-color-1').value); g.addColorStop(1, document.getElementById('grad-color-2').value); }
+                        ctx.fillStyle = g;
+                    } else ctx.fillStyle = bgMode;
+                    ctx.fillRect(0, 0, fc.width, fc.height);
+                }
+                const pc = document.createElement('canvas'); pc.width = tCanvas.width; pc.height = tCanvas.height; const pctx = pc.getContext('2d');
+                pctx.drawImage(rawBgMaskCanvas, 0, 0, pc.width, pc.height); pctx.globalCompositeOperation = 'source-in'; pctx.drawImage(tCanvas, 0, 0);
+                ctx.drawImage(pc, 0, 0); img.src = fc.toDataURL('image/png');
+            } else { img.classList.remove('checkerboard-bg'); img.src = tCanvas.toDataURL('image/png'); }
+        }
+
+        function toggleCompareMode() {
+            if (!baseMat) return; isCompareMode = !isCompareMode;
+            const o = document.getElementById('original-section'), t = document.getElementById('edited-title'), b = document.getElementById('btn-compare');
+            if (isCompareMode) { o.style.display = 'flex'; t.style.display = 'block'; b.innerHTML = '<i class="fas fa-square"></i> 단일 화면'; b.style.background = '#95a5a6'; }
+            else { o.style.display = 'none'; t.style.display = 'none'; b.innerHTML = '<i class="fas fa-columns"></i> 원본 비교'; b.style.background = '#7f8c8d'; }
+            setTimeout(() => { if (isMaskEditMode) renderMaskEditor(); if (isCropMode) drawCropLayer(); }, 50);
+        }
+
+        function changeBackground(color, btn) {
+            if (!baseMat || !rawBgMaskCanvas) return;
+            document.querySelectorAll('.color-palette .color-btn, .custom-gradient-picker').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+            bgMode = color; setProcessingStatus(true, '배경 적용 중...'); setTimeout(() => { applyFilters(); setProcessingStatus(false); }, 30);
+        }
+
+        function showToast(msg) { const t = document.getElementById('toast-container'); t.innerHTML = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2000); }
+        function showCustomModal(msg) { document.getElementById('modal-msg-text').innerHTML = msg; const m = document.getElementById('custom-modal'); m.style.display = 'flex'; setTimeout(() => m.classList.add('show'), 10); }
+        function closeModal() { const m = document.getElementById('custom-modal'); m.classList.remove('show'); setTimeout(() => m.style.display = 'none', 200); }
+
+        async function copyToClipboard() {
+            const b64 = document.getElementById('photo-preview').src; if (!b64 || b64 === window.location.href) return; setProcessingStatus(true, '복사 중...');
+            try {
+                try { const r = await fetch(b64); const b = await r.blob(); if (navigator.clipboard?.write) { await navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]); showToast('복사 완료!'); setProcessingStatus(false); return; } } catch (e) { }
+                const api = (window.pywebview?.api) || (window.parent?.pywebview?.api);
+                if (api) { await api.copy_to_clipboard({ image_data: b64 }); showToast('복사 완료!'); }
+            } catch (e) { showCustomModal('복사 실패'); } finally { setProcessingStatus(false); }
+        }
+
+        async function saveImage() {
+            const b64 = document.getElementById('photo-preview').src; if (!b64 || b64 === window.location.href) return;
+            try {
+                const api = (window.pywebview?.api) || (window.parent?.pywebview?.api);
+                if (api) { setProcessingStatus(true, '저장 중...'); const res = await api.save_scanned_image({ image_data: b64, default_name: '보정완료.png' }); if (res?.success) showCustomModal(res.message); setProcessingStatus(false); }
+                else { const l = document.createElement('a'); l.download = '보정완료.png'; l.href = b64; l.click(); }
+            } catch (e) { setProcessingStatus(false); showCustomModal('저장 오류'); }
+        }
+
+        // ==========================================
+        // 💡 규격 추출: 사진에 꽉 찬 '최대 크기' 보장 로직
+        // ==========================================
+        function startCropMode() {
+            if (!baseMat) { showToast('사진을 불러와주세요.'); return; }
+            if (isBlemishMode) toggleBlemishMode(); if (isMaskEditMode) toggleMaskEditMode();
+            isCropMode = true; document.getElementById('crop-layer').style.display = 'block';
+            setTimeout(() => setCropRatio(3.5 / 4.5), 10);
+        }
+        function stopCropMode() { isCropMode = false; document.getElementById('crop-layer').style.display = 'none'; }
+
+        function setCropRatio(ratio) {
+            if (!isCropMode || !baseMat) return;
+            cropRatio = ratio;
+            const canvas = document.getElementById('crop-layer');
+            let w = canvas.width, h = canvas.height;
+            // 💡 무조건 최대 크기로 꽉 채워 자르기 박스 지정 (0.9 곱셈 제거)
+            if (ratio !== 0) { if (w / ratio <= canvas.height) h = w / ratio; else w = h * ratio; }
+            cropRect = { w: w, h: h, x: (canvas.width - w) / 2, y: (canvas.height - h) / 2 };
+            drawCropLayer();
+        }
+
+        function drawCropLayer() {
+            if (!isCropMode) return;
+            const canvas = document.getElementById('crop-layer'); const ctx = canvas.getContext('2d');
+            const rect = canvas.getBoundingClientRect(); if (rect.width === 0) return;
+            const scale = rect.width / canvas.width; // 화면 확대에 따른 시각적 스케일 보정
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+
+            ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2 / scale; ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1 / scale; ctx.beginPath();
+            ctx.moveTo(cropRect.x + cropRect.w / 3, cropRect.y); ctx.lineTo(cropRect.x + cropRect.w / 3, cropRect.y + cropRect.h);
+            ctx.moveTo(cropRect.x + cropRect.w / 3 * 2, cropRect.y); ctx.lineTo(cropRect.x + cropRect.w / 3 * 2, cropRect.y + cropRect.h);
+            ctx.moveTo(cropRect.x, cropRect.y + cropRect.h / 3); ctx.lineTo(cropRect.x + cropRect.w, cropRect.y + cropRect.h / 3);
+            ctx.moveTo(cropRect.x, cropRect.y + cropRect.h / 3 * 2); ctx.lineTo(cropRect.x + cropRect.w, cropRect.y + cropRect.h / 3 * 2); ctx.stroke();
+
+            ctx.fillStyle = '#f1c40f'; const s = 15 / scale;
+            const dh = (x, y) => ctx.fillRect(x - s / 2, y - s / 2, s, s);
+            dh(cropRect.x, cropRect.y); dh(cropRect.x + cropRect.w, cropRect.y); dh(cropRect.x, cropRect.y + cropRect.h); dh(cropRect.x + cropRect.w, cropRect.y + cropRect.h);
+        }
+
+        document.getElementById('crop-layer').addEventListener('mousedown', (e) => {
+            if (!isCropMode) return;
+            const canvas = document.getElementById('crop-layer');
+            const pos = getNormalizedPos(canvas, e); const x = pos.x * canvas.width, y = pos.y * canvas.height;
+            const scale = canvas.getBoundingClientRect().width / canvas.width;
+            const pad = 15 / scale; // 확대/축소 시에도 잡기 쉽게 패딩 보정
+
+            if (Math.abs(x - cropRect.x) < pad && Math.abs(y - cropRect.y) < pad) cropDragAction = 'nw';
+            else if (Math.abs(x - (cropRect.x + cropRect.w)) < pad && Math.abs(y - cropRect.y) < pad) cropDragAction = 'ne';
+            else if (Math.abs(x - cropRect.x) < pad && Math.abs(y - (cropRect.y + cropRect.h)) < pad) cropDragAction = 'sw';
+            else if (Math.abs(x - (cropRect.x + cropRect.w)) < pad && Math.abs(y - (cropRect.y + cropRect.h)) < pad) cropDragAction = 'se';
+            else if (x > cropRect.x && x < cropRect.x + cropRect.w && y > cropRect.y && y < cropRect.y + cropRect.h) cropDragAction = 'move';
+            else cropDragAction = 'none';
+            if (cropDragAction !== 'none') { cropDragStart = { x, y }; cropStartRect = { ...cropRect }; }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isCropMode || cropDragAction === 'none') return;
+            const canvas = document.getElementById('crop-layer');
+            const pos = getNormalizedPos(canvas, e);
+            const dx = pos.x * canvas.width - cropDragStart.x, dy = pos.y * canvas.height - cropDragStart.y;
+
+            if (cropDragAction === 'move') {
+                cropRect.x = Math.max(0, Math.min(canvas.width - cropRect.w, cropStartRect.x + dx));
+                cropRect.y = Math.max(0, Math.min(canvas.height - cropRect.h, cropStartRect.y + dy));
+            } else {
+                let nX = cropStartRect.x, nY = cropStartRect.y, nW = cropStartRect.w, nH = cropStartRect.h;
+                if (cropDragAction === 'se') { nW += dx; if (cropRatio !== 0) nH = nW / cropRatio; else nH += dy; }
+                else if (cropDragAction === 'nw') { nW -= dx; if (cropRatio !== 0) nH = nW / cropRatio; else nH -= dy; nX += cropStartRect.w - nW; nY += cropStartRect.h - nH; }
+                else if (cropDragAction === 'ne') { nW += dx; if (cropRatio !== 0) nH = nW / cropRatio; else nH -= dy; nY += cropStartRect.h - nH; }
+                else if (cropDragAction === 'sw') { nW -= dx; if (cropRatio !== 0) nH = nW / cropRatio; else nH += dy; nX += cropStartRect.w - nW; }
+
+                if (nW > 50 && nH > 50 && nX >= 0 && nY >= 0 && nX + nW <= canvas.width && nY + nH <= canvas.height) cropRect = { x: nX, y: nY, w: nW, h: nH };
+            } drawCropLayer();
+        });
+        window.addEventListener('mouseup', () => cropDragAction = 'none');
+        window.addEventListener('resize', () => { if (isCropMode) drawCropLayer(); if (isMaskEditMode) renderMaskEditor(); });
+
+        function extractCroppedCanvas() {
+            const previewImg = document.getElementById('photo-preview');
+            const tempCanvas = document.createElement('canvas'); tempCanvas.width = cropRect.w; tempCanvas.height = cropRect.h;
+            tempCanvas.getContext('2d').drawImage(previewImg, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, cropRect.w, cropRect.h);
+            return tempCanvas;
+        }
+
+        async function copyCropArea() {
+            if (!baseMat || !isCropMode) return; setProcessingStatus(true, '복사 중...');
+            try {
+                const b64 = extractCroppedCanvas().toDataURL('image/png');
+                try { const r = await fetch(b64); const b = await r.blob(); if (navigator.clipboard?.write) { await navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]); showToast('영역 복사 완료!'); setProcessingStatus(false); return; } } catch (e) { }
+                const api = (window.pywebview?.api) || (window.parent?.pywebview?.api);
+                if (api) { await api.copy_to_clipboard({ image_data: b64 }); showToast('영역 복사 완료!'); }
+            } catch (e) { showCustomModal('복사 실패'); } finally { setProcessingStatus(false); }
+        }
+
+        async function saveCropArea() {
+            if (!baseMat || !isCropMode) return;
+            try {
+                const b64 = extractCroppedCanvas().toDataURL('image/png');
+                const api = (window.pywebview?.api) || (window.parent?.pywebview?.api);
+                if (api) { setProcessingStatus(true, '저장 중...'); const res = await api.save_scanned_image({ image_data: b64, default_name: '규격사진_추출.png' }); if (res?.success) showCustomModal(res.message); setProcessingStatus(false); }
+                else { const l = document.createElement('a'); l.download = '규격사진_추출.png'; l.href = b64; l.click(); }
+            } catch (e) { showCustomModal('저장 오류'); } finally { setProcessingStatus(false); }
+        }
+    </script>
+</body>
+</html>

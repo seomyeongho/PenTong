@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학생 대진표 만들기</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (Excel Parsing) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Canvas Confetti (화려한 폭죽 효과) -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- html2canvas (이미지 캡처 라이브러리) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap');
+        
+        :root {
+            /* 실시간 크기 조절을 위한 CSS 변수 */
+            --card-width: 170px;
+            --card-height: 80px;
+            --player-size: 0.95rem;
+            --bg-color: #0f172a; 
+        }
+
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f1f5f9; /* 바깥 여백은 항상 옅은 회색 고정 */
+            color: #1e293b;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 명단 테이블 스크롤바 유지 */
+        #view-input ::-webkit-scrollbar { width: 8px; height: 8px; }
+        #view-input ::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 4px; }
+        #view-input ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        #view-input ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* 대진표 무한 스크롤바 숨김 (드래그 패닝 전용) */
+        #bracket-scroll-container::-webkit-scrollbar { display: none; }
+        #bracket-scroll-container { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .btn-primary { background-color: #3b82f6; color: white; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5); }
+        .btn-primary:hover { background-color: #2563eb; transform: translateY(-1px); }
+        .btn-outline { border: 2px solid #cbd5e1; background-color: white; color: #475569; transition: all 0.2s; font-weight: bold; }
+        .btn-outline:hover { background-color: #f8fafc; border-color: #94a3b8; }
+        .btn-excel { background-color: #10b981; color: white; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.5); }
+        .btn-excel:hover { background-color: #059669; transform: translateY(-1px); }
+
+        table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; }
+        th { background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; border-top: 1px solid #e2e8f0; padding: 12px 8px; font-weight: 700; text-align: center; position: sticky; top: 0; z-index: 20; }
+        td { border-bottom: 1px solid #e2e8f0; padding: 8px; text-align: center; vertical-align: middle; }
+        input[type="text"] { width: 100%; border: 1px solid transparent; padding: 6px; text-align: center; border-radius: 6px; outline: none; transition: all 0.2s; }
+        input[type="text"]:focus { border-color: #3b82f6; background-color: #eff6ff; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+
+        /* --- 대진표 캔버스 및 카드 디자인 --- */
+        #view-bracket { background-color: var(--bg-color) !important; transition: background-color 0.3s; }
+        .grab-scroll { cursor: grab; }
+        .cursor-grabbing { cursor: grabbing !important; }
+
+        /* 마우스 포인터 중심 줌을 위해 0,0 고정 */
+        #bracket-wrapper { transform-origin: 0 0; }
+
+        /* 텍스트 선택 방지 */
+        .no-select { user-select: none; -webkit-user-select: none; -moz-user-select: none; }
+
+        /* 대진표 카드 */
+        .match-card {
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            border-radius: 12px;
+            width: var(--card-width); 
+            height: var(--card-height);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            position: relative;
+            z-index: 10;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: row; 
+            overflow: hidden; 
+        }
+        
+        .match-card.has-winner-dark { border-color: #60a5fa; box-shadow: 0 0 16px rgba(96, 165, 250, 0.6); }
+        .match-card.has-winner-light { border-color: #3b82f6; box-shadow: 0 0 16px rgba(37, 99, 235, 0.4); }
+
+        .match-player {
+            position: relative; padding: 8px; font-size: var(--player-size);
+            display: flex; flex: 1; justify-content: center; align-items: center;
+            height: 100%; overflow: hidden; transition: all 0.2s;
+        }
+        
+        .text-vertical { writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 2px; white-space: nowrap !important; text-align: center; line-height: 1.2; }
+        .text-horizontal { white-space: nowrap; text-align: center; line-height: 1.2; }
+
+        .match-player:hover:not(.bye) { background-color: rgba(255, 255, 255, 0.5); }
+        .match-player.draggable { cursor: pointer; }
+        .match-player.draggable:hover { box-shadow: inset 0 0 0 2px rgba(96, 165, 250, 0.5); }
+        .drag-over { background-color: rgba(191, 219, 254, 0.8) !important; border-radius: 4px; border: 2px dashed #3b82f6; }
+        .match-player.bye { background-color: rgba(0, 0, 0, 0.04); color: rgba(15, 23, 42, 0.4); cursor: default; font-size: calc(var(--player-size) * 0.85); }
+        
+        /* 승자 효과 */
+        .match-player.is-winner { 
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(230, 245, 255, 0.85)); 
+            color: #1e3a8a; font-weight: 900; 
+            font-size: calc(var(--player-size) * 1.05); text-shadow: 0 0 5px rgba(255,255,255,0.8);
+            box-shadow: inset 0 0 8px rgba(59, 130, 246, 0.3);
+        }
+
+        /* 설정 톱니바퀴 아이콘 */
+        .edit-btn {
+            position: absolute; right: 4px; top: 4px; opacity: 0; pointer-events: none;
+            transition: opacity 0.2s, transform 0.2s; cursor: pointer; z-index: 20;
+            background: rgba(255, 255, 255, 0.9); border-radius: 50%; width: 24px; height: 24px;
+            display: flex; justify-content: center; align-items: center;
+            border: 1px solid #cbd5e1; color: #475569; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .edit-btn:hover { transform: rotate(90deg); color: #2563eb; border-color: #93c5fd; }
+        .match-player:hover .edit-btn, .group:hover .edit-btn { opacity: 1; pointer-events: auto; }
+
+        /* 최종 우승자 카드 */
+        .final-winner-card {
+            background: linear-gradient(135deg, #fef08a, #f59e0b);
+            border: 4px solid #fbbf24; box-shadow: 0 0 30px rgba(245, 158, 11, 0.6);
+            color: #78350f; transform: scale(1.1);
+            width: auto !important; min-width: var(--card-width);
+            height: auto !important; min-height: var(--card-height);
+            flex-direction: column; padding: 1.5rem;
+            overflow: visible;
+        }
+
+        .round-title-font { font-weight: 800; letter-spacing: 1px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+
+        /* 상단 툴바 슬라이드 애니메이션 */
+        #top-toolbar-container { transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+        .theme-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 12px; width: max-content; }
+        .theme-swatch { width: 32px; height: 32px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.1s; }
+        .theme-swatch:hover { transform: scale(1.2); }
+
+        @keyframes superPop { 0% { transform: scale(1); } 40% { transform: scale(1.1) rotate(2deg); box-shadow: 0 0 40px rgba(255, 215, 0, 1); } 60% { transform: scale(1.1) rotate(-2deg); } 100% { transform: scale(1); } }
+        .anim-pop { animation: superPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 50; }
+        @keyframes screenShake { 0%, 100% { transform: translate(0, 0) rotate(0); } 10%, 30%, 50%, 70%, 90% { transform: translate(-3px, 1px) rotate(-0.5deg); } 20%, 40%, 60%, 80% { transform: translate(3px, -1px) rotate(0.5deg); } }
+        .anim-shake { animation: screenShake 0.4s ease-in-out; }
+
+    </style>
+</head>
+<body class="p-4 md:p-6 overflow-hidden">
+
+    <!-- 단일 통합: 상단 고정 중앙 제목 (항상 검정색 고정) -->
+    <div id="master-header" class="flex justify-center items-center mb-4 w-full z-[100] relative shrink-0">
+        <input type="text" id="main-title-input" value="🏆 OO 대회"
+               class="bg-transparent border-b-2 border-transparent focus:border-blue-500 hover:border-slate-400 outline-none text-3xl md:text-4xl font-medium w-full max-w-4xl text-center drop-shadow-sm"
+               style="letter-spacing: 1px; color: #000000;"
+               placeholder="🏆 대회 이름을 입력하세요"
+               oninput="isBracketModified = true;">
+    </div>
+
+    <!-- 뷰 1: 명단 관리 -->
+    <div id="view-input" class="flex-1 flex flex-col bg-slate-50 rounded-xl shadow-md border border-slate-200 overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white z-10">
+            <h2 class="text-lg font-bold text-slate-700">1. 학생 명단 관리</h2>
+            <div class="flex gap-2">
+                <input type="file" id="bkt-upload" accept=".bkt" class="hidden" onchange="loadTournament(event)">
+                <button onclick="document.getElementById('bkt-upload').click()" class="btn-outline px-4 py-2 rounded-lg text-sm flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 shadow-sm border border-slate-300">
+                    <span>📂 대진표 불러오기</span>
+                </button>
+                <button onclick="addSampleData()" class="btn-outline px-4 py-2 rounded-lg text-sm flex items-center gap-1 ml-4">
+                    <span>+ 샘플(32명)</span>
+                </button>
+                <input type="file" id="excel-upload" accept=".xlsx, .xls" class="hidden" onchange="handleExcelUpload(event)">
+                <button onclick="document.getElementById('excel-upload').click()" class="btn-excel px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1">
+                    <span>📁 엑셀 명단</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-auto relative bg-slate-50 flex justify-center py-4">
+            <div class="w-full max-w-4xl px-4 h-max">
+                <table id="student-table" class="shadow-sm rounded-lg overflow-hidden bg-white">
+                    <thead>
+                        <tr>
+                            <th class="w-12"><input type="checkbox" id="check-all" onchange="toggleAll(this)" checked class="w-4 h-4 text-blue-600 rounded"></th>
+                            <th class="w-24">학년</th>
+                            <th class="w-24">반</th>
+                            <th class="w-24">번호</th>
+                            <th>이름</th>
+                            <th class="w-16">삭제</th>
+                        </tr>
+                    </thead>
+                    <tbody id="student-tbody">
+                        <!-- 행 추가 영역 -->
+                    </tbody>
+                </table>
+                <div class="p-4 text-center pb-8">
+                    <button onclick="addRow()" class="text-slate-500 hover:text-blue-600 hover:bg-blue-50 text-sm font-bold px-6 py-2 rounded-full transition-colors bg-white shadow-sm border border-slate-200">
+                        + 빈 행 추가하기
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4 border-t border-slate-200 bg-white flex justify-between items-center z-10">
+            <div class="text-sm text-slate-600 font-bold">
+                총 참여 인원: <span id="total-count" class="text-blue-600 text-lg mx-1">0</span>명
+            </div>
+            <div class="flex gap-3">
+                <button onclick="showHelpModal()" class="bg-sky-600 hover:bg-sky-500 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-1">
+                    💡 도움말
+                </button>
+                <button onclick="clearAll()" class="btn-outline px-6 py-2 rounded-lg text-sm">초기화</button>
+                <button onclick="generateBracket()" class="btn-primary px-8 py-2 rounded-lg text-base font-bold">대진표 생성하기 🚀</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 뷰 2: 대진표 화면 (조직도 캔버스만 존재) -->
+    <div id="view-bracket" class="hidden flex-1 flex flex-col rounded-xl shadow-2xl overflow-hidden border border-slate-700 relative">
+
+        <!-- 프레젠테이션 복귀 햄버거 메뉴 버튼 (작고, 투명도 40% 설정) -->
+        <button id="menu-toggle-btn" onclick="togglePresentationMode()" class="hidden absolute top-4 right-4 z-[9999] p-1.5 opacity-40 hover:opacity-100 transition-opacity text-slate-600 bg-white border border-slate-300 rounded shadow-md" title="메뉴 열기">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+
+        <!-- 상단 컨트롤 툴바 그룹 -->
+        <div id="top-toolbar-container" class="w-full z-30 flex flex-col shadow-xl shrink-0 absolute top-0 left-0">
+            <!-- 1행: 메인 기능 버튼들 -->
+            <div class="p-3 px-5 border-b border-slate-700 flex justify-between items-center bg-slate-800/95 backdrop-blur-md">
+                <button onclick="confirmAndGoBack()" class="text-slate-300 hover:text-white font-bold flex items-center gap-1 bg-slate-700/50 px-3 py-1.5 rounded-lg transition-colors text-sm">
+                    <span>⬅️ 명단으로 돌아가기</span>
+                </button>
+
+                <div class="flex gap-2 items-center">
+                    <button onclick="saveTournament()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center shadow-lg transition-colors">
+                        💾 대진표 저장
+                    </button>
+                    <button onclick="exportImage()" class="bg-amber-500 hover:bg-amber-400 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center shadow-lg transition-colors">
+                        📸 그림 복사
+                    </button>
+                    <button onclick="confirmAndReshuffle()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center shadow-lg transition-colors">
+                        🔀 랜덤 섞기
+                    </button>
+                    <button onclick="showHelpModal()" class="bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center shadow-lg transition-colors">
+                        💡 도움말
+                    </button>
+                    <!-- 닫기 (X) 버튼 -->
+                    <button onclick="togglePresentationMode()" class="ml-3 text-slate-400 hover:text-red-400 p-1 rounded transition-colors" title="메뉴 닫기 (전체 화면)">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+            </div>
+            <!-- 2행: 세부 설정 툴바 -->
+            <div class="p-2.5 px-5 bg-slate-900/90 backdrop-blur-md flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300 font-medium border-b border-slate-700/50">
+                <label class="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors" title="이름 옆에 승자 표시 아이콘 보이기">
+                    <input type="checkbox" id="opt-show-winner-icon" onchange="renderBracket()" class="accent-blue-500 w-3.5 h-3.5" checked> 승자 표시
+                </label>
+                <div class="w-px h-3 bg-slate-600"></div>
+                <label class="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
+                    <input type="checkbox" id="opt-show-id" onchange="renderBracket()" class="accent-blue-500 w-3.5 h-3.5"> 학번 표시
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
+                    <input type="checkbox" id="opt-vertical" onchange="handleVerticalToggle()" class="accent-blue-500 w-3.5 h-3.5"> 세로 표시
+                </label>
+                <div class="w-px h-3 bg-slate-600"></div>
+                <div class="flex items-center gap-1.5" title="대진표 상자 가로 길이">
+                    <span>가로↔</span><input type="range" id="opt-width" min="100" max="300" value="170" class="w-16 accent-blue-500" oninput="updateStyles()">
+                </div>
+                <div class="flex items-center gap-1.5" title="대진표 상자 세로 길이">
+                    <span>세로↕</span><input type="range" id="opt-height" min="40" max="250" value="80" class="w-16 accent-blue-500" oninput="updateStyles()">
+                </div>
+                <div class="w-px h-3 bg-slate-600"></div>
+                <div class="flex items-center gap-1.5" title="이름 글자 크기">
+                    <span>이름크기</span><input type="range" id="opt-name-size" min="0.5" max="2.0" step="0.05" value="0.95" class="w-16 accent-emerald-500" oninput="updateStyles()">
+                </div>
+                <div class="w-px h-3 bg-slate-600"></div>
+
+                <div class="relative group" id="theme-dropdown-wrapper">
+                    <button class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-1 rounded transition-colors text-white font-bold" onclick="toggleThemePalette(event)">
+                        <span>🎨 테마 팔레트</span>
+                    </button>
+                    <div id="theme-palette-menu" class="absolute top-full left-1/2 transform -translate-x-1/2 pt-2 hidden z-50">
+                        <div class="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl">
+                            <div class="theme-grid" id="theme-palette-container">
+                                <!-- JS 생성 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 ml-2">
+                    <span>배경색</span>
+                    <input type="color" id="opt-bg-color" value="#0f172a" class="w-6 h-6 cursor-pointer bg-transparent border-none p-0" oninput="updateStyles()">
+                </div>
+            </div>
+        </div>
+
+        <!-- 캔버스 (무한 드래그 여백) -->
+        <div id="bracket-scroll-container" class="flex-1 overflow-auto grab-scroll relative mt-24 transition-[margin-top] duration-300 ease-in-out">
+            <div id="bracket-wrapper" class="relative w-max h-max flex flex-col items-center" style="padding: 3000px;">
+                <svg id="bracket-lines" class="absolute inset-0 w-full h-full pointer-events-none z-0"></svg>
+                <div id="bracket-content" class="flex flex-col items-center justify-end w-full relative z-10 transition-transform">
+                    <!-- Javascript로 라운드별 노드 생성 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 다목적 모달 -->
+    <div id="custom-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[10000] transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full mx-4 transform transition-all border-t-4 border-blue-500">
+            <div id="modal-msg" class="text-slate-800 text-center mb-6 whitespace-pre-line leading-relaxed text-base font-bold">
+                메시지 내용
+            </div>
+            <div id="modal-dynamic-content" class="w-full mb-6"></div>
+
+            <div class="flex gap-3 justify-center">
+                <button id="modal-cancel" class="hidden flex-1 btn-outline py-2.5 rounded-lg font-bold text-slate-600 hover:bg-slate-100">취소</button>
+                <button id="modal-ok" class="flex-1 btn-primary py-2.5 rounded-lg font-bold shadow-md">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="help-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[10000] transition-opacity p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-0 max-w-2xl w-full max-h-[90vh] flex flex-col transform transition-all border-t-4 border-sky-500 overflow-hidden">
+
+            <div class="pt-6 px-6 md:px-8 bg-slate-50 border-b shrink-0">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-2xl font-black text-slate-800">💡 대진표 사용 설명서</h3>
+                    <button onclick="closeHelpModal()" class="text-slate-400 hover:text-red-500 transition-colors">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="switchHelpTab('tab-roster')" id="btn-tab-roster" class="px-4 py-2 font-bold text-sky-600 border-b-2 border-sky-600 bg-white rounded-t-lg transition-colors">1. 명단 화면</button>
+                    <button onclick="switchHelpTab('tab-bracket')" id="btn-tab-bracket" class="px-4 py-2 font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-t-lg transition-colors border-b-2 border-transparent">2. 대진표 화면</button>
+                </div>
+            </div>
+
+            <div class="p-6 md:p-8 overflow-y-auto bg-white flex-1">
+
+                <div id="tab-roster" class="space-y-6 text-slate-700 text-sm md:text-base animate-fade-in">
+                    <section>
+                        <strong class="text-sky-600 text-lg flex items-center gap-2">📝 명단 작성 및 불러오기</strong>
+                        <ul class="mt-2 space-y-2 list-disc list-inside pl-2">
+                            <li><b>직접 입력:</b> [+ 빈 행 추가하기]를 눌러 학생의 정보를 직접 입력합니다. 맨 앞의 체크박스가 선택된 학생만 대진표에 포함됩니다.</li>
+                            <li><b>📂 대진표 불러오기:</b> 이전에 저장해둔 대진표 파일(<code>.bkt</code>)을 불러옵니다. 진행 상황과 디자인, 화면 배율까지 그대로 복원됩니다.</li>
+                            <li><b>+ 샘플(32명):</b> 빠르게 테스트해 볼 수 있도록 가상의 학생 32명 명단을 자동으로 채워줍니다.</li>
+                            <li><b>📁 엑셀 명단:</b> 학교에서 사용하는 엑셀 파일(<code>.xlsx</code>)을 그대로 올려 명단을 한 번에 불러옵니다. (첫 줄에 '이름', '학년', '반', '번호' 제목이 있으면 자동 인식합니다.)</li>
+                        </ul>
+                    </section>
+                    <section>
+                        <strong class="text-sky-600 text-lg flex items-center gap-2">🚀 대진표 생성</strong>
+                        <ul class="mt-2 space-y-2 list-disc list-inside pl-2">
+                            <li><b>초기화:</b> 작성된 모든 명단을 지우고 처음부터 다시 시작합니다.</li>
+                            <li><b>대진표 생성하기:</b> 체크된 인원들을 바탕으로 <b>무작위(랜덤) 추첨</b>을 통해 대진표를 생성하고 화면을 넘어갑니다. (최소 2명 이상)</li>
+                        </ul>
+                    </section>
+                </div>
+
+                <div id="tab-bracket" class="hidden space-y-6 text-slate-700 text-sm md:text-base animate-fade-in">
+                    <section>
+                        <strong class="text-blue-600 text-lg">1. 기본 조작 (이동 및 줌)</strong>
+                        <p class="mt-1 flex flex-col gap-1 pl-2">
+                            <span>• <b>화면 이동:</b> 대진표 바깥의 빈 여백을 <b>클릭하고 드래그</b>하면 화면이 이동합니다.</span>
+                            <span>• <b>확대/축소:</b> 마우스 휠을 굴리면 <b>현재 마우스 포인터가 있는 위치를 중심</b>으로 정밀하게 확대/축소됩니다.</span>
+                        </p>
+                    </section>
+
+                    <section>
+                        <strong class="text-blue-600 text-lg">2. 대진 진행 및 조작</strong>
+                        <p class="mt-1 flex flex-col gap-1 pl-2">
+                            <span>• <b>승자 선택:</b> 매치업된 두 학생 중 <b>이긴 학생의 칸을 클릭</b>하면 다음 라운드로 진출합니다.</span>
+                            <span>• <b>자리 바꾸기:</b> 1라운드(맨 아랫줄) 학생 카드를 마우스로 꾹 눌러 다른 학생 자리로 <b>드래그 앤 드롭</b>하면 자리가 서로 교체됩니다.</span>
+                            <span>• <b>개별 설정(⚙️):</b> 각 박스 우측 상단 톱니바퀴를 눌러 특정 학생의 이름이나 배경색을 개별로 칠할 수 있습니다. (빈칸에도 색칠 가능)</span>
+                        </p>
+                    </section>
+
+                    <section>
+                        <strong class="text-blue-600 text-lg">3. 디자인 및 내보내기</strong>
+                        <p class="mt-1 flex flex-col gap-1 pl-2">
+                            <span>• <b>제목/이모지 변경:</b> 화면 상단의 제목이나 이모지(🏆, 👑)를 클릭해 텍스트를 직접 수정합니다.</span>
+                            <span>• <b>저장 및 그림 복사:</b> 상단 메뉴를 통해 현재 모든 진행 상황을 파일(<code>.bkt</code>)로 <b>저장</b>하거나, 대진표 영역만 깔끔하게 잘라내어 <b>그림으로 복사</b>(PPT 붙여넣기용)할 수 있습니다.</span>
+                        </p>
+                    </section>
+                </div>
+            </div>
+
+            <div class="p-4 border-t bg-slate-50 flex justify-center shrink-0">
+                <button onclick="closeHelpModal()" class="bg-slate-800 hover:bg-slate-700 text-white px-10 py-2.5 rounded-lg font-bold shadow-md transition-colors text-lg">닫기</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- 상태 및 옵션 변수 ---
+        let isBracketModified = false;
+        let tournamentData = [];
+        let pIdCounter = 0;
+        let finalTitleText = "🏆 우승 🏆";
+        let winnerIconText = "👑";
+
+        // 도움말 모달 제어 함수
+        function showHelpModal() {
+            document.getElementById('help-modal').classList.remove('hidden');
+        }
+
+        function closeHelpModal() {
+            document.getElementById('help-modal').classList.add('hidden');
+        }
+
+        // 👇 여기에 탭 전환 함수 추가 👇
+        function switchHelpTab(tabId) {
+            const tabRoster = document.getElementById('tab-roster');
+            const tabBracket = document.getElementById('tab-bracket');
+            const btnRoster = document.getElementById('btn-tab-roster');
+            const btnBracket = document.getElementById('btn-tab-bracket');
+
+            if (tabId === 'tab-roster') {
+                tabRoster.classList.remove('hidden');
+                tabBracket.classList.add('hidden');
+                btnRoster.className = "px-4 py-2 font-bold text-sky-600 border-b-2 border-sky-600 bg-white rounded-t-lg transition-colors";
+                btnBracket.className = "px-4 py-2 font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-t-lg transition-colors border-b-2 border-transparent";
+            } else {
+                tabRoster.classList.add('hidden');
+                tabBracket.classList.remove('hidden');
+                btnBracket.className = "px-4 py-2 font-bold text-blue-600 border-b-2 border-blue-600 bg-white rounded-t-lg transition-colors";
+                btnRoster.className = "px-4 py-2 font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-t-lg transition-colors border-b-2 border-transparent";
+            }
+        }
+        // 👆 여기까지 추가 👇
+        // --- 1. 다목적 모달 시스템 ---
+        const Modal = {
+            show: function (msg, isConfirm = false, type = 'none', currentData = null) {
+                return new Promise((resolve) => {
+                    const modal = document.getElementById('custom-modal');
+                    const msgEl = document.getElementById('modal-msg');
+                    const dynamicArea = document.getElementById('modal-dynamic-content');
+                    const btnOk = document.getElementById('modal-ok');
+                    const btnCancel = document.getElementById('modal-cancel');
+
+                    msgEl.innerHTML = msg;
+                    dynamicArea.innerHTML = '';
+                    modal.classList.remove('hidden');
+
+                    if (type === 'playerEdit') {
+                        const nameInputHtml = currentData.canEditName ? `
+                                    <div>
+                                        <label class="block text-xs text-slate-500 font-bold mb-1">학생/선수 이름 변경</label>
+                                        <input type="text" id="p-edit-name" value="${currentData.name || ''}" class="w-full border border-slate-300 rounded-lg p-2 text-center text-lg font-bold text-slate-800 focus:border-blue-500 outline-none" autocomplete="off">
+                                    </div>
+                                ` : '';
+
+                        dynamicArea.innerHTML = `
+                                    <div class="flex flex-col gap-5">
+                                        ${nameInputHtml}
+                                        <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                                            <label class="block text-sm text-slate-600 font-bold mb-3 text-center">이 위치(박스)의 배경색 지정</label>
+                                            <div class="flex gap-3 items-center justify-center">
+                                                <input type="color" id="p-edit-color" value="${currentData.bg || '#ffffff'}" class="w-14 h-12 cursor-pointer rounded border border-slate-300 p-0">
+                                                <button id="p-color-reset" class="px-4 py-2 bg-white hover:bg-slate-100 rounded-lg text-sm text-slate-600 font-bold border border-slate-300 transition-colors">기본색으로</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                        const inputColor = document.getElementById('p-edit-color');
+                        let useColor = currentData.bg ? true : false;
+
+                        document.getElementById('p-color-reset').onclick = () => { useColor = false; inputColor.value = '#ffffff'; };
+                        inputColor.onchange = () => { useColor = true; };
+
+                        btnCancel.classList.remove('hidden');
+
+                        if (currentData.canEditName) {
+                            const inputName = document.getElementById('p-edit-name');
+                            setTimeout(() => { inputName.focus(); inputName.select(); }, 50);
+                        }
+
+                        btnOk.onclick = () => {
+                            cleanup();
+                            const finalName = currentData.canEditName ? document.getElementById('p-edit-name').value : null;
+                            resolve({ name: finalName, color: useColor ? inputColor.value : null });
+                        };
+
+                    } else if (type === 'textPrompt') {
+                        dynamicArea.innerHTML = `<input type="text" id="text-input" value="${currentData}" class="w-full border border-slate-300 rounded-lg p-3 text-center text-xl focus:border-blue-500 outline-none" autocomplete="off">
+                                                         <p class="text-xs text-center text-slate-500 mt-2">비워두면 숨겨지거나 기본값이 됩니다.</p>`;
+                        const inputTxt = document.getElementById('text-input');
+                        btnCancel.classList.remove('hidden');
+                        setTimeout(() => { inputTxt.focus(); inputTxt.select(); }, 50);
+                        btnOk.onclick = () => { cleanup(); resolve(inputTxt.value); };
+
+                    } else if (type === 'savePrompt') {
+                        dynamicArea.innerHTML = `<input type="text" id="save-input" value="${currentData}" class="w-full border border-slate-300 rounded-lg p-3 text-center text-lg font-bold focus:border-blue-500 outline-none" autocomplete="off">
+                                                         <p class="text-xs text-center text-slate-500 mt-2">저장할 파일 이름을 입력하세요.</p>`;
+                        const inputSave = document.getElementById('save-input');
+                        btnCancel.classList.remove('hidden');
+                        setTimeout(() => { inputSave.focus(); inputSave.select(); }, 50);
+                        btnOk.onclick = () => { cleanup(); resolve(inputSave.value); };
+                    } else {
+                        if (isConfirm) btnCancel.classList.remove('hidden');
+                        else btnCancel.classList.add('hidden');
+                        btnOk.onclick = () => { cleanup(); resolve(true); };
+                    }
+
+                    const cleanup = () => { modal.classList.add('hidden'); btnOk.onclick = null; btnCancel.onclick = null; };
+                    btnCancel.onclick = () => { cleanup(); resolve(false); };
+                });
+            }
+        };
+
+        const gearIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
+
+        const colorThemes = {
+            pastel: ["linear-gradient(145deg, #f8fafc, #e2e8f0)", "linear-gradient(145deg, #f0fdfa, #ccfbf1)", "linear-gradient(145deg, #eff6ff, #dbeafe)", "linear-gradient(145deg, #fdf4ff, #fae8ff)", "linear-gradient(145deg, #fff7ed, #ffedd5)", "linear-gradient(145deg, #f0fdf4, #dcfce7)", "linear-gradient(145deg, #fff1f2, #ffe4e6)"],
+            vivid: ["linear-gradient(145deg, #fee2e2, #fca5a5)", "linear-gradient(145deg, #ffedd5, #fdba74)", "linear-gradient(145deg, #fef9c3, #fde047)", "linear-gradient(145deg, #dcfce7, #86efac)", "linear-gradient(145deg, #dbeafe, #93c5fd)", "linear-gradient(145deg, #f3e8ff, #d8b4fe)", "linear-gradient(145deg, #fce7f3, #f9a8d4)"],
+            cool: ["linear-gradient(145deg, #e0f2fe, #bae6fd)", "linear-gradient(145deg, #cffafe, #a5f3fc)", "linear-gradient(145deg, #ccfbf1, #99f6e4)", "linear-gradient(145deg, #dbeafe, #bfdbfe)", "linear-gradient(145deg, #e0e7ff, #c7d2fe)", "linear-gradient(145deg, #fae8ff, #fbcfe8)", "linear-gradient(145deg, #f1f5f9, #e2e8f0)"],
+            sakura: ["linear-gradient(145deg, #fff1f2, #fecdd3)", "linear-gradient(145deg, #fdf2f8, #fbcfe8)", "linear-gradient(145deg, #faf5ff, #f3e8ff)", "linear-gradient(145deg, #ffffff, #fdf2f8)", "linear-gradient(145deg, #fce7f3, #f9a8d4)", "linear-gradient(145deg, #fbcfe8, #f472b6)", "linear-gradient(145deg, #f43f5e, #e11d48)"],
+            nature: ["linear-gradient(145deg, #f0fdf4, #dcfce7)", "linear-gradient(145deg, #ecfccb, #bbf7d0)", "linear-gradient(145deg, #fefce8, #fef08a)", "linear-gradient(145deg, #fef3c7, #fde047)", "linear-gradient(145deg, #ffedd5, #fdba74)", "linear-gradient(145deg, #fed7aa, #fb923c)", "linear-gradient(145deg, #166534, #14532d)"],
+            ocean: ["linear-gradient(145deg, #f0f9ff, #e0f2fe)", "linear-gradient(145deg, #e0f2fe, #bae6fd)", "linear-gradient(145deg, #bae6fd, #7dd3fc)", "linear-gradient(145deg, #7dd3fc, #38bdf8)", "linear-gradient(145deg, #38bdf8, #0ea5e9)", "linear-gradient(145deg, #0ea5e9, #0284c7)", "linear-gradient(145deg, #0369a1, #075985)"],
+            sunset: ["linear-gradient(145deg, #fffbeb, #fef3c7)", "linear-gradient(145deg, #fef3c7, #fde68a)", "linear-gradient(145deg, #fde68a, #fcd34d)", "linear-gradient(145deg, #fcd34d, #fbbf24)", "linear-gradient(145deg, #fbbf24, #f59e0b)", "linear-gradient(145deg, #f59e0b, #d97706)", "linear-gradient(145deg, #ea580c, #c2410c)"],
+            neon: ["linear-gradient(145deg, #111827, #1f2937)", "linear-gradient(145deg, #1f2937, #374151)", "linear-gradient(145deg, #374151, #4b5563)", "linear-gradient(145deg, #4b5563, #000000)", "linear-gradient(145deg, #39ff14, #39ff14)", "linear-gradient(145deg, #ff073a, #ff073a)", "linear-gradient(145deg, #bc13fe, #bc13fe)"],
+            gold: ["linear-gradient(145deg, #fefce8, #fef08a)", "linear-gradient(145deg, #fef08a, #fde047)", "linear-gradient(145deg, #fde047, #facc15)", "linear-gradient(145deg, #facc15, #eab308)", "linear-gradient(145deg, #eab308, #ca8a04)", "linear-gradient(145deg, #ca8a04, #a16207)", "linear-gradient(145deg, #854d0e, #713f12)"],
+            monochrome: ["linear-gradient(145deg, #ffffff, #f1f5f9)", "linear-gradient(145deg, #f8fafc, #e2e8f0)", "linear-gradient(145deg, #f1f5f9, #cbd5e1)", "linear-gradient(145deg, #e2e8f0, #94a3b8)", "linear-gradient(145deg, #cbd5e1, #64748b)", "linear-gradient(145deg, #94a3b8, #475569)", "linear-gradient(145deg, #64748b, #334155)"]
+        };
+
+        let activeThemeKey = 'pastel';
+
+        // 테마 팔레트 메뉴 토글 함수
+        function toggleThemePalette(e) {
+            e.stopPropagation();
+            const menu = document.getElementById('theme-palette-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        // 바탕 클릭 시 팔레트 메뉴 닫기
+        document.addEventListener('click', function (e) {
+            const menu = document.getElementById('theme-palette-menu');
+            const wrapper = document.getElementById('theme-dropdown-wrapper');
+            if (wrapper && !wrapper.contains(e.target) && !menu.classList.contains('hidden')) {
+                menu.classList.add('hidden');
+            }
+        });
+
+        function initThemePalette() {
+            const container = document.getElementById('theme-palette-container');
+            const themeNames = { pastel: '파스텔', vivid: '비비드', cool: '쿨톤', sakura: '벚꽃', nature: '자연', ocean: '바다', sunset: '노을', neon: '네온', gold: '골드', monochrome: '모노' };
+            for (const [key, colors] of Object.entries(colorThemes)) {
+                const btn = document.createElement('div');
+                btn.className = 'theme-swatch';
+                btn.style.background = colors[2];
+                btn.title = themeNames[key];
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    activeThemeKey = key;
+                    isBracketModified = true;
+                    renderBracket();
+                    document.getElementById('theme-palette-menu').classList.add('hidden');
+                };
+                container.appendChild(btn);
+            }
+        }
+        initThemePalette();
+
+        // 텍스트 대비색 계산 (선 색깔 및 캡처 처리용)
+        function getContrastYIQ(hexcolor) {
+            hexcolor = hexcolor.replace("#", "");
+            if (hexcolor.length === 3) hexcolor = hexcolor.split('').map(c => c + c).join('');
+            var r = parseInt(hexcolor.substr(0, 2), 16);
+            var g = parseInt(hexcolor.substr(2, 2), 16);
+            var b = parseInt(hexcolor.substr(4, 2), 16);
+            var yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+            return (yiq >= 128) ? '#1e293b' : '#ffffff';
+        }
+
+        // --- 명단 관리 로직 ---
+        function updateCount() {
+            const checks = document.querySelectorAll('.row-check');
+            let checkedCount = Array.from(checks).filter(c => c.checked).length;
+            document.getElementById('total-count').innerText = checkedCount;
+        }
+
+        function createRow(data = {}) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                        <td><input type="checkbox" class="row-check cursor-pointer w-4 h-4 text-blue-600 rounded" onchange="updateCount()" checked></td>
+                        <td><input type="text" value="${data.grade || ''}" placeholder="-"></td>
+                        <td><input type="text" value="${data.class || ''}" placeholder="-"></td>
+                        <td><input type="text" value="${data.num || ''}" placeholder="-"></td>
+                        <td><input type="text" value="${data.name || ''}" placeholder="이름 입력" class="font-bold text-slate-800"></td>
+                        <td><button onclick="deleteRow(this)" class="text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full w-8 h-8 font-bold text-lg transition-colors">×</button></td>
+                    `;
+            return tr;
+        }
+
+        function addRow(data) { document.getElementById('student-tbody').appendChild(createRow(data)); updateCount(); }
+        function deleteRow(btn) { btn.closest('tr').remove(); updateCount(); }
+        async function clearAll() { if (await Modal.show('작성된 모든 명단이 삭제됩니다.\n계속하시겠습니까?', true)) { document.getElementById('student-tbody').innerHTML = ''; updateCount(); } }
+        function toggleAll(chk) { document.querySelectorAll('.row-check').forEach(c => c.checked = chk.checked); updateCount(); }
+        function removeEmptyRows() { document.querySelectorAll('#student-tbody tr').forEach(tr => { if (Array.from(tr.querySelectorAll('input[type="text"]')).every(inp => inp.value.trim() === '')) tr.remove(); }); }
+
+        function addSampleData() {
+            removeEmptyRows();
+            const names = ["김민준", "이서연", "박도윤", "최지우", "정하준", "강서윤", "조은우", "윤지아", "장시우", "임다은", "한건우", "오채원", "서준희", "신수아", "권시우", "황지유", "송우진", "안서현", "홍지훈", "유하은", "고태윤", "문지민", "백도현", "양수민", "손건우", "배지윤", "허은우", "노윤아", "남기태", "최서진", "정우성", "김가현"];
+            names.forEach((name, i) => addRow({ grade: '3', class: '1', num: i + 1, name: name }));
+            const scrollDiv = document.getElementById('student-tbody').closest('.overflow-auto');
+            if (scrollDiv) scrollDiv.scrollTop = scrollDiv.scrollHeight;
+            updateCount();
+        }
+
+        function handleExcelUpload(e) {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+                    if (jsonData.length < 2) return Modal.show('데이터가 없거나 양식이 올바르지 않습니다.');
+                    removeEmptyRows();
+                    const headers = jsonData[0];
+                    let idxName = -1, idxGrade = -1, idxClass = -1, idxNum = -1;
+                    headers.forEach((h, i) => {
+                        if (typeof h !== 'string') return;
+                        if (h.includes('이름') || h.includes('성명')) idxName = i;
+                        if (h.includes('학년')) idxGrade = i; if (h.includes('반')) idxClass = i; if (h.includes('번호')) idxNum = i;
+                    });
+                    if (idxName === -1) idxName = headers.length > 3 ? 3 : headers.length - 1;
+                    let added = 0;
+                    for (let i = 1; i < jsonData.length; i++) {
+                        const row = jsonData[i]; if (!row || row.length === 0 || !row[idxName]) continue;
+                        addRow({ grade: idxGrade !== -1 ? (row[idxGrade] || '') : '', class: idxClass !== -1 ? (row[idxClass] || '') : '', num: idxNum !== -1 ? (row[idxNum] || '') : '', name: row[idxName] });
+                        added++;
+                    }
+                    Modal.show(`엑셀에서 ${added}명의 명단을 불러왔습니다.`);
+                    document.getElementById('excel-upload').value = "";
+                } catch (err) { Modal.show('엑셀 파일을 읽는 중 오류가 발생했습니다.'); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // --- 4. 대진표 로직 ---
+        function getParticipants() {
+            const trs = document.querySelectorAll('#student-tbody tr'); let players = [];
+            trs.forEach(tr => {
+                if (tr.querySelector('.row-check')?.checked) {
+                    const inputs = tr.querySelectorAll('input[type="text"]');
+                    let sId = "";
+                    if (inputs[0].value.trim() || inputs[1].value.trim() || inputs[2].value.trim()) {
+                        sId = `${inputs[0].value.trim() || '0'}${inputs[1].value.trim().padStart(2, '0')}${inputs[2].value.trim().padStart(2, '0')}`;
+                    }
+                    if (inputs[3].value.trim()) players.push({ name: inputs[3].value.trim(), sId: sId, id: `p_${++pIdCounter}` });
+                }
+            });
+            return players;
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[array[i], array[j]] = [array[j], array[i]]; }
+            return array;
+        }
+
+        function getBracketSeeds(P) {
+            if (P <= 1) return [1]; let seeds = [1, 2];
+            for (let r = 2; r <= Math.log2(P); r++) {
+                let nextSeeds = []; let length = Math.pow(2, r);
+                for (let i = 0; i < seeds.length; i++) { nextSeeds.push(seeds[i]); nextSeeds.push(length - seeds[i] + 1); }
+                seeds = nextSeeds;
+            }
+            return seeds;
+        }
+
+        async function generateBracket() {
+            let players = getParticipants();
+            if (players.length < 2) return await Modal.show('대진표를 만들려면 최소 2명 이상의 학생이 선택되어야 합니다.');
+
+            players = shuffleArray([...players]);
+
+            let N = players.length; let P = 1; while (P < N) P *= 2;
+            const seeds = getBracketSeeds(P);
+            let seededPlayers = new Array(P).fill(null);
+            for (let i = 0; i < P; i++) seededPlayers[i] = seeds[i] <= N ? players[seeds[i] - 1] : { isBye: true, name: '부전승 (Pass)', id: `bye_${++pIdCounter}` };
+
+            const numRounds = Math.log2(P);
+            tournamentData = [];
+
+            for (let r = 0; r < numRounds; r++) {
+                let matches = [];
+                for (let m = 0; m < Math.pow(2, numRounds - r - 1); m++) matches.push({ p1: null, p2: null, winner: null, bg1: null, bg2: null });
+                tournamentData.push(matches);
+            }
+            tournamentData.push([{ p1: null, p2: null, winner: null, isFinalNode: true, bgFinal: null }]);
+
+            for (let m = 0; m < P / 2; m++) {
+                tournamentData[0][m].p1 = seededPlayers[m * 2];
+                tournamentData[0][m].p2 = seededPlayers[m * 2 + 1];
+                reevaluateByes(0, m, true);
+            }
+
+            currentScale = 1; document.getElementById('bracket-wrapper').style.transform = `scale(1)`;
+            isBracketModified = false;
+
+            // 메뉴 표시 초기화 및 gap 제거
+            const toolbar = document.getElementById('top-toolbar-container');
+            const scrollContainer = document.getElementById('bracket-scroll-container');
+            toolbar.classList.remove('-translate-y-full', 'opacity-0', 'pointer-events-none');
+            document.getElementById('menu-toggle-btn').classList.add('hidden');
+            scrollContainer.classList.add('mt-24');
+
+            switchViewToBracket();
+        }
+
+        function switchViewToBracket() {
+            document.getElementById('view-input').classList.add('hidden');
+            document.getElementById('view-bracket').classList.remove('hidden');
+            document.getElementById('view-bracket').classList.add('flex');
+
+            updateStyles();
+            renderBracket();
+
+            setTimeout(() => {
+                drawConnectors();
+                centerBracketView();
+            }, 100);
+        }
+
+        // 💾 네이티브 파일 저장 다이얼로그
+        async function saveTournament() {
+            const titleVal = document.getElementById('main-title-input').value.trim() || "대진표";
+            const safeName = titleVal.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]|\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDE4F]|🏆| /g, '_').replace(/_+/g, '_').trim() || "대진표";
+            const fileName = safeName + ".bkt";
+
+            const container = document.getElementById('bracket-scroll-container');
+            const data = {
+                title: document.getElementById('main-title-input').value,
+                finalTitleText: finalTitleText,
+                winnerIconText: winnerIconText,
+                isShowWinnerIcon: document.getElementById('opt-show-winner-icon').checked,
+                nameSize: document.getElementById('opt-name-size').value,
+                cardWidth: document.getElementById('opt-width').value,
+                cardHeight: document.getElementById('opt-height').value,
+                isShowId: document.getElementById('opt-show-id').checked,
+                isVertical: document.getElementById('opt-vertical').checked,
+                themeKey: activeThemeKey,
+                bgColor: document.getElementById('opt-bg-color').value,
+                currentScale: currentScale,
+                scrollLeft: container.scrollLeft,
+                scrollTop: container.scrollTop,
+                tournamentData: tournamentData
+            };
+            const dataStr = JSON.stringify(data);
+
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.save_file) {
+                window.pywebview.api.save_file(dataStr, fileName);
+                return;
+            }
+
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: fileName,
+                        types: [{ description: '대진표 파일 (.bkt)', accept: { 'application/json': ['.bkt'] } }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(dataStr);
+                    await writable.close();
+                    return;
+                } catch (err) {
+                    if (err.name !== 'AbortError') console.error(err);
+                    return;
+                }
+            }
+
+            // Fallback (구형 브라우저)
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = fileName; a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 📂 대진표 설정 완벽 복원
+        function loadTournament(e) {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    tournamentData = data.tournamentData;
+
+                    document.getElementById('main-title-input').value = data.title || "🏆 OO 대회";
+
+                    finalTitleText = data.finalTitleText || "🏆 우승 🏆";
+                    winnerIconText = data.winnerIconText || "👑";
+                    document.getElementById('opt-show-winner-icon').checked = data.isShowWinnerIcon !== false;
+
+                    document.getElementById('opt-name-size').value = data.nameSize || 0.95;
+                    document.getElementById('opt-width').value = data.cardWidth || 170;
+                    document.getElementById('opt-height').value = data.cardHeight || 80;
+                    document.getElementById('opt-show-id').checked = data.isShowId || false;
+                    document.getElementById('opt-vertical').checked = data.isVertical || false;
+                    document.getElementById('opt-bg-color').value = data.bgColor || "#0f172a";
+                    activeThemeKey = data.themeKey || "pastel";
+                    currentScale = data.currentScale || 1;
+
+                    isBracketModified = true;
+                    document.getElementById('bracket-wrapper').style.transform = `scale(${currentScale})`;
+
+                    document.getElementById('view-input').classList.add('hidden');
+                    document.getElementById('view-bracket').classList.remove('hidden');
+                    document.getElementById('view-bracket').classList.add('flex');
+
+                    updateStyles();
+                    renderBracket();
+
+                    setTimeout(() => {
+                        const container = document.getElementById('bracket-scroll-container');
+                        if (data.scrollLeft !== undefined && data.scrollTop !== undefined) {
+                            container.scrollLeft = data.scrollLeft;
+                            container.scrollTop = data.scrollTop;
+                        } else {
+                            centerBracketView();
+                        }
+                        drawConnectors();
+                    }, 100);
+
+                    document.getElementById('bkt-upload').value = "";
+                } catch (err) { Modal.show('올바르지 않은 bkt 파일입니다.'); }
+            };
+            reader.readAsText(file);
+        }
+
+        // 📸 이미지로 복사 (대진표 영역만 최적화하여 여백 잘라내기)
+        async function exportImage() {
+            const wrapper = document.getElementById('bracket-wrapper');
+            const container = document.getElementById('bracket-scroll-container');
+
+            // 기존 뷰 상태(스케일, 여백, 스크롤) 임시 저장
+            const originalTransform = wrapper.style.transform;
+            const originalPadding = wrapper.style.padding;
+            const originalScrollLeft = container.scrollLeft;
+            const originalScrollTop = container.scrollTop;
+
+            // 캡처를 위해 배율을 1배로 초기화하고 3000px 무한 여백을 잘라냄 (상단은 제목 공간 확보)
+            wrapper.style.transform = 'scale(1)';
+            wrapper.style.padding = '120px 80px 80px 80px';
+
+            // 축소된 여백에 맞춰 SVG 선을 강제로 다시 그림
+            drawConnectors();
+
+            // 캡처 이미지 위에 찰나의 순간에만 제목을 합성 (제목은 무조건 검정)
+            const tempTitle = document.createElement('div');
+            tempTitle.style.position = 'absolute';
+            tempTitle.style.top = '40px';
+            tempTitle.style.width = '100%';
+            tempTitle.style.textAlign = 'center';
+            tempTitle.style.color = '#000000';
+            tempTitle.style.fontSize = '3.5rem';
+            tempTitle.style.fontWeight = '500';
+            tempTitle.style.fontFamily = "'Pretendard', sans-serif";
+            tempTitle.style.letterSpacing = '1px';
+            tempTitle.innerText = document.getElementById('main-title-input').value;
+            wrapper.appendChild(tempTitle);
+
+            try {
+                const canvas = await html2canvas(wrapper, {
+                    backgroundColor: document.getElementById('opt-bg-color').value,
+                    scale: 2, // 고해상도(2배수) 캡처로 선명도 유지
+                    useCORS: true
+                });
+
+                canvas.toBlob(async function (blob) {
+                    try {
+                        const item = new ClipboardItem({ "image/png": blob });
+                        await navigator.clipboard.write([item]);
+                        Modal.show('대진표가 그림으로 클립보드에 복사되었습니다!\n(최적화된 여백으로 캡처 완료. 문서 등에 Ctrl+V 로 붙여넣기 하세요)');
+                    } catch (e) {
+                        const titleVal = document.getElementById('main-title-input').value.trim();
+                        const safeName = titleVal.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]|\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDE4F]|🏆| /g, '_').replace(/_+/g, '_').trim() || "대진표";
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.href = url; a.download = safeName + '.png'; a.click();
+                        URL.revokeObjectURL(url);
+                        Modal.show('보안 설정에 의해 클립보드 복사가 차단되어,\n최적화된 이미지 파일로 자동 저장되었습니다.');
+                    }
+                });
+            } catch (err) {
+                Modal.show('이미지 캡처 중 오류가 발생했습니다.');
+            } finally {
+                wrapper.removeChild(tempTitle);
+
+                // 캡처 완료 후 뷰 상태 원상 복구 (무한 스크롤, 배율 복귀)
+                wrapper.style.padding = originalPadding || '3000px';
+                wrapper.style.transform = originalTransform;
+                drawConnectors();
+                container.scrollLeft = originalScrollLeft;
+                container.scrollTop = originalScrollTop;
+            }
+        }
+
+        async function confirmAndReshuffle() {
+            if (isBracketModified && !await Modal.show('진행 중인 대진 결과가 있습니다.\n정말 다시 섞으시겠습니까?\n(기존 진행 내역은 모두 초기화됩니다.)', true)) return;
+            generateBracket();
+        }
+
+        async function confirmAndGoBack() {
+            if (isBracketModified && !await Modal.show('명단으로 돌아가시겠습니까?\n(현재 대진표 진행 내역은 모두 초기화됩니다.)', true)) return;
+            goBack();
+        }
+
+        function centerBracketView() {
+            const container = document.getElementById('bracket-scroll-container');
+            const content = document.getElementById('bracket-content');
+
+            const scaledWidth = content.offsetWidth * currentScale;
+            const scaledOffsetLeft = content.offsetLeft * currentScale;
+            const scaledOffsetTop = content.offsetTop * currentScale;
+
+            const targetX = scaledOffsetLeft + (scaledWidth / 2) - (container.clientWidth / 2);
+            const targetY = scaledOffsetTop - (100 * currentScale);
+            container.scrollLeft = targetX; container.scrollTop = targetY;
+        }
+
+        function updateStyles() {
+            const width = document.getElementById('opt-width').value;
+            const height = document.getElementById('opt-height').value;
+            const nameSize = document.getElementById('opt-name-size').value;
+            const bgColor = document.getElementById('opt-bg-color').value || '#0f172a';
+
+            document.documentElement.style.setProperty('--card-width', `${width}px`);
+            document.documentElement.style.setProperty('--card-height', `${height}px`);
+            document.documentElement.style.setProperty('--player-size', `${nameSize}rem`);
+            document.documentElement.style.setProperty('--bg-color', bgColor);
+
+            // 강력하게 DOM 요소에 직접 배경색 주입 (CSS 버그 방지)
+            const viewBracket = document.getElementById('view-bracket');
+            if (viewBracket) {
+                viewBracket.style.backgroundColor = bgColor;
+            }
+
+            isBracketModified = true;
+            drawConnectors();
+        }
+
+        function handleVerticalToggle() {
+            const isVertical = document.getElementById('opt-vertical').checked;
+            const heightInput = document.getElementById('opt-height');
+            if (isVertical && heightInput.value < 140) heightInput.value = 160;
+            else if (!isVertical && heightInput.value == 160) heightInput.value = 80;
+            updateStyles(); renderBracket();
+        }
+
+        function togglePresentationMode() {
+            const toolbar = document.getElementById('top-toolbar-container');
+            const toggleBtn = document.getElementById('menu-toggle-btn');
+            const scrollContainer = document.getElementById('bracket-scroll-container');
+
+            if (!toolbar.classList.contains('-translate-y-full')) {
+                // 메뉴 닫기 (위로 슬라이드 및 투명화)
+                toolbar.classList.add('-translate-y-full', 'opacity-0', 'pointer-events-none');
+                toggleBtn.classList.remove('hidden');
+                scrollContainer.classList.remove('mt-24'); // 여백을 없애서 캔버스가 위로 밀착되도록 함
+            } else {
+                // 메뉴 열기
+                toolbar.classList.remove('-translate-y-full', 'opacity-0', 'pointer-events-none');
+                toggleBtn.classList.add('hidden');
+                scrollContainer.classList.add('mt-24');
+            }
+        }
+
+        // 우승 문구 수정
+        async function editFinalTitlePrompt() {
+            const newText = await Modal.show('최종 우승자 박스 위의 문구를 변경합니다.', false, 'textPrompt', finalTitleText);
+            if (newText !== false && newText !== null) { finalTitleText = newText.trim() || ' '; isBracketModified = true; renderBracket(); }
+        }
+
+        // 승자 표시 아이콘 수정
+        async function editWinnerIconPrompt() {
+            const newText = await Modal.show('승자 이름 옆에 표시할 아이콘(이모지 등)을 변경합니다.', false, 'textPrompt', winnerIconText);
+            if (newText !== false && newText !== null) { winnerIconText = newText.trim(); isBracketModified = true; renderBracket(); }
+        }
+
+        // 슬롯 기준 개별 색상 및 이름 수정
+        async function editPlayerPrompt(r, m, pIndex) {
+            const match = tournamentData[r][m];
+            const player = pIndex === 1 ? match.p1 : match.p2;
+            const currentBg = pIndex === 1 ? match.bg1 : match.bg2;
+
+            // 이름이 배정된 경우에만 이름 수정 허용
+            const canEditName = player && !player.isBye;
+            const currentName = canEditName ? player.name : '';
+
+            const result = await Modal.show('', false, 'playerEdit', { name: currentName, bg: currentBg, canEditName: canEditName });
+            if (result) {
+                if (canEditName) {
+                    player.name = result.name.trim() || '?';
+                }
+                if (pIndex === 1) match.bg1 = result.color; else match.bg2 = result.color;
+
+                isBracketModified = true;
+                renderBracket(); setTimeout(drawConnectors, 50);
+            }
+        }
+
+        async function editFinalWinnerPrompt() {
+            const match = tournamentData[tournamentData.length - 1][0];
+            const canEditName = match.winner && !match.winner.isBye;
+            const currentName = canEditName ? match.winner.name : '';
+
+            const result = await Modal.show('', false, 'playerEdit', { name: currentName, bg: match.bgFinal, canEditName: canEditName });
+            if (result) {
+                if (canEditName) {
+                    match.winner.name = result.name.trim() || '?';
+                }
+                match.bgFinal = result.color;
+                isBracketModified = true; renderBracket();
+            }
+        }
+
+        function reevaluateByes(r, m, isInit = false) {
+            const match = tournamentData[r][m];
+            match.winner = null;
+            if (match.p1 && match.p1.isBye && match.p2 && !match.p2.isBye) selectWinnerLogic(r, m, 2, isInit);
+            else if (match.p2 && match.p2.isBye && match.p1 && !match.p1.isBye) selectWinnerLogic(r, m, 1, isInit);
+        }
+
+        function selectWinnerClick(e, r, m, pIndex) {
+            if (isDraggingBracket) return;
+            const match = tournamentData[r][m];
+            const player = pIndex === 1 ? match.p1 : match.p2;
+            if (!player || player.isBye) return;
+
+            selectWinnerLogic(r, m, pIndex, false);
+            isBracketModified = true; renderBracket();
+
+            setTimeout(() => {
+                drawConnectors();
+                fireMassiveEffects(r, m, match.winner && match.winner.id === player.id && !tournamentData[r + 1][0].isFinalNode);
+            }, 30);
+        }
+
+        function selectWinnerLogic(r, m, pIndex, isInit = false) {
+            const match = tournamentData[r][m]; const player = pIndex === 1 ? match.p1 : match.p2;
+            if (!player || player.isBye) return;
+            match.winner = player;
+            const nextR = r + 1;
+            if (nextR < tournamentData.length) {
+                const nextM = Math.floor(m / 2); const nextMatch = tournamentData[nextR][nextM];
+                if (nextMatch.isFinalNode) { nextMatch.p1 = player; nextMatch.winner = player; }
+                else {
+                    if (m % 2 === 0) nextMatch.p1 = player; else nextMatch.p2 = player;
+                    if (!isInit) clearUpwards(nextR, nextM);
+                }
+            }
+        }
+
+        function clearUpwards(startR, startM) {
+            let r = startR; let m = startM;
+            while (r < tournamentData.length) {
+                let match = tournamentData[r][m]; match.winner = null;
+                let nextR = r + 1;
+                if (nextR < tournamentData.length) {
+                    let nextM = Math.floor(m / 2); let nextMatch = tournamentData[nextR][nextM];
+                    if (nextMatch.isFinalNode) { nextMatch.p1 = null; nextMatch.winner = null; }
+                    else { if (m % 2 === 0) nextMatch.p1 = null; else nextMatch.p2 = null; }
+                    r = nextR; m = nextM;
+                } else break;
+            }
+        }
+
+        // --- 드래그 앤 드롭 (자리 교체) ---
+        let dragInfo = null;
+
+        function handleDragStart(e, r, m, pIndex) {
+            isDraggingBracket = true; dragInfo = { r, m, pIndex };
+            e.dataTransfer.effectAllowed = "move"; e.target.style.opacity = "0.5";
+        }
+        function handleDragEnd(e) { e.target.style.opacity = "1"; setTimeout(() => { isDraggingBracket = false; }, 100); }
+        function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+        function handleDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+        function handleDrop(e, targetR, targetM, targetPIndex) {
+            e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+            if (!dragInfo) return;
+            const { r: srcR, m: srcM, pIndex: srcPIndex } = dragInfo;
+            if (srcR === targetR && srcM === targetM && srcPIndex === targetPIndex) return;
+
+            const srcMatch = tournamentData[srcR][srcM]; const targetMatch = tournamentData[targetR][targetM];
+            const p1 = srcPIndex === 1 ? srcMatch.p1 : srcMatch.p2; const p2 = targetPIndex === 1 ? targetMatch.p1 : targetMatch.p2;
+
+            if (srcPIndex === 1) srcMatch.p1 = p2; else srcMatch.p2 = p2;
+            if (targetPIndex === 1) targetMatch.p1 = p1; else targetMatch.p2 = p1;
+
+            clearUpwards(srcR, srcM); clearUpwards(targetR, targetM);
+            reevaluateByes(srcR, srcM); reevaluateByes(targetR, targetM);
+
+            isBracketModified = true; renderBracket(); setTimeout(drawConnectors, 50); dragInfo = null;
+        }
+
+        function fireMassiveEffects(r, m, isNormalWin) {
+            const wrapper = document.getElementById(`match-${r}-${m}`); if (!wrapper) return;
+            const clickedCard = wrapper.querySelector('.match-card');
+            if (clickedCard) { clickedCard.classList.remove('anim-pop'); void clickedCard.offsetWidth; clickedCard.classList.add('anim-pop'); }
+
+            const bracketView = document.getElementById('bracket-content');
+            bracketView.classList.remove('anim-shake'); void bracketView.offsetWidth; bracketView.classList.add('anim-shake');
+
+            let x = 0.5, y = 0.5;
+            if (clickedCard) {
+                const rect = clickedCard.getBoundingClientRect();
+                x = (rect.left + rect.width / 2) / window.innerWidth; y = (rect.top + rect.height / 2) / window.innerHeight;
+            }
+
+            confetti({ particleCount: 80, spread: 100, origin: { x, y }, colors: ['#3b82f6', '#fbbf24', '#ef4444', '#10b981'], zIndex: 9999 });
+
+            if (r === tournamentData.length - 2) {
+                setTimeout(() => {
+                    const end = Date.now() + 3000;
+                    (function frame() {
+                        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff0000', '#ffff00'] });
+                        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#0000ff', '#00ff00'] });
+                        if (Date.now() < end) requestAnimationFrame(frame);
+                    }());
+                }, 300);
+            }
+        }
+
+        // HTML 렌더링
+        function renderBracket() {
+            const container = document.getElementById('bracket-content');
+            container.innerHTML = '';
+
+            const isShowId = document.getElementById('opt-show-id').checked;
+            const isVertical = document.getElementById('opt-vertical').checked;
+            const isShowWinnerIcon = document.getElementById('opt-show-winner-icon').checked;
+            const roundColors = colorThemes[activeThemeKey] || colorThemes.pastel;
+
+            // 캔버스 배경 밝기 판별하여 라운드 텍스트 색상 조절
+            const currentBgColor = document.documentElement.style.getPropertyValue('--bg-color') || '#0f172a';
+            const isDarkBg = getContrastYIQ(currentBgColor) === '#ffffff';
+
+            for (let r = tournamentData.length - 1; r >= 0; r--) {
+                const row = document.createElement('div');
+                row.className = 'flex flex-row w-full justify-around items-center gap-1.5 md:gap-3 relative z-10 my-4 no-select';
+                row.dataset.round = r;
+
+                let roundText = "";
+                if (r === tournamentData.length - 1) roundText = "";
+                else if (r === tournamentData.length - 2) roundText = "결승전";
+                else if (r === tournamentData.length - 3) roundText = "준결승";
+                else roundText = `${Math.pow(2, tournamentData.length - r - 1)}강`;
+
+                if (roundText) {
+                    const titleDiv = document.createElement('div');
+                    titleDiv.className = `absolute -left-12 md:-left-20 text-lg md:text-xl font-bold opacity-90 whitespace-nowrap round-title-font drop-shadow-md ${isDarkBg ? 'text-slate-300' : 'text-slate-600'}`;
+                    titleDiv.innerText = roundText;
+                    row.appendChild(titleDiv);
+                }
+
+                const bgColor = roundColors[r % roundColors.length];
+
+                if (r === tournamentData.length - 1) {
+                    const match = tournamentData[r][0];
+                    const card = document.createElement('div');
+                    card.id = `match-${r}-0`;
+                    card.className = 'match-card-wrapper mb-8 mt-4';
+
+                    const winnerStr = match.winner ? match.winner.name : '?';
+
+                    const winIconHtml = (isShowWinnerIcon && match.winner && !match.winner.isBye)
+                        ? `<span class="text-amber-500 drop-shadow-sm cursor-pointer hover:scale-125 transition-transform ${isVertical ? 'mb-2 block' : 'mr-1 inline-block'}" style="font-size: 1.1em;" onclick="event.stopPropagation(); editWinnerIconPrompt()" title="승자 표시 아이콘 수정">${winnerIconText}</span>` : '';
+
+                    const finalNameHtml = `<div class="font-bold text-slate-900 w-full flex items-center justify-center gap-1 ${isVertical ? 'text-vertical' : 'text-horizontal'}" style="font-size: calc(var(--player-size)*1.5);">${winIconHtml}${winnerStr}</div>`;
+                    const finalIdHtml = (isShowId && match.winner && match.winner.sId && !match.winner.isBye)
+                        ? `<div class="opacity-80 font-bold ${isVertical ? 'text-vertical mx-1' : 'mt-1 text-horizontal'}" style="font-size: calc(var(--player-size)*0.85);">${match.winner.sId}</div>` : '';
+
+                    const winCustomBg = match.bgFinal ? `style="background: ${match.bgFinal};"` : '';
+
+                    card.innerHTML = `
+                                <div class="match-card final-winner-card justify-center items-center relative group" ${winCustomBg}>
+                                    <div class="edit-btn" onclick="event.stopPropagation(); editFinalWinnerPrompt()" title="설정">${gearIcon}</div>
+                                    <div class="text-amber-700 font-bold mb-2 round-title-font whitespace-nowrap text-center cursor-pointer hover:scale-105 transition-transform" style="font-size: calc(var(--player-size)*1.2);" onclick="editFinalTitlePrompt()" title="우승 문구 수정">${finalTitleText}</div>
+                                    <div class="flex ${isVertical ? 'flex-row items-center' : 'flex-col items-center'} justify-center w-full">
+                                        ${finalNameHtml}
+                                        ${finalIdHtml}
+                                    </div>
+                                </div>
+                            `;
+                    row.appendChild(card);
+                } else {
+                    tournamentData[r].forEach((match, m) => {
+                        const card = document.createElement('div');
+                        card.id = `match-${r}-${m}`;
+                        card.className = 'match-card-wrapper';
+
+                        const isP1Winner = match.winner && match.p1 && match.winner.id === match.p1.id;
+                        const isP2Winner = match.winner && match.p2 && match.winner.id === match.p2.id;
+
+                        // 승자 테두리 밝기 조정 (배경이 밝으면 어두운 파랑)
+                        const winnerClass = isDarkBg ? 'has-winner-dark' : 'has-winner-light';
+                        const cardHasWinnerClass = match.winner ? winnerClass : '';
+
+                        let dragAttrsP1 = ''; let dragAttrsP2 = '';
+                        let p1Class = `match-player cursor-pointer ${match.p1 && match.p1.isBye ? 'bye' : ''} ${isP1Winner ? 'is-winner' : ''}`;
+                        let p2Class = `match-player cursor-pointer ${match.p2 && match.p2.isBye ? 'bye' : ''} ${isP2Winner ? 'is-winner' : ''}`;
+
+                        if (r === 0) {
+                            p1Class += " draggable"; p2Class += " draggable";
+                            dragAttrsP1 = `draggable="true" ondragstart="handleDragStart(event, ${r}, m, 1)" ondragend="handleDragEnd(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, ${r}, ${m}, 1)"`;
+                            dragAttrsP2 = `draggable="true" ondragstart="handleDragStart(event, ${r}, m, 2)" ondragend="handleDragEnd(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, ${r}, ${m}, 2)"`;
+                        }
+
+                        const divider = `<div class="w-px h-full bg-slate-300 opacity-50 z-20 absolute left-1/2 transform -translate-x-1/2 top-0 pointer-events-none"></div>`;
+                        const textFormatClass = isVertical ? 'text-vertical' : 'text-horizontal';
+                        const layoutFlex = isVertical ? 'flex-row gap-2' : 'flex-col gap-1';
+
+                        const crownIcon = isShowWinnerIcon ? `<span class="text-amber-500 drop-shadow-sm cursor-pointer hover:scale-125 transition-transform ${isVertical ? 'mb-1 block' : 'mr-1 inline-block'}" style="font-size: 1.1em;" onclick="event.stopPropagation(); editWinnerIconPrompt()" title="승자 표시 아이콘 수정">${winnerIconText}</span>` : '';
+
+                        let p1Content = '';
+                        let p1Style = (match.bg1) ? `style="background: ${match.bg1}; border-radius: 10px 0 0 10px;"` : '';
+                        if (!match.p1 || match.p1.isBye) {
+                            p1Content = `<span class="w-full text-center pointer-events-none opacity-60 ${textFormatClass}">${match.p1 ? match.p1.name : '?'}</span>` +
+                                `<div class="edit-btn" onclick="event.stopPropagation(); editPlayerPrompt(${r}, ${m}, 1)" title="설정">${gearIcon}</div>`;
+                        } else {
+                            const p1NameHtml = isP1Winner ? `${crownIcon}${match.p1.name}` : match.p1.name;
+                            const nameSpan = `<span class="font-bold pointer-events-none ${textFormatClass} flex ${isVertical ? 'flex-col items-center' : 'items-center'} justify-center w-full h-full">${p1NameHtml}</span>`;
+                            const idSpan = (isShowId && match.p1.sId) ? `<span class="opacity-80 ${textFormatClass}" style="font-size: calc(var(--player-size)*0.85);">${match.p1.sId}</span>` : '';
+
+                            p1Content = `<div class="flex ${layoutFlex} items-center justify-center w-full h-full">${nameSpan}${idSpan}</div>` +
+                                `<div class="edit-btn" onclick="event.stopPropagation(); editPlayerPrompt(${r}, ${m}, 1)" title="설정">${gearIcon}</div>`;
+                        }
+
+                        let p2Content = '';
+                        let p2Style = (match.bg2) ? `style="background: ${match.bg2}; border-radius: 0 10px 10px 0;"` : '';
+                        if (!match.p2 || match.p2.isBye) {
+                            p2Content = `<span class="w-full text-center pointer-events-none opacity-60 ${textFormatClass}">${match.p2 ? match.p2.name : '?'}</span>` +
+                                `<div class="edit-btn" onclick="event.stopPropagation(); editPlayerPrompt(${r}, ${m}, 2)" title="설정">${gearIcon}</div>`;
+                        } else {
+                            const p2NameHtml = isP2Winner ? `${crownIcon}${match.p2.name}` : match.p2.name;
+                            const nameSpan = `<span class="font-bold pointer-events-none ${textFormatClass} flex ${isVertical ? 'flex-col items-center' : 'items-center'} justify-center w-full h-full">${p2NameHtml}</span>`;
+                            const idSpan = (isShowId && match.p2.sId) ? `<span class="opacity-80 ${textFormatClass}" style="font-size: calc(var(--player-size)*0.85);">${match.p2.sId}</span>` : '';
+
+                            p2Content = `<div class="flex ${layoutFlex} items-center justify-center w-full h-full">${nameSpan}${idSpan}</div>` +
+                                `<div class="edit-btn" onclick="event.stopPropagation(); editPlayerPrompt(${r}, ${m}, 2)" title="설정">${gearIcon}</div>`;
+                        }
+
+                        card.innerHTML = `
+                                    <div class="match-card ${cardHasWinnerClass}" style="background: ${bgColor};">
+                                        <div class="${p1Class} group" onclick="selectWinnerClick(event, ${r}, ${m}, 1)" ${dragAttrsP1} ${p1Style}>${p1Content}</div>
+                                        ${divider}
+                                        <div class="${p2Class} group" onclick="selectWinnerClick(event, ${r}, ${m}, 2)" ${dragAttrsP2} ${p2Style}>${p2Content}</div>
+                                    </div>
+                                `;
+                        row.appendChild(card);
+                    });
+                }
+                container.appendChild(row);
+            }
+            setTimeout(drawConnectors, 50);
+        }
+
+        function drawConnectors() {
+            const svg = document.getElementById('bracket-lines');
+            svg.innerHTML = '';
+            const svgRect = svg.getBoundingClientRect();
+            const scale = currentScale || 1;
+
+            // 배경 밝기 판별하여 라인 색상 조정
+            const currentBgColor = document.documentElement.style.getPropertyValue('--bg-color') || '#0f172a';
+            const isDarkBg = getContrastYIQ(currentBgColor) === '#ffffff';
+
+            const defaultLineColor = isDarkBg ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.2)';
+            const winnerLineColor = isDarkBg ? '#60a5fa' : '#3b82f6';
+            const winnerShadow = isDarkBg ? 'drop-shadow(0px 0px 6px rgba(96, 165, 250, 0.6))' : 'drop-shadow(0px 0px 4px rgba(37, 99, 235, 0.4))';
+
+            for (let r = 0; r < tournamentData.length - 1; r++) {
+                tournamentData[r].forEach((match, m) => {
+                    const nextM = Math.floor(m / 2);
+                    const wrapper1 = document.getElementById(`match-${r}-${m}`);
+                    const wrapper2 = document.getElementById(`match-${r + 1}-${nextM}`);
+
+                    if (wrapper1 && wrapper2) {
+                        const card1 = wrapper1.querySelector('.match-card');
+                        const card2 = wrapper2.querySelector('.match-card');
+                        const rect1 = card1.getBoundingClientRect();
+                        const rect2 = card2.getBoundingClientRect();
+
+                        const startX = (rect1.left + rect1.width / 2 - svgRect.left) / scale;
+                        const startY = (rect1.top - svgRect.top) / scale;
+                        const endX = (rect2.left + rect2.width / 2 - svgRect.left) / scale;
+                        const endY = (rect2.bottom - svgRect.top) / scale;
+                        const midY = startY - (startY - endY) / 2;
+
+                        if (startY <= endY) return;
+
+                        const path = `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+                        const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathEl.setAttribute('d', path);
+                        pathEl.setAttribute('fill', 'none');
+
+                        if (match.winner !== null) {
+                            pathEl.setAttribute('stroke', winnerLineColor);
+                            pathEl.setAttribute('stroke-width', '4');
+                            pathEl.style.filter = winnerShadow;
+                        } else {
+                            pathEl.setAttribute('stroke', defaultLineColor);
+                            pathEl.setAttribute('stroke-width', '2');
+                        }
+
+                        svg.appendChild(pathEl);
+                    }
+                });
+            }
+        }
+
+        function goBack() {
+            document.getElementById('view-bracket').classList.add('hidden');
+            document.getElementById('view-bracket').classList.remove('flex');
+            document.getElementById('view-input').classList.remove('hidden');
+        }
+
+        // --- 마우스 포인터 중심 정밀 줌(Zoom) ---
+        const scrollContainer = document.getElementById('bracket-scroll-container');
+        let isDown = false; let startX, startY, scrollLeft, scrollTop; let isDraggingBracket = false; let currentScale = 1;
+
+        scrollContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomOut = e.deltaY > 0;
+            const zoomStep = 0.05;
+
+            const oldScale = currentScale;
+            currentScale += zoomOut ? -zoomStep : zoomStep;
+            currentScale = Math.min(Math.max(0.3, currentScale), 3.0);
+
+            const ratio = currentScale / oldScale;
+
+            const rect = scrollContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // 마우스가 가리키고 있는 원본 좌표
+            const scrollX = scrollContainer.scrollLeft;
+            const scrollY = scrollContainer.scrollTop;
+
+            document.getElementById('bracket-wrapper').style.transform = `scale(${currentScale})`;
+
+            // 변경된 비율만큼 스크롤 축을 재계산하여 마우스 포인터 중심 고정
+            scrollContainer.scrollLeft = (scrollX + mouseX) * ratio - mouseX;
+            scrollContainer.scrollTop = (scrollY + mouseY) * ratio - mouseY;
+
+            isBracketModified = true;
+        }, { passive: false });
+
+        scrollContainer.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.match-card') || e.target.closest('.edit-btn') || e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+            isDown = true; isDraggingBracket = false;
+            document.body.style.userSelect = 'none';
+            scrollContainer.classList.add('cursor-grabbing', 'no-select');
+
+            startX = e.pageX - scrollContainer.offsetLeft;
+            startY = e.pageY - scrollContainer.offsetTop;
+            scrollLeft = scrollContainer.scrollLeft;
+            scrollTop = scrollContainer.scrollTop;
+        });
+
+        scrollContainer.addEventListener('mouseleave', () => {
+            isDown = false; document.body.style.userSelect = ''; scrollContainer.classList.remove('cursor-grabbing', 'no-select');
+        });
+
+        scrollContainer.addEventListener('mouseup', () => {
+            if (isDown) isBracketModified = true;
+            isDown = false; document.body.style.userSelect = ''; scrollContainer.classList.remove('cursor-grabbing', 'no-select');
+            setTimeout(() => { isDraggingBracket = false; }, 50);
+        });
+
+        // 부드러운 1:1 패닝
+        scrollContainer.addEventListener('mousemove', (e) => {
+            if (!isDown) return;
+            e.preventDefault();
+            const walkX = (e.pageX - scrollContainer.offsetLeft - startX);
+            const walkY = (e.pageY - scrollContainer.offsetTop - startY);
+            if (Math.abs(walkX) > 5 || Math.abs(walkY) > 5) isDraggingBracket = true;
+            scrollContainer.scrollLeft = scrollLeft - walkX;
+            scrollContainer.scrollTop = scrollTop - walkY;
+        });
+
+        window.addEventListener('resize', () => { if (!document.getElementById('view-bracket').classList.contains('hidden')) drawConnectors(); });
+
+        // 처음 로딩 시
+        window.onload = () => {
+            updateStyles();
+            for (let i = 0; i < 5; i++) addRow({});
+            updateCount();
+        };
+
+    </script>
+</body>
+</html>

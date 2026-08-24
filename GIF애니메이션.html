@@ -1,0 +1,2355 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>고급 GIF 애니메이션 제작기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+        /* iframe 및 웹뷰 환경 완벽 대응 레이아웃 리셋 */
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #f8fafc;
+            font-family: 'Noto Sans KR', sans-serif;
+            user-select: none;
+        }
+
+        /* 세련된 커스텀 스크롤바 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+            }
+
+        .checkerboard {
+            background-color: #e5e5f7;
+            background-image: repeating-linear-gradient(45deg, #c2c2d6 25%, transparent 25%, transparent 75%, #c2c2d6 75%, #c2c2d6), repeating-linear-gradient(45deg, #c2c2d6 25%, #e5e5f7 25%, #e5e5f7 75%, #c2c2d6 75%, #c2c2d6);
+            background-position: 0 0, 10px 10px;
+            background-size: 20px 20px;
+        }
+
+        #editor-wrapper {
+            transition: transform 0.1s ease-out;
+            transform-origin: center center;
+        }
+
+        /* 프레임 아이템이 찌그러지지 않도록 flex-shrink-0 강제 적용 */
+        .frame-item {
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+            flex-shrink: 0;
+        }
+
+            .frame-item.active {
+                border-color: #3b82f6;
+                background-color: #eff6ff;
+            }
+
+            .frame-item.dragging {
+                opacity: 0.4;
+                transform: scale(0.95);
+            }
+
+        .drag-over-top {
+            border-top: 3px solid #3b82f6 !important;
+        }
+
+        .drag-over-bottom {
+            border-bottom: 3px solid #3b82f6 !important;
+        }
+
+        .tool-btn.active {
+            background-color: #eff6ff;
+            color: #2563eb;
+            border-color: #bfdbfe;
+        }
+
+        /* 파워포인트 스타일 크기 조절/회전 핸들 */
+        .resize-handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: white;
+            border: 1.5px solid #3b82f6;
+            z-index: 30;
+        }
+
+        .rotate-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #3b82f6;
+            border-radius: 50%;
+            border: 2px solid white;
+            z-index: 30;
+            cursor: crosshair;
+        }
+
+        .rotate-line {
+            position: absolute;
+            width: 2px;
+            height: 20px;
+            background-color: #3b82f6;
+            z-index: 29;
+        }
+
+        /* 토스트 메시지 스타일 */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(30, 41, 59, 0.9);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 9999;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        /* 절대 스크롤 레이아웃 강제 적용 */
+        .layout-main {
+            flex: 1 1 0%;
+            min-height: 0;
+        }
+
+        .scroll-area {
+            flex: 1 1 0%;
+            min-height: 0;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="flex flex-col text-slate-800">
+
+    <input type="file" accept=".gif" class="hidden" id="gif-import-input" onchange="handleGifImport(event)">
+
+    <header class="bg-slate-900 text-white p-3 flex justify-between items-center shrink-0 z-20 shadow-md">
+        <div class="flex items-center gap-3">
+            <h1 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-film text-blue-400"></i> 고급 GIF 애니메이션 제작기</h1>
+            <button onclick="showHelp()" class="text-slate-400 hover:text-white transition-colors text-sm flex items-center gap-1 bg-slate-800 px-2 py-1 rounded">
+                <i class="fa-regular fa-circle-question"></i> 도움말
+            </button>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="promptImportGif()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-medium transition-colors shadow-sm"><i class="fa-solid fa-film mr-1"></i> GIF 열기(프레임 추출)</button>
+            <div class="w-px h-6 bg-slate-700 mx-1 my-auto"></div>
+            <button onclick="loadProject()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium transition-colors"><i class="fa-solid fa-folder-open mr-1"></i> 프로젝트 열기</button>
+            <button onclick="saveProject()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium transition-colors"><i class="fa-solid fa-save mr-1"></i> 프로젝트 저장</button>
+            <div class="w-px h-6 bg-slate-700 mx-1 my-auto"></div>
+            <button onclick="clearAllFrames()" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"><i class="fa-solid fa-trash-can mr-1"></i> 전체 초기화</button>
+            <button onclick="exportToPython()" class="px-5 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium shadow-lg flex items-center gap-2 transition-colors"><i class="fa-solid fa-file-export"></i> GIF 내보내기</button>
+
+            <div class="relative inline-block text-left">
+                <button onclick="toggleExportMenu()" id="btn-export-more" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium shadow-lg flex items-center gap-2 transition-colors">
+                    기타 <i class="fa-solid fa-chevron-down text-xs ml-1"></i>
+                </button>
+                <div id="export-dropdown" class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-2xl bg-white border border-slate-200 focus:outline-none hidden z-50">
+                    <div class="py-1">
+                        <button onclick="exportToWebP(); closeExportMenu();" class="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-teal-50 hover:text-teal-700 transition-colors flex items-center gap-2"><i class="fa-solid fa-file-image w-4 text-center text-teal-600"></i> WebP (웹 고화질)</button>
+                        <button onclick="exportToAPNG(); closeExportMenu();" class="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-orange-50 hover:text-orange-700 transition-colors flex items-center gap-2"><i class="fa-solid fa-file-code w-4 text-center text-orange-600"></i> APNG (투명 고화질)</button>
+                        <button onclick="exportToWebM(); closeExportMenu();" class="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-fuchsia-50 hover:text-fuchsia-700 transition-colors flex items-center gap-2"><i class="fa-solid fa-video w-4 text-center text-fuchsia-600"></i> WebM (투명 비디오)</button>
+                        <button onclick="exportToMP4(); closeExportMenu();" class="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2"><i class="fa-solid fa-circle-play w-4 text-center text-slate-600"></i> MP4 (일반 동영상)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="layout-main flex flex-row">
+        <aside class="w-[30rem] bg-white border-r border-slate-200 flex flex-row z-10 shadow-[2px_0_10px_rgba(0,0,0,0.02)] shrink-0 min-h-0">
+            <div class="w-1/2 border-r border-slate-100 flex flex-col min-h-0">
+                <div class="scroll-area flex flex-col p-3 pb-8">
+                    <h2 class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider shrink-0">편집 도구</h2>
+                    <div class="grid grid-cols-2 gap-2 mb-3 shrink-0">
+                        <button class="tool-btn active p-2 rounded border border-slate-200 hover:bg-slate-50 flex flex-col items-center justify-center" data-tool="move" onclick="setTool('move')" title="객체 선택/이동 (V)">
+                            <i class="fa-solid fa-arrow-pointer mb-1"></i><span class="text-[10px]">선택</span>
+                        </button>
+                        <button class="tool-btn p-2 rounded border border-slate-200 hover:bg-slate-50 flex flex-col items-center justify-center" data-tool="wand" onclick="setTool('wand')" title="마법봉 (W)">
+                            <i class="fa-solid fa-wand-magic-sparkles mb-1"></i><span class="text-[10px]">투명화</span>
+                        </button>
+                        <button class="tool-btn p-2 rounded border border-slate-200 hover:bg-slate-50 flex flex-col items-center justify-center" data-tool="eraser" onclick="setTool('eraser')" title="지우개 (E)">
+                            <i class="fa-solid fa-eraser mb-1"></i><span class="text-[10px]">지우개</span>
+                        </button>
+                        <button class="tool-btn p-2 rounded border border-slate-200 hover:bg-slate-50 flex flex-col items-center justify-center" data-tool="pen" onclick="setTool('pen')" title="펜 그리기 (P)">
+                            <i class="fa-solid fa-pen mb-1"></i><span class="text-[10px]">새 선 그리기</span>
+                        </button>
+                        <button class="tool-btn p-2 rounded border border-slate-200 hover:bg-slate-50 col-span-2 flex flex-col items-center justify-center" data-tool="text" onclick="setTool('text')" title="텍스트 입력 (T)">
+                            <i class="fa-solid fa-font mb-1"></i><span class="text-[10px]">텍스트 추가 (클릭 시 삽입)</span>
+                        </button>
+                    </div>
+
+                    <div id="tool-options" class="bg-slate-50 p-2 rounded-lg border border-slate-100 flex flex-col justify-center min-h-[70px] shrink-0 mb-4">
+                        <div id="opt-move" class="text-[11px] text-slate-500 text-center leading-tight">마우스로 사진이나 글자를 클릭하여<br><b>이동/크기조절/회전</b> 하세요.</div>
+                        <div id="opt-text" class="hidden text-[11px] text-slate-500 text-center leading-tight">화면을 클릭하면 글자가 추가되고<br>자동으로 <b>선택 모드</b>로 전환됩니다.</div>
+                        <div id="opt-wand" class="hidden flex-col gap-1 w-full">
+                            <label class="text-[11px] font-medium text-slate-600 flex justify-between">투명화 강도 <span id="wand-tol-val" class="text-blue-600 font-bold">15</span></label>
+                            <input type="range" id="wand-tolerance" min="0" max="100" value="15" class="w-full accent-blue-600">
+                        </div>
+                        <div id="opt-brush" class="hidden flex-col gap-2 w-full">
+                            <label class="text-[11px] font-medium text-slate-600 flex justify-between">브러시 크기 <span id="brush-size-val" class="text-blue-600 font-bold">10px</span></label>
+                            <input type="range" id="brush-size" min="1" max="100" value="10" class="w-full accent-blue-600">
+                            <div id="color-picker-wrapper" class="flex items-center gap-2 mt-1">
+                                <span class="text-[11px] font-medium text-slate-600">펜 색상</span>
+                                <input type="color" id="brush-color" value="#ef4444" class="w-6 h-6 rounded cursor-pointer border-none bg-transparent">
+                            </div>
+                        </div>
+                    </div>
+
+                    <h2 class="text-xs font-bold text-blue-600 mb-2 uppercase tracking-wider shrink-0"><i class="fa-solid fa-sliders mr-1"></i>객체 속성</h2>
+                    <div id="obj-props-container" class="space-y-2 opacity-30 pointer-events-none transition-opacity shrink-0 bg-blue-50/30 p-2 rounded border border-blue-100">
+                        <div class="mb-1">
+                            <label class="block text-[11px] font-medium text-slate-600 mb-1">레이어 순서</label>
+                            <div class="flex gap-1">
+                                <button onclick="changeZOrder('front')" class="flex-1 bg-white border border-slate-300 rounded text-slate-600 hover:bg-slate-100 py-1" title="맨 앞으로 가져오기"><i class="fa-solid fa-angles-up"></i></button>
+                                <button onclick="changeZOrder('forward')" class="flex-1 bg-white border border-slate-300 rounded text-slate-600 hover:bg-slate-100 py-1" title="앞으로 가져오기"><i class="fa-solid fa-angle-up"></i></button>
+                                <button onclick="changeZOrder('backward')" class="flex-1 bg-white border border-slate-300 rounded text-slate-600 hover:bg-slate-100 py-1" title="뒤로 보내기"><i class="fa-solid fa-angle-down"></i></button>
+                                <button onclick="changeZOrder('back')" class="flex-1 bg-white border border-slate-300 rounded text-slate-600 hover:bg-slate-100 py-1" title="맨 뒤로 보내기"><i class="fa-solid fa-angles-down"></i></button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 mb-1 flex justify-between">회전 각도 <span id="prop-rot-val">0°</span></label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="prop-rot-slider" min="-180" max="180" value="0" class="w-full accent-blue-600" oninput="updateObjProp('rot', this.value)">
+                                <input type="number" id="prop-rot-input" value="0" class="w-12 text-xs border rounded text-center outline-none focus:border-blue-500" onchange="updateObjProp('rot', this.value)">
+                            </div>
+                        </div>
+                        <div id="prop-image-group" class="flex flex-col gap-2 hidden">
+                            <button onclick="updateObjProp('flipH', 'toggle')" id="prop-flip-btn" class="w-full bg-white border border-slate-300 rounded text-xs py-1 hover:bg-slate-100 font-medium shadow-sm"><i class="fa-solid fa-arrows-left-right"></i> 좌우 반전</button>
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-600 mb-1">사진 필터 효과</label>
+                                <select id="prop-filter" onchange="updateObjProp('filter', this.value)" class="w-full bg-white border border-slate-300 rounded text-[11px] py-1 px-1 outline-none focus:border-blue-500 shadow-sm">
+                                    <option value="none">효과 없음</option>
+                                    <option value="grayscale(100%)">흑백 변환</option>
+                                    <option value="sepia(100%)">세피아 (빛바랜)</option>
+                                    <option value="invert(100%)">색상 반전</option>
+                                    <option value="blur(3px)">흐리게 (블러)</option>
+                                    <option value="brightness(1.5)">밝게</option>
+                                    <option value="brightness(0.5)">어둡게</option>
+                                    <option value="contrast(1.5)">대비 증가</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="prop-text-group" class="flex flex-col gap-2 hidden">
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-600 mb-1">내용 수정</label>
+                                <input type="text" id="prop-text-input" class="w-full border border-slate-300 rounded px-2 py-1 text-[11px] outline-none focus:border-blue-500" oninput="updateObjTextRealtime(this.value)" onchange="commitObjText(this.value)">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-medium text-slate-600">글자 색상</span>
+                                <input type="color" id="prop-color-input" class="w-6 h-6 rounded cursor-pointer border-none bg-transparent" oninput="updateObjColorRealtime(this.value)" onchange="commitObjColor(this.value)">
+                            </div>
+                        </div>
+                        <button onclick="deleteSelectedObj()" class="w-full bg-red-50 text-red-600 border border-red-200 rounded text-[11px] py-1 mt-1 hover:bg-red-100 font-medium shadow-sm"><i class="fa-solid fa-trash-can mr-1"></i>선택 삭제 (Del)</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-1/2 flex flex-col min-h-0">
+                <div class="scroll-area flex flex-col p-3 pb-8">
+                    <h2 class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider shrink-0">GIF 공통 설정</h2>
+                    <div class="space-y-3 shrink-0">
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 mb-1">최종 저장 크기</label>
+                            <div class="flex items-center gap-1">
+                                <input type="number" id="global-width" value="200" class="w-full border border-slate-300 rounded p-1 text-xs text-center outline-none">
+                                <span class="text-slate-400 text-xs"><i class="fa-solid fa-xmark"></i></span>
+                                <input type="number" id="global-height" value="200" class="w-full border border-slate-300 rounded p-1 text-xs text-center outline-none">
+                            </div>
+                            <button onclick="resizeGlobalCanvas()" class="w-full mt-1.5 py-1 bg-slate-100 border border-slate-300 text-slate-600 text-[11px] font-medium rounded hover:bg-slate-200">배경 크기 적용</button>
+                        </div>
+
+                        <div class="mt-4">
+                            <label class="block text-[11px] font-medium text-slate-600 mb-1">GIF 반복 횟수 (0=무한)</label>
+                            <div class="flex items-center gap-1">
+                                <input type="number" id="global-loop" value="0" min="0" oninput="toggleStopFrameUI()" class="w-full border border-slate-300 rounded p-1 text-xs text-center outline-none focus:border-blue-500 font-bold">
+                                <span class="text-[10px] text-slate-400 whitespace-nowrap">회 반복</span>
+                            </div>
+                            <div class="flex items-center justify-between mt-1 pl-1 pr-1">
+                                <label for="global-pingpong" class="text-[10px] font-medium text-slate-600 cursor-pointer">되감기(왕복) 추가</label>
+                                <input type="checkbox" id="global-pingpong" class="accent-blue-600 w-3 h-3 cursor-pointer">
+                            </div>
+                        </div>
+
+                        <div id="stop-frame-container" class="hidden bg-slate-50 p-1.5 rounded border border-slate-200">
+                            <label class="block text-[10px] font-bold text-slate-600 mb-1">반복 후 멈출 프레임</label>
+                            <select id="global-stop-frame" class="w-full border border-slate-300 rounded p-1 text-[10px] bg-white outline-none focus:border-blue-500">
+                                <option value="-1">마지막 프레임 (기본)</option>
+                            </select>
+                        </div>
+
+                        <hr class="border-slate-100 my-2">
+
+                        <div class="bg-blue-50 p-2 rounded border border-blue-100">
+                            <label class="block text-[11px] font-bold text-blue-800 mb-1">기본 지연시간 (ms)</label>
+                            <div class="flex items-center gap-1">
+                                <input type="number" id="global-delay" value="200" step="50" class="w-full border border-blue-200 rounded p-1 text-xs text-center outline-none focus:border-blue-500 font-bold">
+                                <button onclick="applyGlobalDelay()" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-medium hover:bg-blue-700 shadow-sm whitespace-nowrap">전체 적용</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-indigo-50 p-2 rounded border border-indigo-100 mt-2">
+                            <label class="block text-[11px] font-bold text-indigo-800 mb-1">재생 속도 조절 (N배속)</label>
+                            <div class="flex items-center gap-1">
+                                <input type="number" id="speed-multiplier" value="2.0" step="0.1" min="0.1" max="10" class="w-full border border-indigo-200 rounded p-1 text-xs text-center outline-none focus:border-indigo-500 font-bold">
+                                <button onclick="applySpeedMultiplier()" class="px-2 py-1 bg-indigo-600 text-white rounded text-[11px] font-medium hover:bg-indigo-700 shadow-sm whitespace-nowrap">배속 적용</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <section class="flex-1 flex flex-col relative overflow-hidden min-w-0 min-h-0 bg-slate-200/50">
+            <div class="h-12 bg-white border-b border-slate-200 flex justify-between items-center px-4 shrink-0 shadow-sm z-10">
+                <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <button onclick="setZoom('fit')" class="px-3 py-1 bg-white shadow-sm rounded text-xs font-medium text-slate-700 hover:text-blue-600">화면에 맞춤</button>
+                    <button onclick="setZoom(1)" class="px-3 py-1 hover:bg-white hover:shadow-sm rounded text-xs font-medium text-slate-700 hover:text-blue-600">100%</button>
+                    <div class="w-px h-4 bg-slate-300 mx-1"></div>
+                    <span id="zoom-display" class="text-xs font-mono text-slate-600 w-12 text-center">100%</span>
+                    <span class="text-[10px] text-slate-400 ml-1">(마우스 휠 줌)</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1 mr-2">
+                        <button id="btn-undo" onclick="undoEdit()" disabled class="w-7 h-7 rounded hover:bg-white hover:shadow-sm text-slate-600 disabled:opacity-30 transition-all" title="실행 취소 (Ctrl+Z)"><i class="fa-solid fa-rotate-left"></i></button>
+                        <button id="btn-redo" onclick="redoEdit()" disabled class="w-7 h-7 rounded hover:bg-white hover:shadow-sm text-slate-600 disabled:opacity-30 transition-all" title="다시 실행 (Ctrl+Y)"><i class="fa-solid fa-rotate-right"></i></button>
+                    </div>
+                    <span id="active-frame-info" class="text-sm font-bold text-blue-600 hidden mr-2">프레임 편집 중...</span>
+                    <div class="flex items-center gap-1 bg-white border border-slate-300 rounded-full p-1 shadow-inner">
+                        <button id="btn-play" onclick="togglePlay()" class="w-8 h-8 rounded-full flex items-center justify-center text-emerald-600 hover:bg-emerald-50 transition-colors"><i class="fa-solid fa-play"></i></button>
+                        <button id="btn-stop" onclick="stopPreview()" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors" title="정지 (ESC)"><i class="fa-solid fa-stop"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="workspace-scroll" class="scroll-area flex items-center justify-center relative p-8">
+                <div id="empty-workspace" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 pointer-events-none z-0">
+                    <i class="fa-regular fa-images text-6xl mb-4 text-slate-300"></i>
+                    <p class="text-lg font-medium text-slate-500">우측 타임라인에서 캔버스를 추가해주세요.</p>
+                </div>
+
+                <div id="editor-wrapper" class="relative hidden" style="width: 200px; height: 200px; overflow: visible;">
+                    <div class="absolute inset-0 checkerboard shadow-md" style="z-index: 0;"></div>
+
+                    <img id="onion-skin-img" class="absolute pointer-events-none hidden" style="z-index: 1; opacity: 0.6; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain;">
+
+                    <canvas id="global-bg-canvas" class="absolute inset-0 pointer-events-none" style="z-index: 2;"></canvas>
+                    <div id="objects-container" class="absolute inset-0" style="z-index: 5;"></div>
+                    <canvas id="global-fg-canvas" class="absolute inset-0 pointer-events-none" style="z-index: 8;"></canvas>
+
+                    <canvas id="drawing-overlay" class="absolute hidden cursor-crosshair" style="z-index: 9;"></canvas>
+
+                    <div class="absolute inset-0 pointer-events-none shadow-[0_0_0_2px_#3b82f6,0_0_0_9999px_rgba(0,0,0,0.4)]" style="z-index: 10;"></div>
+
+                    <div id="transform-box" class="absolute hidden" style="border: 1.5px solid #3b82f6; z-index: 25; pointer-events: none;">
+                        <div class="resize-handle cursor-nwse-resize -left-1.5 -top-1.5" data-handle="nw" style="pointer-events: auto;"></div>
+                        <div class="resize-handle cursor-nesw-resize -right-1.5 -top-1.5" data-handle="ne" style="pointer-events: auto;"></div>
+                        <div class="resize-handle cursor-nesw-resize -left-1.5 -bottom-1.5" data-handle="sw" style="pointer-events: auto;"></div>
+                        <div class="resize-handle cursor-nwse-resize -right-1.5 -bottom-1.5" data-handle="se" style="pointer-events: auto;"></div>
+                        <div class="resize-handle cursor-ns-resize left-1/2 -top-1.5 -translate-x-1/2" data-handle="n" style="pointer-events: auto;"></div>
+                        <div class="resize-handle cursor-ns-resize left-1/2 -bottom-1.5 -translate-x-1/2" data-handle="s" style="pointer-events: auto;"></div>
+                        <div class="resize-handle cursor-ew-resize -left-1.5 top-1/2 -translate-y-1/2" data-handle="w" style="pointer-events: auto;"></div>
+                        <div class="resize-handle cursor-ew-resize -right-1.5 top-1/2 -translate-y-1/2" data-handle="e" style="pointer-events: auto;"></div>
+                        <div class="rotate-handle -top-6 left-1/2 -translate-x-1/2" data-handle="rot" style="pointer-events: auto;"></div>
+                        <div class="rotate-line -top-5 left-1/2 -translate-x-1/2"></div>
+                    </div>
+                    <canvas id="preview-canvas" class="absolute inset-0 hidden checkerboard" style="z-index: 30;"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <aside class="w-[22rem] bg-white border-l border-slate-200 flex flex-col z-10 shadow-[-2px_0_10px_rgba(0,0,0,0.02)] shrink-0 min-h-0">
+            <div class="flex border-b border-slate-200 shrink-0 bg-white">
+                <button id="tab-btn-anim" onclick="switchTab('anim')" class="flex-1 py-2.5 text-[11px] font-bold text-blue-600 border-b-2 border-blue-600 transition-colors">애니메이션 프레임</button>
+                <button id="tab-btn-global" onclick="switchTab('global')" class="flex-1 py-2.5 text-[11px] font-bold text-slate-400 border-b-2 border-transparent hover:text-slate-600 transition-colors">공통 프레임 (배경/전경)</button>
+            </div>
+
+            <div id="tab-content-anim" class="flex flex-col flex-1 min-h-0">
+                <div class="p-2 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
+                    <div class="text-[11px] font-bold text-slate-700 ml-1 flex items-center gap-2">
+                        <div><i class="fa-solid fa-film mr-1"></i> 목록 (<span id="frame-count">0</span>)</div>
+                        <label class="flex items-center gap-1 cursor-pointer bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm hover:bg-slate-50 transition-colors ml-1">
+                            <input type="checkbox" id="onion-skin-toggle" onchange="updateOnionSkin()" class="accent-blue-600 w-3 h-3 cursor-pointer">
+                            <span class="text-[10px] text-slate-600 whitespace-nowrap">이전 프레임 보기</span>
+                        </label>
+                        <button id="onion-skin-front-btn" onclick="toggleOnionSkinZIndex()" class="hidden px-1.5 py-0.5 bg-white border border-slate-200 rounded shadow-sm hover:bg-slate-50 text-[10px] text-slate-600 font-medium transition-colors" title="이전 프레임을 맨 앞으로 가져와 비교합니다."><i class="fa-solid fa-arrow-up-z-a"></i> 위로</button>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="addNewBlankFrame('anim')" class="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-medium shadow-sm flex items-center transition-colors">
+                            <i class="fa-solid fa-plus mr-1"></i> 추가
+                        </button>
+                        <button onclick="checkAndPromptImageUpload('anim')" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-[11px] font-medium shadow-sm flex items-center transition-colors">
+                            <i class="fa-regular fa-image mr-1"></i> 삽입
+                        </button>
+                        <input type="file" multiple accept="image/*" class="hidden" id="file-input-anim" onchange="handleFiles(event, 'anim')">
+                    </div>
+                </div>
+                <div id="timeline-container" data-type="anim" class="scroll-area p-2 flex flex-col gap-2 bg-slate-100 pb-24"></div>
+            </div>
+
+            <div id="tab-content-global" class="flex flex-col flex-1 min-h-0 hidden">
+                <div class="p-2 border-b border-slate-200 bg-indigo-50 flex justify-between items-center shrink-0">
+                    <div class="text-[11px] font-bold text-indigo-800 ml-1">
+                        <i class="fa-solid fa-layer-group mr-1"></i> 목록 (<span id="global-frame-count">0</span>)
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="addNewBlankFrame('global')" class="px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[11px] font-medium shadow-sm flex items-center transition-colors">
+                            <i class="fa-solid fa-plus mr-1"></i> 추가
+                        </button>
+                        <button onclick="checkAndPromptImageUpload('global')" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-[11px] font-medium shadow-sm flex items-center transition-colors">
+                            <i class="fa-regular fa-image mr-1"></i> 삽입
+                        </button>
+                        <input type="file" multiple accept="image/*" class="hidden" id="file-input-global" onchange="handleFiles(event, 'global')">
+                    </div>
+                </div>
+                <div id="global-timeline-container" data-type="global" class="scroll-area p-2 flex flex-col gap-2 bg-indigo-50/30 pb-24">
+                    <div class="text-[10px] text-center text-slate-400 py-4 pointer-events-none">추가된 공통 프레임이 없습니다.</div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <div id="custom-popup-overlay" class="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-200 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-[420px] transform scale-95 transition-transform duration-200 overflow-hidden" id="custom-popup-box">
+            <div class="p-6 text-center">
+                <div id="popup-icon" class="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4"></div>
+                <h3 id="popup-title" class="text-lg font-bold text-slate-800 mb-2">알림</h3>
+                <div id="popup-message" class="text-sm text-slate-600 whitespace-pre-line mb-4"></div>
+            </div>
+            <div class="bg-slate-50 p-4 flex gap-2 justify-center border-t border-slate-100" id="popup-buttons"></div>
+        </div>
+    </div>
+    <div id="loading-overlay" class="fixed inset-0 bg-white/80 backdrop-blur-sm z-[60] flex flex-col items-center justify-center hidden">
+        <div class="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+        <p class="text-slate-700 font-bold" id="loading-text">처리중...</p>
+    </div>
+
+    <div id="help-popup-overlay" class="fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center hidden opacity-0 transition-opacity duration-200 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-[600px] max-h-[85vh] flex flex-col overflow-hidden transform scale-95 transition-transform duration-200">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-lightbulb text-amber-500"></i> 프로그램 사용법</h3>
+                <button onclick="closeHelp()" class="text-slate-400 hover:text-slate-600 text-xl px-2">&times;</button>
+            </div>
+
+            <div class="flex px-6 pt-3 border-b border-slate-200 bg-white shrink-0 gap-4">
+                <button onclick="switchHelpTab('help-tools')" id="btn-help-tools" class="px-2 py-2 text-sm font-bold text-blue-600 border-b-2 border-blue-600 transition-colors">도구 & 단축키</button>
+                <button onclick="switchHelpTab('help-panels')" id="btn-help-panels" class="px-2 py-2 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-800 transition-colors">패널 설명</button>
+                <button onclick="switchHelpTab('help-files')" id="btn-help-files" class="px-2 py-2 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-800 transition-colors">파일 관리</button>
+            </div>
+
+            <div class="p-6 overflow-y-auto flex-1 space-y-5 text-sm leading-relaxed bg-white">
+
+                <div id="help-tools" class="space-y-5">
+                    <div>
+                        <h4 class="font-bold text-blue-600 mb-2 border-l-4 border-blue-600 pl-2">🎨 기본 편집 도구</h4>
+                        <ul class="grid grid-cols-2 gap-x-4 gap-y-2 text-slate-600">
+                            <li><b>[V] 선택:</b> 객체 이동, 크기 조절, 회전</li>
+                            <li><b>[W] 마법봉:</b> 클릭 시 배경색 투명화</li>
+                            <li><b>[E] 지우개:</b> 이미지의 특정 부분 지우기</li>
+                            <li><b>[P] 선 그리기:</b> 새로운 독립 레이어에 선 그리기</li>
+                            <li><b>[T] 텍스트:</b> 캔버스 클릭 시 글자 삽입</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-blue-600 mb-2 border-l-4 border-blue-600 pl-2">⌨️ 시스템 단축키</h4>
+                        <ul class="grid grid-cols-2 gap-x-4 gap-y-2 text-slate-600">
+                            <li><b>Ctrl + C:</b> 선택한 객체 복사</li>
+                            <li><b>Ctrl + V:</b> 객체 또는 외부 이미지 붙여넣기</li>
+                            <li><b>Ctrl + Z:</b> 실행 취소</li>
+                            <li><b>Ctrl + Y:</b> 다시 실행</li>
+                            <li><b>Delete:</b> 선택한 객체 삭제</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="help-panels" class="hidden space-y-5">
+                    <div>
+                        <h4 class="font-bold text-blue-600 mb-1 border-l-4 border-blue-600 pl-2">좌측 패널 (속성 및 설정)</h4>
+                        <ul class="list-disc pl-5 space-y-1 text-slate-600">
+                            <li><b>객체 속성:</b> 선택한 객체의 레이어 순서(Z-Order), 좌우 반전, 필터(흑백, 블러 등), 글자 색상을 변경합니다.</li>
+                            <li><b>GIF 공통 설정:</b> 최종 저장될 캔버스의 크기, 전체 반복 횟수, 되감기(왕복) 모드, 기본 지연시간(재생 속도)을 일괄 적용합니다.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-blue-600 mb-1 border-l-4 border-blue-600 pl-2">우측 패널 (타임라인)</h4>
+                        <ul class="list-disc pl-5 space-y-1 text-slate-600">
+                            <li><b>애니메이션 프레임:</b> 순서대로 재생될 각 장면들을 관리합니다. 드래그하여 순서를 바꾸거나, 이전 프레임 보기를 켤 수 있습니다.</li>
+                            <li><b>공통 프레임:</b> 모든 프레임에 동일하게 나타날 '배경'이나 '전경(워터마크 등)'을 등록하는 공간입니다.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-blue-600 mb-1 border-l-4 border-blue-600 pl-2">중앙 캔버스 (편집기)</h4>
+                        <p class="text-slate-600">작업 공간을 줌(Zoom)하거나, 프레임 밖 영역으로 넘어가며 자유롭게 선을 그릴 수 있습니다. 상단 재생 버튼을 눌러 미리보기가 가능합니다.</p>
+                    </div>
+                </div>
+
+                <div id="help-files" class="hidden space-y-5">
+                    <div>
+                        <h4 class="font-bold text-blue-600 mb-1 border-l-4 border-blue-600 pl-2">GIF 열기 (프레임 추출)</h4>
+                        <p class="text-slate-600">기존에 만들어진 움직이는 GIF 파일을 불러옵니다. 단순히 사진으로 넣는 것이 아니라, <b>GIF의 모든 장면을 낱장 프레임으로 분해하여 타임라인에 나열</b>하므로 완벽한 재편집이 가능합니다. (초기화 후 열기 / 이어서 붙이기 지원)</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-blue-600 mb-1 border-l-4 border-blue-600 pl-2">프로젝트 저장 / 열기</h4>
+                        <p class="text-slate-600">현재까지 작업한 <b>모든 레이어와 객체 정보, 타임라인 상태를 그대로 보존</b>하여 전용 파일로 저장합니다. 나중에 다시 불러와서 글자를 수정하거나 사진을 옮길 수 있습니다.</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-blue-600 mb-1 border-l-4 border-blue-600 pl-2">GIF 내보내기</h4>
+                        <p class="text-slate-600">모든 편집을 마치고, 실제로 움직이는 <b>표준 GIF 이미지 파일로 렌더링</b>하여 저장합니다. 웹사이트나 메신저에 바로 올릴 수 있는 결과물이 만들어집니다.</p>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="p-4 bg-slate-50 text-center border-t border-slate-100 shrink-0">
+                <button onclick="closeHelp()" class="px-8 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md">확인했습니다</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        /* ================= 1. 유틸리티 함수 ================= */
+        function showLoading(show, text = "처리중...") {
+            const el = document.getElementById('loading-overlay');
+            if (show) { document.getElementById('loading-text').textContent = text; el.classList.remove('hidden'); }
+            else { el.classList.add('hidden'); }
+        }
+        function showHelp() {
+            switchHelpTab('help-tools'); // 열 때마다 항상 첫 번째 탭으로 초기화
+            const overlay = document.getElementById('help-popup-overlay');
+            const box = overlay.querySelector('div');
+            overlay.classList.remove('hidden');
+            setTimeout(() => {
+                overlay.classList.remove('opacity-0');
+                box.classList.remove('scale-95');
+                box.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeHelp() {
+            const overlay = document.getElementById('help-popup-overlay');
+            const box = overlay.querySelector('div');
+            overlay.classList.add('opacity-0');
+            box.classList.remove('scale-100');
+            box.classList.add('scale-95');
+            setTimeout(() => overlay.classList.add('hidden'), 200);
+        }
+        /* ================= 드롭다운 메뉴 제어 ================= */
+        function toggleExportMenu() {
+            const menu = document.getElementById('export-dropdown');
+            menu.classList.toggle('hidden');
+        }
+
+        function closeExportMenu() {
+            const menu = document.getElementById('export-dropdown');
+            if (menu) menu.classList.add('hidden');
+        }
+
+        // 화면 다른 곳을 클릭하면 드롭다운 메뉴가 자동으로 닫히도록 설정
+        window.addEventListener('click', function (e) {
+            const btn = document.getElementById('btn-export-more');
+            const menu = document.getElementById('export-dropdown');
+            if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
+
+        // [신규] 도움말 팝업 내 탭 전환 함수
+        function switchHelpTab(targetId) {
+            const tabs = ['help-tools', 'help-panels', 'help-files'];
+            tabs.forEach(id => {
+                // 컨텐츠 숨기기
+                document.getElementById(id).classList.add('hidden');
+                // 버튼 스타일 초기화 (비활성 상태)
+                const btn = document.getElementById('btn-' + id);
+                btn.classList.remove('text-blue-600', 'border-blue-600', 'font-bold');
+                btn.classList.add('text-slate-500', 'border-transparent', 'font-medium');
+            });
+
+            // 선택된 탭 보이기 및 버튼 스타일 활성화
+            document.getElementById(targetId).classList.remove('hidden');
+            const targetBtn = document.getElementById('btn-' + targetId);
+            targetBtn.classList.remove('text-slate-500', 'border-transparent', 'font-medium');
+            targetBtn.classList.add('text-blue-600', 'border-blue-600', 'font-bold');
+        }
+
+        function showPopup(title, message, type = 'alert', callback = null, iconType = 'info') {
+            const overlay = document.getElementById('custom-popup-overlay');
+            const box = document.getElementById('custom-popup-box');
+            const btnContainer = document.getElementById('popup-buttons');
+            const iconContainer = document.getElementById('popup-icon');
+
+            document.getElementById('popup-title').textContent = title;
+            document.getElementById('popup-message').textContent = message;
+            btnContainer.innerHTML = '';
+
+            let iconHtml = '<i class="fa-solid fa-bell text-xl text-blue-500"></i>'; let iconBg = 'bg-blue-50';
+            if (iconType === 'success') { iconHtml = '<i class="fa-solid fa-check text-xl text-emerald-500"></i>'; iconBg = 'bg-emerald-50'; }
+            else if (iconType === 'error') { iconHtml = '<i class="fa-solid fa-triangle-exclamation text-xl text-red-500"></i>'; iconBg = 'bg-red-50'; }
+            iconContainer.className = `w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 ${iconBg}`;
+            iconContainer.innerHTML = iconHtml;
+
+            const closePopup = () => {
+                overlay.classList.add('opacity-0'); box.classList.remove('scale-100'); box.classList.add('scale-95');
+                setTimeout(() => overlay.classList.add('hidden'), 200);
+            };
+
+            if (type === 'confirm') {
+                btnContainer.innerHTML = `<button id="pop-cancel" class="flex-1 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded font-bold hover:bg-slate-50">취소</button><button id="pop-ok" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">확인</button>`;
+                document.getElementById('pop-cancel').onclick = closePopup;
+                document.getElementById('pop-ok').onclick = () => { closePopup(); if (callback) callback(true); };
+            } else if (type === 'import_gif') {
+                btnContainer.innerHTML = `
+                                <button id="pop-cancel" class="px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded font-bold hover:bg-slate-50 text-xs">취소</button>
+                                <button id="pop-append" class="flex-1 px-3 py-2 bg-emerald-600 text-white rounded font-bold hover:bg-emerald-700 text-xs">이어서 붙이기</button>
+                                <button id="pop-clear" class="flex-1 px-3 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700 text-xs">초기화 후 열기</button>
+                            `;
+                document.getElementById('pop-cancel').onclick = closePopup;
+                document.getElementById('pop-append').onclick = () => { closePopup(); if (callback) callback('append'); };
+                document.getElementById('pop-clear').onclick = () => { closePopup(); if (callback) callback('clear'); };
+            } else {
+                btnContainer.innerHTML = `<button id="pop-ok" class="w-full px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">확인</button>`;
+                document.getElementById('pop-ok').onclick = () => { closePopup(); if (callback) callback(); };
+            }
+
+            overlay.classList.remove('hidden');
+            setTimeout(() => { overlay.classList.remove('opacity-0'); box.classList.remove('scale-95'); box.classList.add('scale-100'); }, 10);
+        }
+
+        function showToast(msg) {
+            const toast = document.createElement('div'); toast.className = 'toast';
+            toast.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 mr-2"></i>${msg}`;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '1'; }, 10);
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => { toast.remove(); }, 300); }, 2500);
+        }
+
+        window.showPopup = showPopup; window.showLoading = showLoading; window.showToast = showToast;
+
+        /* ================= 2. 탭 전환 및 어니언 스킨 제어 ================= */
+        let currentTab = 'anim';
+        let lastActiveAnimFrameId = null;
+        let lastActiveGlobalFrameId = null;
+
+        function switchTab(tabName, preventAutoSelect = false) {
+            currentTab = tabName;
+            const btnAnim = document.getElementById('tab-btn-anim');
+            const btnGlobal = document.getElementById('tab-btn-global');
+            const cntAnim = document.getElementById('tab-content-anim');
+            const cntGlobal = document.getElementById('tab-content-global');
+
+            if (tabName === 'anim') {
+                btnAnim.className = "flex-1 py-2.5 text-[11px] font-bold text-blue-600 border-b-2 border-blue-600 transition-colors";
+                btnGlobal.className = "flex-1 py-2.5 text-[11px] font-bold text-slate-400 border-b-2 border-transparent hover:text-slate-600 transition-colors";
+                cntAnim.classList.remove('hidden');
+                cntGlobal.classList.add('hidden');
+
+                if (!preventAutoSelect) {
+                    if (lastActiveAnimFrameId && frames.find(f => f.id === lastActiveAnimFrameId)) selectFrame(lastActiveAnimFrameId);
+                    else if (frames.length > 0) selectFrame(frames[0].id);
+                    else selectFrame(null);
+                }
+            } else {
+                btnGlobal.className = "flex-1 py-2.5 text-[11px] font-bold text-blue-600 border-b-2 border-blue-600 transition-colors";
+                btnAnim.className = "flex-1 py-2.5 text-[11px] font-bold text-slate-400 border-b-2 border-transparent hover:text-slate-600 transition-colors";
+                cntGlobal.classList.remove('hidden');
+                cntAnim.classList.add('hidden');
+
+                if (!preventAutoSelect) {
+                    if (lastActiveGlobalFrameId && globalFrames.find(f => f.id === lastActiveGlobalFrameId)) selectFrame(lastActiveGlobalFrameId);
+                    else if (globalFrames.length > 0) selectFrame(globalFrames[0].id);
+                    else selectFrame(null);
+                }
+            }
+            updateOnionSkin(); // 탭 전환 시 어니언 스킨 갱신
+        }
+
+        // [신규] 어니언 스킨 업데이트 함수
+        function updateOnionSkin() {
+            const onionImg = document.getElementById('onion-skin-img');
+            const toggle = document.getElementById('onion-skin-toggle');
+            const frontBtn = document.getElementById('onion-skin-front-btn');
+            const idx = getActiveFrameIndex();
+
+            if (toggle && toggle.checked && currentTab === 'anim' && idx > 0) {
+                const prevFrame = frames[idx - 1];
+                if (prevFrame && prevFrame.thumbnail) {
+                    onionImg.src = prevFrame.thumbnail;
+                    onionImg.classList.remove('hidden');
+                    if (frontBtn) frontBtn.classList.remove('hidden');
+                    return;
+                }
+            }
+            onionImg.classList.add('hidden');
+            onionImg.src = '';
+            if (frontBtn) frontBtn.classList.add('hidden');
+        }
+
+        // [신규] 이전 프레임 앞으로/뒤로 가져오기 토글 함수
+        let onionSkinOnTop = false;
+        function toggleOnionSkinZIndex() {
+            onionSkinOnTop = !onionSkinOnTop;
+            const onionImg = document.getElementById('onion-skin-img');
+            const btn = document.getElementById('onion-skin-front-btn');
+
+            if (onionSkinOnTop) {
+                onionImg.style.zIndex = '50'; // 다른 객체들보다 맨 위로
+                btn.classList.add('bg-blue-100', 'text-blue-600', 'border-blue-300');
+                btn.classList.remove('bg-white', 'text-slate-600');
+            } else {
+                onionImg.style.zIndex = '1';  // 다시 배경쪽으로 (원상복구)
+                btn.classList.remove('bg-blue-100', 'text-blue-600', 'border-blue-300');
+                btn.classList.add('bg-white', 'text-slate-600');
+            }
+        }
+
+        /* ================= 3. 상태 및 전역 변수 ================= */
+        let frames = [];
+        let globalFrames = [];
+        let activeFrameId = null;
+        let selectedObjId = null;
+        let currentTool = 'move';
+
+        let globalW = 200; let globalH = 200;
+        let isPlaying = false; let previewTimer = null;
+        let previewSequence = []; let currentSequenceIndex = 0;
+        let zoomScale = 1;
+
+        let appUndoStack = [];
+        let appRedoStack = [];
+        let isRestoring = false;
+
+        const editorWrapper = document.getElementById('editor-wrapper');
+        const objectsContainer = document.getElementById('objects-container');
+        const transformBox = document.getElementById('transform-box');
+        const previewCanvas = document.getElementById('preview-canvas');
+        const previewCtx = previewCanvas.getContext('2d');
+        const workspaceScroll = document.getElementById('workspace-scroll');
+        const drawingOverlay = document.getElementById('drawing-overlay');
+        const overlayCtx = drawingOverlay.getContext('2d', { willReadFrequently: true });
+
+        let isDrawing = false; let isMoving = false; let isResizing = false; let isRotating = false;
+        let resizeHandle = null; let actionStartX = 0, actionStartY = 0; let originalObj = {};
+        let overlayDrawing = false;
+
+        const genId = () => 'id_' + Date.now() + Math.random().toString(36).substr(2, 5);
+
+        function getActiveFrame() { return frames.find(f => f.id === activeFrameId) || globalFrames.find(f => f.id === activeFrameId) || null; }
+        function getActiveFrameIndex() { return frames.findIndex(f => f.id === activeFrameId); }
+        function getActiveObj() { const f = getActiveFrame(); return f ? f.objects.find(o => o.id === selectedObjId) : null; }
+
+        /* ================= 4. 프로젝트 저장/불러오기 ================= */
+        async function saveProject() {
+            if (frames.length === 0 && globalFrames.length === 0) { window.showPopup('알림', '저장할 내용이 없습니다.', 'alert', null, 'error'); return; }
+            window.showLoading(true, "프로젝트 저장 중...");
+
+            const serializeFrame = (f) => ({
+                id: f.id, type: f.type, layerType: f.layerType, delay: f.delay, zIndex: f.zIndex, thumbnail: f.thumbnail,
+                objects: f.objects.map(o => {
+                    if (o.type === 'image') return { ...o, dataUrl: o.canvas.toDataURL(), canvasWidth: o.canvasWidth, canvasHeight: o.canvasHeight };
+                    return JSON.parse(JSON.stringify(o));
+                })
+            });
+
+            const projectData = {
+                globalW: globalW, globalH: globalH,
+                loop: document.getElementById('global-loop').value, pingpong: document.getElementById('global-pingpong').checked, stopFrame: document.getElementById('global-stop-frame').value,
+                frames: frames.map(serializeFrame), globalFrames: globalFrames.map(serializeFrame)
+            };
+
+            let pyApi = null; try { pyApi = (window.pywebview && window.pywebview.api) || (window.parent && window.parent.pywebview && window.parent.pywebview.api); } catch (e) { }
+
+            try {
+                if (pyApi && pyApi.save_pengif_project) {
+                    const res = await pyApi.save_pengif_project(JSON.stringify(projectData));
+                    window.showLoading(false);
+                    if (res && res.success) window.showToast('프로젝트가 안전하게 저장되었습니다.');
+                    else if (res && res.message !== '취소됨') window.showPopup('오류', '저장 실패: ' + res.message, 'alert', null, 'error');
+                } else { window.showLoading(false); window.showPopup('오류', '파이썬 통신 객체를 찾을 수 없습니다.', 'alert', null, 'error'); }
+            } catch (e) { window.showLoading(false); window.showPopup('오류', '통신 오류: ' + String(e), 'alert', null, 'error'); }
+        }
+
+        async function loadProject() {
+            window.showLoading(true, "프로젝트 불러오는 중...");
+            let pyApi = null; try { pyApi = (window.pywebview && window.pywebview.api) || (window.parent && window.parent.pywebview && window.parent.pywebview.api); } catch (e) { }
+
+            try {
+                if (pyApi && pyApi.load_pengif_project) {
+                    const res = await pyApi.load_pengif_project();
+                    if (res && res.success && res.data) {
+                        await parseProjectData(res.data);
+                        window.showLoading(false); window.showToast('프로젝트를 성공적으로 불러왔습니다.');
+                    } else if (res && res.message !== '취소됨') { window.showLoading(false); window.showPopup('오류', '불러오기 실패: ' + res.message, 'alert', null, 'error'); }
+                    else { window.showLoading(false); }
+                } else { window.showLoading(false); window.showPopup('오류', '파이썬 통신 객체를 찾을 수 없습니다.', 'alert', null, 'error'); }
+            } catch (e) { window.showLoading(false); window.showPopup('오류', '통신 오류: ' + String(e), 'alert', null, 'error'); }
+        }
+
+        async function parseProjectData(jsonStr) {
+            try {
+                const data = JSON.parse(jsonStr);
+                document.getElementById('global-width').value = data.globalW; document.getElementById('global-height').value = data.globalH;
+                document.getElementById('global-loop').value = data.loop || 0; document.getElementById('global-pingpong').checked = data.pingpong || false;
+
+                globalW = parseInt(data.globalW) || 200; globalH = parseInt(data.globalH) || 200;
+                initGlobalCanvas();
+
+                const loadFrameObjects = async (frameData) => {
+                    const loadedObjects = [];
+                    for (const o of frameData.objects) {
+                        if (o.type === 'image') {
+                            await new Promise(resolve => {
+                                const img = new Image();
+                                img.onload = () => {
+                                    const cvs = document.createElement('canvas'); cvs.width = o.canvasWidth; cvs.height = o.canvasHeight;
+                                    cvs.getContext('2d', { willReadFrequently: true }).drawImage(img, 0, 0);
+                                    o.canvas = cvs; o.ctx = cvs.getContext('2d', { willReadFrequently: true });
+                                    delete o.dataUrl; loadedObjects.push(o); resolve();
+                                }; img.onerror = () => resolve(); img.src = o.dataUrl;
+                            });
+                        } else { loadedObjects.push(o); }
+                    }
+                    frameData.objects = loadedObjects;
+                    return frameData;
+                };
+
+                frames = []; for (const f of data.frames || []) { frames.push(await loadFrameObjects(f)); }
+                globalFrames = []; for (const f of data.globalFrames || []) { globalFrames.push(await loadFrameObjects(f)); }
+
+                toggleStopFrameUI(); updateStopFrameOptions();
+                if (data.stopFrame) document.getElementById('global-stop-frame').value = data.stopFrame;
+
+                renderTimeline(); renderGlobalTimeline();
+                if (frames.length > 0) { switchTab('anim'); selectFrame(frames[0].id); }
+                else if (globalFrames.length > 0) { switchTab('global'); selectFrame(globalFrames[0].id); }
+                else { selectFrame(null); }
+
+                appUndoStack = []; appRedoStack = [];
+                saveAppState('load_project', true);
+
+            } catch (e) { throw new Error("유효하지 않은 프로젝트 파일입니다."); }
+        }
+
+        /* ================= 4.1. GIF 프레임 추출(해체) 기능 ================= */
+        let currentGifImportMode = 'clear';
+
+        function promptImportGif() {
+            if (frames.length > 0 || globalFrames.length > 0) {
+                showPopup('GIF 불러오기', '현재 작업 중인 프레임이 있습니다.\n어떻게 가져오시겠습니까?', 'import_gif', (mode) => {
+                    currentGifImportMode = mode;
+                    document.getElementById('gif-import-input').click();
+                });
+            } else {
+                currentGifImportMode = 'clear';
+                document.getElementById('gif-import-input').click();
+            }
+        }
+
+        async function handleGifImport(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            window.showLoading(true, "GIF 분석 및 추출 중...");
+            try {
+                const { parseGIF, decompressFrames } = await import('https://cdn.jsdelivr.net/npm/gifuct-js/+esm');
+                const buffer = await file.arrayBuffer();
+                const gif = parseGIF(buffer);
+                const rawFrames = decompressFrames(gif, true);
+
+                const gifW = gif.lsd.width;
+                const gifH = gif.lsd.height;
+
+                if (currentGifImportMode === 'clear') {
+                    frames = []; globalFrames = [];
+                    appUndoStack = []; appRedoStack = [];
+                    document.getElementById('global-width').value = gifW;
+                    document.getElementById('global-height').value = gifH;
+                    initGlobalCanvas();
+                }
+
+                const renderCanvas = document.createElement('canvas');
+                renderCanvas.width = gifW; renderCanvas.height = gifH;
+                const renderCtx = renderCanvas.getContext('2d', { willReadFrequently: true });
+
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+                let frameImageData;
+                let previousCanvasState = null;
+
+                for (let i = 0; i < rawFrames.length; i++) {
+                    const frame = rawFrames[i];
+
+                    if (frame.disposalType === 3) previousCanvasState = renderCtx.getImageData(0, 0, gifW, gifH);
+
+                    tempCanvas.width = frame.dims.width; tempCanvas.height = frame.dims.height;
+                    if (!frameImageData || frameImageData.width !== frame.dims.width || frameImageData.height !== frame.dims.height) {
+                        frameImageData = tempCtx.createImageData(frame.dims.width, frame.dims.height);
+                    }
+                    frameImageData.data.set(frame.patch);
+                    tempCtx.putImageData(frameImageData, 0, 0);
+
+                    renderCtx.drawImage(tempCanvas, frame.dims.left, frame.dims.top);
+
+                    const objCanvas = document.createElement('canvas');
+                    objCanvas.width = gifW; objCanvas.height = gifH;
+                    objCanvas.getContext('2d', { willReadFrequently: true }).drawImage(renderCanvas, 0, 0);
+
+                    let dx = 0, dy = 0;
+                    if (currentGifImportMode === 'append') {
+                        dx = (globalW - gifW) / 2; dy = (globalH - gifH) / 2;
+                    }
+
+                    const newObj = {
+                        id: genId(), type: 'image', canvas: objCanvas, ctx: objCanvas.getContext('2d', { willReadFrequently: true }),
+                        canvasWidth: gifW, canvasHeight: gifH, x: dx, y: dy, w: gifW, h: gifH, rot: 0, flipH: false, filter: 'none'
+                    };
+
+                    const newFrame = {
+                        id: genId(), type: 'regular', layerType: undefined, delay: frame.delay || 100, thumbnail: '', objects: [newObj]
+                    };
+                    frames.push(newFrame);
+                    updateThumbnail(newFrame, false);
+
+                    if (frame.disposalType === 2) renderCtx.clearRect(frame.dims.left, frame.dims.top, frame.dims.width, frame.dims.height);
+                    else if (frame.disposalType === 3 && previousCanvasState) renderCtx.putImageData(previousCanvasState, 0, 0);
+                }
+
+                switchTab('anim'); renderTimeline();
+                const targetId = frames[currentGifImportMode === 'clear' ? 0 : frames.length - rawFrames.length].id;
+                selectFrame(targetId);
+
+                saveAppState('import_gif');
+                window.showToast(`GIF에서 ${rawFrames.length}개의 프레임을 추출했습니다.`);
+
+            } catch (err) {
+                console.error(err);
+                window.showPopup('오류', 'GIF 파일을 분석할 수 없습니다. 형식이 지원되지 않거나 손상되었을 수 있습니다.', 'alert', null, 'error');
+            } finally {
+                window.showLoading(false);
+                e.target.value = '';
+            }
+        }
+
+        /* ================= 4.6. UI 제어 ================= */
+        function toggleStopFrameUI() {
+            const loopVal = parseInt(document.getElementById('global-loop').value) || 0;
+            const container = document.getElementById('stop-frame-container');
+            if (loopVal > 0) container.classList.remove('hidden');
+            else { container.classList.add('hidden'); document.getElementById('global-stop-frame').value = "-1"; }
+        }
+
+        function updateStopFrameOptions() {
+            const select = document.getElementById('global-stop-frame'); if (!select) return;
+            const currentVal = select.value;
+            select.innerHTML = '<option value="-1">마지막 프레임 (기본)</option>';
+            frames.forEach((f, i) => select.innerHTML += `<option value="${i}">${i + 1}번 프레임</option>`);
+            if (currentVal && select.querySelector(`option[value="${currentVal}"]`)) select.value = currentVal;
+        }
+
+        function applyWandDynamic(obj, toleranceRaw) {
+            if (!obj.originalImgData) return;
+            obj.ctx.putImageData(obj.originalImgData, 0, 0);
+            floodFillErase(obj.canvas, obj.ctx, obj.wandX, obj.wandY, toleranceRaw);
+        }
+
+        document.getElementById('wand-tolerance').addEventListener('input', (e) => {
+            document.getElementById('wand-tol-val').textContent = e.target.value;
+            const obj = getActiveObj();
+            if (currentTool === 'wand' && obj && obj.type === 'image' && obj.wandX !== undefined) {
+                applyWandDynamic(obj, parseInt(e.target.value));
+                renderEditor();
+            }
+        });
+
+        document.getElementById('wand-tolerance').addEventListener('change', (e) => {
+            const obj = getActiveObj(); const frame = getActiveFrame();
+            if (currentTool === 'wand' && obj && obj.type === 'image' && obj.wandX !== undefined) {
+                updateThumbnail(frame, true);
+                saveAppState('wand_' + obj.id);
+            }
+        });
+
+        /* ================= 5. 캔버스 초기화 ================= */
+        function initGlobalCanvas() {
+            globalW = parseInt(document.getElementById('global-width').value) || 200;
+            globalH = parseInt(document.getElementById('global-height').value) || 200;
+
+            previewCanvas.width = globalW; previewCanvas.height = globalH;
+
+            // [수정] 프레임 밖 그리기를 위해 오버레이 캔버스의 실제 해상도를 화면의 3배로 확장
+            drawingOverlay.width = globalW * 3;
+            drawingOverlay.height = globalH * 3;
+
+            editorWrapper.style.width = globalW + 'px'; editorWrapper.style.height = globalH + 'px';
+
+            // [수정] 오버레이를 캔버스 기준 중앙(-100% 위치)에 배치하여 사방으로 삐져나온 그리기 지원
+            drawingOverlay.style.left = (-globalW) + 'px';
+            drawingOverlay.style.top = (-globalH) + 'px';
+            drawingOverlay.style.width = (globalW * 3) + 'px';
+            drawingOverlay.style.height = (globalH * 3) + 'px';
+
+            const bgCvs = document.getElementById('global-bg-canvas');
+            const fgCvs = document.getElementById('global-fg-canvas');
+            if (bgCvs) { bgCvs.width = globalW; bgCvs.height = globalH; }
+            if (fgCvs) { fgCvs.width = globalW; fgCvs.height = globalH; }
+
+            updateZoomDisplay(); renderEditor(); renderGlobalCanvases();
+
+            if (appUndoStack.length === 0) {
+                appUndoStack = []; appRedoStack = [];
+                saveAppState('init', true);
+            }
+        }
+
+        // 초기화 실행 (높이 축소 방지 및 드로잉 오버레이 설정)
+        initGlobalCanvas();
+
+        // 프로그램 시작 시 기본 애니메이션 프레임 1개 자동 추가
+        if (frames.length === 0 && globalFrames.length === 0) {
+            addNewBlankFrame('anim');
+        }
+
+        /* ================= 6. 도구 및 줌 컨트롤 ================= */
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`.tool-btn[data-tool="${tool}"]`).classList.add('active');
+
+            ['opt-move', 'opt-wand', 'opt-brush', 'opt-text'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            document.getElementById(tool === 'eraser' || tool === 'pen' ? 'opt-brush' : 'opt-' + tool).classList.remove('hidden');
+            if (tool === 'pen' || tool === 'eraser') document.getElementById('color-picker-wrapper').style.display = (tool === 'pen') ? 'flex' : 'none';
+
+            if (tool === 'pen') {
+                drawingOverlay.classList.remove('hidden');
+                drawingOverlay.style.pointerEvents = 'auto';
+            } else {
+                drawingOverlay.classList.add('hidden');
+                drawingOverlay.style.pointerEvents = 'none';
+            }
+
+            const objs = document.querySelectorAll('.editor-obj');
+            objs.forEach(el => el.style.cursor = tool === 'move' ? 'move' : (tool === 'text' ? 'text' : 'crosshair'));
+            editorWrapper.style.cursor = tool === 'text' ? 'text' : 'default';
+        }
+
+        function setZoom(scale) { zoomScale = (scale === 'fit') ? -1 : scale; updateZoomDisplay(); }
+        function updateZoomDisplay() {
+            let finalScale = 1;
+            if (zoomScale === -1) {
+                const cw = workspaceScroll.clientWidth - 64; const ch = workspaceScroll.clientHeight - 64;
+                finalScale = Math.min(cw / globalW, ch / globalH);
+                document.getElementById('zoom-display').textContent = 'Fit';
+            } else {
+                finalScale = zoomScale; document.getElementById('zoom-display').textContent = Math.round(finalScale * 100) + '%';
+            }
+            editorWrapper.style.transform = `scale(${finalScale})`;
+        }
+
+        window.addEventListener('resize', () => { if (zoomScale === -1) updateZoomDisplay(); });
+        workspaceScroll.addEventListener('wheel', (e) => {
+            e.preventDefault(); let s = zoomScale === -1 ? 1 : zoomScale; s += e.deltaY < 0 ? 0.1 : -0.1; setZoom(Math.max(0.1, Math.min(s, 5)));
+        }, { passive: false });
+
+        /* ================= 7. 렌더링 ================= */
+        function renderEditor() {
+            const frame = getActiveFrame();
+            if (!frame) return;
+
+            Array.from(objectsContainer.children).forEach(child => {
+                if (!frame.objects.find(o => 'obj-' + o.id === child.id)) child.remove();
+            });
+
+            frame.objects.forEach((obj, index) => {
+                let el = document.getElementById('obj-' + obj.id);
+                if (!el) {
+                    el = document.createElement('div'); el.id = 'obj-' + obj.id; el.className = 'editor-obj';
+                    el.style.position = 'absolute'; el.style.touchAction = 'none';
+                    el.onmousedown = (e) => { const cObj = getActiveFrame()?.objects.find(o => o.id === obj.id); if (cObj) handleObjMouseDown(e, cObj); };
+                    el.ontouchstart = (e) => { const cObj = getActiveFrame()?.objects.find(o => o.id === obj.id); if (cObj) handleObjMouseDown(e, cObj); };
+                    objectsContainer.appendChild(el);
+                }
+
+                if (obj.type === 'image') {
+                    if (!el.contains(obj.canvas)) {
+                        el.innerHTML = '';
+                        obj.canvas.style.width = '100%'; obj.canvas.style.height = '100%';
+                        obj.canvas.style.pointerEvents = 'auto';
+                        el.appendChild(obj.canvas);
+                    }
+                    obj.canvas.style.filter = obj.filter !== 'none' ? obj.filter : '';
+                } else if (obj.type === 'text') {
+                    let tdiv = el.querySelector('.text-content');
+                    if (!tdiv) {
+                        el.innerHTML = '';
+                        tdiv = document.createElement('div'); tdiv.className = 'text-content';
+                        tdiv.style.width = '100%'; tdiv.style.height = '100%'; tdiv.style.display = 'flex';
+                        tdiv.style.alignItems = 'center'; tdiv.style.justifyContent = 'center';
+                        tdiv.style.fontWeight = 'bold'; tdiv.style.whiteSpace = 'nowrap'; tdiv.style.pointerEvents = 'none';
+                        el.appendChild(tdiv);
+                    }
+                    tdiv.style.fontSize = obj.fontSize + 'px';
+                    tdiv.style.color = obj.color;
+                    tdiv.textContent = obj.text;
+                }
+
+                el.style.left = obj.x + 'px'; el.style.top = obj.y + 'px';
+                el.style.width = obj.w + 'px'; el.style.height = obj.h + 'px';
+                el.style.transform = `rotate(${obj.rot}deg) scaleX(${obj.flipH ? -1 : 1})`;
+                el.style.zIndex = index;
+                el.style.cursor = currentTool === 'move' ? 'move' : (currentTool === 'text' ? 'text' : 'crosshair');
+            });
+            updateTransformBox();
+        }
+
+        function renderGlobalCanvases() {
+            const bgCanvas = document.getElementById('global-bg-canvas');
+            const fgCanvas = document.getElementById('global-fg-canvas');
+            if (!bgCanvas || !fgCanvas) return;
+
+            const bgCtx = bgCanvas.getContext('2d'); const fgCtx = fgCanvas.getContext('2d');
+            bgCtx.clearRect(0, 0, globalW, globalH); fgCtx.clearRect(0, 0, globalW, globalH);
+
+            globalFrames.forEach(gf => {
+                if (gf.id === activeFrameId) return;
+                if (gf.layerType === 'bg') drawFrameToContext(bgCtx, gf);
+                else drawFrameToContext(fgCtx, gf);
+            });
+        }
+
+        function syncPropsUI() {
+            const container = document.getElementById('obj-props-container'); const obj = getActiveObj();
+            if (!obj || isPlaying) { container.classList.add('opacity-30', 'pointer-events-none'); return; }
+            container.classList.remove('opacity-30', 'pointer-events-none');
+
+            document.getElementById('prop-rot-slider').value = obj.rot; document.getElementById('prop-rot-input').value = obj.rot; document.getElementById('prop-rot-val').textContent = obj.rot + '°';
+            document.getElementById('prop-image-group').classList.add('hidden'); document.getElementById('prop-text-group').classList.add('hidden');
+
+            if (obj.type === 'image') {
+                document.getElementById('prop-image-group').classList.remove('hidden'); document.getElementById('prop-filter').value = obj.filter;
+                const flipBtn = document.getElementById('prop-flip-btn');
+                if (obj.flipH) flipBtn.classList.add('bg-blue-100', 'border-blue-300', 'text-blue-700');
+                else flipBtn.classList.remove('bg-blue-100', 'border-blue-300', 'text-blue-700');
+            } else if (obj.type === 'text') {
+                document.getElementById('prop-text-group').classList.remove('hidden'); document.getElementById('prop-text-input').value = obj.text; document.getElementById('prop-color-input').value = obj.color;
+            }
+        }
+
+        function updateObjTextRealtime(val) {
+            const obj = getActiveObj(); if (!obj || obj.type !== 'text') return;
+            obj.text = val; renderEditor();
+        }
+        function commitObjText(val) {
+            const obj = getActiveObj(); if (!obj || obj.type !== 'text') return;
+            const frame = getActiveFrame(); obj.text = val;
+            renderEditor(); updateThumbnail(frame, true); saveAppState('text_edit_' + obj.id);
+        }
+        function updateObjColorRealtime(val) {
+            const obj = getActiveObj(); if (!obj || obj.type !== 'text') return;
+            obj.color = val; renderEditor();
+        }
+        function commitObjColor(val) {
+            const obj = getActiveObj(); if (!obj || obj.type !== 'text') return;
+            const frame = getActiveFrame(); obj.color = val;
+            renderEditor(); updateThumbnail(frame, true); saveAppState('text_color_' + obj.id);
+        }
+
+        function updateObjProp(prop, val) {
+            const obj = getActiveObj(); if (!obj) return;
+            const frame = getActiveFrame();
+            if (prop === 'rot') obj.rot = parseInt(val) || 0;
+            else if (prop === 'flipH') obj.flipH = !obj.flipH;
+            else if (prop === 'filter') obj.filter = val;
+
+            let act = prop === 'flipH' ? 'flip_' + Date.now() : `${prop}_${obj.id}`;
+            syncPropsUI(); renderEditor(); updateThumbnail(frame, true); saveAppState(act);
+        }
+
+        function deleteSelectedObj() {
+            const frame = getActiveFrame(); if (!frame || !selectedObjId) return;
+            frame.objects = frame.objects.filter(o => o.id !== selectedObjId);
+            selectedObjId = null;
+            renderEditor(); syncPropsUI(); updateThumbnail(frame, true); saveAppState('delete_obj');
+        }
+        // 👇👇👇 여기에 함수 추가 👇👇👇
+        function changeZOrder(action) {
+            const frame = getActiveFrame();
+            if (!frame || !selectedObjId) return;
+
+            const idx = frame.objects.findIndex(o => o.id === selectedObjId);
+            if (idx === -1) return;
+
+            const obj = frame.objects.splice(idx, 1)[0]; // 현재 배열에서 빼기
+
+            if (action === 'front') {
+                frame.objects.push(obj); // 맨 끝(위)으로
+            } else if (action === 'forward') {
+                frame.objects.splice(Math.min(frame.objects.length, idx + 1), 0, obj); // 한 칸 앞으로
+            } else if (action === 'backward') {
+                frame.objects.splice(Math.max(0, idx - 1), 0, obj); // 한 칸 뒤로
+            } else if (action === 'back') {
+                frame.objects.unshift(obj); // 맨 앞(아래)으로
+            }
+
+            renderEditor();
+            updateThumbnail(frame, true);
+            saveAppState('z_order');
+        }
+        /* ================= 8. 오버레이(독립 레이어) 프레임 밖 새 선 그리기 ================= */
+        function getOverlayCoords(e) {
+            const rect = drawingOverlay.getBoundingClientRect();
+            let cx = e.clientX, cy = e.clientY;
+            if (e.touches && e.touches.length > 0) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+
+            // [수정] 줌 배율과 상관없이 펜촉 위치 정확히 보정 (캔버스가 화면상에서 차지하는 비율 적용)
+            return {
+                x: (cx - rect.left) * ((globalW * 3) / rect.width),
+                y: (cy - rect.top) * ((globalH * 3) / rect.height)
+            };
+        }
+
+        function startOverlayDrawing(e) {
+            if (currentTool !== 'pen') return;
+            if (getActiveFrame() == null) return;
+            e.preventDefault();
+            overlayDrawing = true;
+            const { x, y } = getOverlayCoords(e);
+            overlayCtx.beginPath();
+            overlayCtx.lineCap = 'round'; overlayCtx.lineJoin = 'round';
+            overlayCtx.lineWidth = parseInt(document.getElementById('brush-size').value);
+            overlayCtx.strokeStyle = document.getElementById('brush-color').value;
+            overlayCtx.moveTo(x, y); overlayCtx.lineTo(x, y); overlayCtx.stroke();
+        }
+
+        function moveOverlayDrawing(e) {
+            if (!overlayDrawing) return;
+            e.preventDefault();
+            const { x, y } = getOverlayCoords(e);
+            overlayCtx.lineTo(x, y); overlayCtx.stroke();
+        }
+
+        function finishOverlayDrawing(e) {
+            if (!overlayDrawing) return;
+            overlayDrawing = false;
+
+            const w = drawingOverlay.width; const h = drawingOverlay.height;
+            const imgData = overlayCtx.getImageData(0, 0, w, h);
+            const data = imgData.data;
+            let minX = w, minY = h, maxX = 0, maxY = 0; let hasPixels = false;
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    if (data[(y * w + x) * 4 + 3] > 0) {
+                        hasPixels = true;
+                        if (x < minX) minX = x; if (x > maxX) maxX = x;
+                        if (y < minY) minY = y; if (y > maxY) maxY = y;
+                    }
+                }
+            }
+
+            if (hasPixels) {
+                const pad = parseInt(document.getElementById('brush-size').value);
+                minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+                maxX = Math.min(w, maxX + pad); maxY = Math.min(h, maxY + pad);
+                const cw = maxX - minX; const ch = maxY - minY;
+
+                const newCvs = document.createElement('canvas');
+                newCvs.width = cw; newCvs.height = ch;
+                const nCtx = newCvs.getContext('2d', { willReadFrequently: true });
+                nCtx.putImageData(overlayCtx.getImageData(minX, minY, cw, ch), 0, 0);
+
+                const frame = getActiveFrame();
+                const newObj = {
+                    id: genId(), type: 'image', canvas: newCvs, ctx: nCtx,
+                    canvasWidth: cw, canvasHeight: ch,
+                    // [수정] 오버레이가 좌상단으로 확장된 만큼 정확한 위치 보정
+                    x: minX - globalW, y: minY - globalH, w: cw, h: ch, rot: 0, flipH: false, filter: 'none'
+                };
+                frame.objects.push(newObj);
+                selectedObjId = newObj.id;
+
+                renderEditor(); syncPropsUI(); updateThumbnail(frame, true);
+                setTool('move');
+                saveAppState('add_pen');
+            }
+            overlayCtx.clearRect(0, 0, w, h);
+        }
+
+        drawingOverlay.addEventListener('mousedown', startOverlayDrawing);
+        drawingOverlay.addEventListener('mousemove', moveOverlayDrawing);
+        drawingOverlay.addEventListener('mouseup', finishOverlayDrawing);
+        // [수정] 마우스가 캔버스를 잠시 벗어나더라도 그리기 취소되지 않도록 mouseout 이벤트 삭제
+
+        drawingOverlay.addEventListener('touchstart', startOverlayDrawing, { passive: false });
+        drawingOverlay.addEventListener('touchmove', moveOverlayDrawing, { passive: false });
+        drawingOverlay.addEventListener('touchend', finishOverlayDrawing);
+        drawingOverlay.addEventListener('touchcancel', finishOverlayDrawing);
+
+        /* ================= 9. 마우스 및 터치 이벤트 ================= */
+        editorWrapper.addEventListener('mousedown', handleWorkspaceDown);
+        editorWrapper.addEventListener('touchstart', handleWorkspaceDown, { passive: false });
+
+        function handleWorkspaceDown(e) {
+            if (isPlaying || e.target.closest('.editor-obj') || e.target.closest('#transform-box')) return;
+            const frame = getActiveFrame(); if (!frame) return;
+
+            if (currentTool === 'text') {
+                const rect = editorWrapper.getBoundingClientRect(); const scale = rect.width / globalW;
+                let cx = e.clientX, cy = e.clientY; if (e.touches) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+                const lx = (cx - rect.left) / scale; const ly = (cy - rect.top) / scale;
+
+                const newTxt = { id: genId(), type: 'text', text: '새 글자', x: lx - 50, y: ly - 20, w: 100, h: 40, rot: 0, flipH: false, filter: 'none', color: '#000000', fontSize: 30 };
+                frame.objects.push(newTxt); selectedObjId = newTxt.id;
+                setTool('move'); renderEditor(); syncPropsUI(); updateThumbnail(frame, true);
+                saveAppState('add_text');
+            } else {
+                selectedObjId = null; renderEditor(); syncPropsUI();
+            }
+        }
+
+        function handleObjMouseDown(e, obj) {
+            if (isPlaying || (e.button !== 0 && e.type === 'mousedown')) return;
+            selectedObjId = obj.id; const frame = getActiveFrame(); syncPropsUI(); renderEditor();
+
+            if (currentTool === 'move') {
+                isMoving = true;
+                actionStartX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX; actionStartY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+                originalObj = { x: obj.x, y: obj.y, w: obj.w, h: obj.h, rot: obj.rot };
+            }
+            else if (currentTool === 'wand' && obj.type === 'image') {
+                const px = e.offsetX * (obj.canvasWidth / obj.w); const py = e.offsetY * (obj.canvasHeight / obj.h);
+
+                obj.originalImgData = obj.ctx.getImageData(0, 0, obj.canvasWidth, obj.canvasHeight);
+                obj.wandX = Math.floor(px); obj.wandY = Math.floor(py);
+
+                const tol = parseInt(document.getElementById('wand-tolerance').value);
+                applyWandDynamic(obj, tol);
+
+                updateThumbnail(frame, true);
+                saveAppState('wand_' + obj.id);
+            }
+            else if (currentTool === 'eraser' && obj.type === 'image') {
+                isDrawing = true;
+                const px = e.offsetX * (obj.canvasWidth / obj.w); const py = e.offsetY * (obj.canvasHeight / obj.h);
+                const size = parseInt(document.getElementById('brush-size').value);
+                obj.ctx.beginPath(); obj.ctx.lineCap = 'round'; obj.ctx.lineJoin = 'round'; obj.ctx.lineWidth = size;
+                obj.ctx.globalCompositeOperation = 'destination-out';
+                obj.ctx.strokeStyle = 'rgba(0,0,0,1)';
+                obj.ctx.moveTo(px, py); obj.ctx.lineTo(px, py); obj.ctx.stroke();
+            }
+            e.stopPropagation();
+        }
+
+        transformBox.addEventListener('mousedown', startTransformBox);
+        transformBox.addEventListener('touchstart', startTransformBox, { passive: false });
+
+        function startTransformBox(e) {
+            if (isPlaying || (e.button !== 0 && e.type === 'mousedown')) return;
+            const handle = e.target.dataset.handle; const obj = getActiveObj(); if (!obj) return;
+            if (handle === 'rot') isRotating = true; else if (handle) { isResizing = true; resizeHandle = handle; } else isMoving = true;
+            actionStartX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX; actionStartY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+            originalObj = { x: obj.x, y: obj.y, w: obj.w, h: obj.h, rot: obj.rot };
+            e.preventDefault(); e.stopPropagation();
+        }
+
+        window.addEventListener('mousemove', handleGlobalMove);
+        window.addEventListener('touchmove', handleGlobalMove, { passive: false });
+
+        function handleGlobalMove(e) {
+            if (isPlaying || (!isDrawing && !isMoving && !isResizing && !isRotating)) return;
+            const obj = getActiveObj(); if (!obj) return;
+            let cx = e.clientX, cy = e.clientY; if (e.touches) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+            const globalScale = editorWrapper.getBoundingClientRect().width / globalW;
+
+            if (isMoving) {
+                obj.x = originalObj.x + ((cx - actionStartX) / globalScale); obj.y = originalObj.y + ((cy - actionStartY) / globalScale);
+                renderEditor();
+            }
+            else if (isResizing) {
+                let dx = (cx - actionStartX) / globalScale; let dy = (cy - actionStartY) / globalScale;
+                let nx = originalObj.x, ny = originalObj.y, nw = originalObj.w, nh = originalObj.h;
+
+                if (['nw', 'ne', 'sw', 'se'].includes(resizeHandle)) {
+                    let ratio = originalObj.w / originalObj.h; let cX = resizeHandle.includes('e') ? dx : -dx; let cY = resizeHandle.includes('s') ? dy : -dy;
+                    let scaleX = (originalObj.w + cX) / originalObj.w; let scaleY = (originalObj.h + cY) / originalObj.h;
+                    let newScale = Math.abs(scaleX - 1) > Math.abs(scaleY - 1) ? scaleX : scaleY;
+                    nw = Math.max(10, originalObj.w * newScale); nh = nw / ratio;
+                    if (resizeHandle.includes('w')) nx = originalObj.x + (originalObj.w - nw);
+                    if (resizeHandle.includes('n')) ny = originalObj.y + (originalObj.h - nh);
+                } else {
+                    if (resizeHandle.includes('e')) nw = Math.max(10, originalObj.w + dx);
+                    if (resizeHandle.includes('w')) { nw = Math.max(10, originalObj.w - dx); nx = originalObj.x + (originalObj.w - nw); }
+                    if (resizeHandle.includes('s')) nh = Math.max(10, originalObj.h + dy);
+                    if (resizeHandle.includes('n')) { nh = Math.max(10, originalObj.h - dy); ny = originalObj.y + (originalObj.h - nh); }
+                }
+                obj.x = nx; obj.y = ny; obj.w = nw; obj.h = nh;
+                if (obj.type === 'text') obj.fontSize = Math.max(10, nh * 0.75);
+                renderEditor();
+            }
+            else if (isRotating) {
+                const rect = transformBox.getBoundingClientRect(); const center_x = rect.left + rect.width / 2; const center_y = rect.top + rect.height / 2;
+                const angle = Math.atan2(cy - center_y, cx - center_x) * 180 / Math.PI;
+                obj.rot = Math.round((angle + 90) % 360); syncPropsUI(); renderEditor();
+            }
+            else if (isDrawing && currentTool === 'eraser') {
+                e.preventDefault(); const px = e.offsetX * (obj.canvasWidth / obj.w); const py = e.offsetY * (obj.canvasHeight / obj.h);
+                obj.ctx.lineTo(px, py); obj.ctx.stroke();
+            }
+        }
+
+        window.addEventListener('mouseup', handleGlobalUp);
+        window.addEventListener('touchend', handleGlobalUp);
+
+        function handleGlobalUp(e) {
+            if (isPlaying) return;
+
+            // [수정] 캔버스 밖으로 벗어나서 마우스를 뗄 때도 그리기 완료가 정상 처리되도록 추가
+            if (overlayDrawing) { finishOverlayDrawing(e); }
+
+            const obj = getActiveObj(); const frame = getActiveFrame();
+            let changed = false;
+
+            if (isDrawing && currentTool === 'eraser') { isDrawing = false; if (obj) obj.ctx.globalCompositeOperation = 'source-over'; changed = true; }
+            if (isMoving || isResizing || isRotating) {
+                isMoving = false; isResizing = false; isRotating = false; resizeHandle = null;
+                if (obj && (obj.x !== originalObj.x || obj.y !== originalObj.y || obj.w !== originalObj.w || obj.h !== originalObj.h || obj.rot !== originalObj.rot)) changed = true;
+            }
+
+            if (changed && frame) {
+                updateThumbnail(frame, true);
+                let act = 'transform_' + Date.now();
+                if (currentTool === 'eraser') act = 'erase_' + obj.id;
+                saveAppState(act);
+            }
+        }
+
+        function floodFillErase(canvas, ctx, startX, startY, toleranceRaw) {
+            const w = canvas.width; const h = canvas.height; if (startX < 0 || startX >= w || startY < 0 || startY >= h) return;
+            const imgData = ctx.getImageData(0, 0, w, h); const data = imgData.data;
+            const startIdx = (startY * w + startX) * 4; const startR = data[startIdx], startG = data[startIdx + 1], startB = data[startIdx + 2], startA = data[startIdx + 3];
+            if (startA === 0) return;
+            const tol = (toleranceRaw / 100) * 441.67; const stack = [[startX, startY]]; const visited = new Uint8Array(w * h); visited[startY * w + startX] = 1;
+            while (stack.length > 0) {
+                const [x, y] = stack.pop(); const i = (y * w + x) * 4; data[i + 3] = 0;
+                const neighbors = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+                for (let [nx, ny] of neighbors) {
+                    if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                        const nIdx = ny * w + nx;
+                        if (!visited[nIdx]) {
+                            visited[nIdx] = 1; const di = nIdx * 4;
+                            if (data[di + 3] > 0) {
+                                const dist = Math.sqrt((data[di] - startR) ** 2 + (data[di + 1] - startG) ** 2 + (data[di + 2] - startB) ** 2);
+                                if (dist <= tol) stack.push([nx, ny]);
+                            }
+                        }
+                    }
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function updateTransformBox() {
+            const obj = getActiveObj();
+            // [수정] 펜이나 지우개 도구 사용 중에는 파란색 조절점을 숨겨 방해받지 않게 합니다.
+            if (!obj || isPlaying || currentTool === 'text' || currentTool === 'pen' || currentTool === 'eraser') {
+                transformBox.style.display = 'none'; return;
+            }
+            transformBox.style.display = 'block'; transformBox.style.left = obj.x + 'px'; transformBox.style.top = obj.y + 'px';
+            transformBox.style.width = obj.w + 'px'; transformBox.style.height = obj.h + 'px'; transformBox.style.transform = `rotate(${obj.rot}deg)`;
+        }
+
+        /* ================= 10. 전역 실행 취소(Undo) / 다시 실행(Redo) 시스템 ================= */
+        function saveAppState(actionType = null, isInitial = false) {
+            if (isRestoring) return;
+            if (!isInitial) appRedoStack = [];
+
+            const serializeFrame = (f) => ({
+                id: f.id, type: f.type, layerType: f.layerType, delay: f.delay, zIndex: f.zIndex, thumbnail: f.thumbnail,
+                objects: f.objects.map(o => {
+                    if (o.type === 'image') return { ...o, dataUrl: o.canvas.toDataURL(), canvasWidth: o.canvasWidth, canvasHeight: o.canvasHeight };
+                    return JSON.parse(JSON.stringify(o));
+                })
+            });
+
+            const state = {
+                frames: frames.map(serializeFrame),
+                globalFrames: globalFrames.map(serializeFrame),
+                activeFrameId: activeFrameId,
+                currentTab: currentTab,
+                actionType: actionType
+            };
+
+            if (isInitial) {
+                appUndoStack.push(state);
+            } else {
+                if (actionType && appUndoStack.length > 0 && appUndoStack[appUndoStack.length - 1].actionType === actionType) {
+                    appUndoStack[appUndoStack.length - 1] = state;
+                } else {
+                    appUndoStack.push(state);
+                }
+            }
+            if (appUndoStack.length > 40) appUndoStack.shift();
+            updateUndoRedoUI();
+        }
+
+        function updateUndoRedoUI() {
+            document.getElementById('btn-undo').disabled = appUndoStack.length <= 1;
+            document.getElementById('btn-redo').disabled = appRedoStack.length === 0;
+        }
+
+        async function undoEdit() {
+            if (appUndoStack.length <= 1 || isRestoring) return;
+            appRedoStack.push(appUndoStack.pop());
+            await restoreAppState(appUndoStack[appUndoStack.length - 1]);
+        }
+
+        async function redoEdit() {
+            if (appRedoStack.length === 0 || isRestoring) return;
+            const state = appRedoStack.pop();
+            appUndoStack.push(state);
+            await restoreAppState(state);
+        }
+
+        async function restoreAppState(state) {
+            isRestoring = true;
+            window.showLoading(true, "상태 복원 중...");
+
+            try {
+                const loadFrameObjects = async (frameData) => {
+                    const loadedObjects = [];
+                    for (const o of frameData.objects) {
+                        if (o.type === 'image') {
+                            await new Promise(resolve => {
+                                const img = new Image();
+                                img.onload = () => {
+                                    const cvs = document.createElement('canvas'); cvs.width = o.canvasWidth; cvs.height = o.canvasHeight;
+                                    cvs.getContext('2d', { willReadFrequently: true }).drawImage(img, 0, 0);
+                                    const newObj = { ...o, canvas: cvs, ctx: cvs.getContext('2d', { willReadFrequently: true }) };
+                                    delete newObj.dataUrl;
+                                    loadedObjects.push(newObj);
+                                    resolve();
+                                };
+                                img.onerror = () => resolve();
+                                img.src = o.dataUrl;
+                            });
+                        } else {
+                            loadedObjects.push(JSON.parse(JSON.stringify(o)));
+                        }
+                    }
+                    return {
+                        id: frameData.id, type: frameData.type, layerType: frameData.layerType, delay: frameData.delay,
+                        zIndex: frameData.zIndex, thumbnail: frameData.thumbnail, objects: loadedObjects
+                    };
+                };
+
+                frames = []; for (const f of state.frames) { frames.push(await loadFrameObjects(f)); }
+                globalFrames = []; for (const f of state.globalFrames) { globalFrames.push(await loadFrameObjects(f)); }
+
+                objectsContainer.innerHTML = '';
+                activeFrameId = state.activeFrameId;
+                selectedObjId = null;
+
+                switchTab(state.currentTab, true);
+                renderTimeline();
+                renderGlobalTimeline();
+
+                document.querySelectorAll('.frame-item').forEach(el => el.classList.remove('active'));
+                if (activeFrameId) {
+                    const item = document.getElementById(`frame_${activeFrameId}`); if (item) item.classList.add('active');
+                    const frame = getActiveFrame();
+                    document.getElementById('empty-workspace').classList.add('hidden');
+                    editorWrapper.classList.remove('hidden');
+                    document.getElementById('active-frame-info').classList.remove('hidden');
+                    document.getElementById('active-frame-info').textContent = frame?.type === 'global' ? `[공통 프레임] 편집 중` : `[애니메이션] 편집 중`;
+                } else {
+                    document.getElementById('empty-workspace').classList.remove('hidden');
+                    editorWrapper.classList.add('hidden');
+                    document.getElementById('active-frame-info').classList.add('hidden');
+                }
+
+                renderEditor(); syncPropsUI(); renderGlobalCanvases(); updateUndoRedoUI();
+            } catch (e) {
+                console.error(e);
+            } finally {
+                window.showLoading(false);
+                isRestoring = false;
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            if (isPlaying) { if (e.key === 'Escape') stopPreview(); return; }
+            // [신규] 방향키 1px 이동 처리
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                const obj = getActiveObj();
+                if (obj) {
+                    e.preventDefault(); // 스크롤 등 기본 동작 방지
+                    if (e.key === 'ArrowUp') obj.y -= 1;
+                    if (e.key === 'ArrowDown') obj.y += 1;
+                    if (e.key === 'ArrowLeft') obj.x -= 1;
+                    if (e.key === 'ArrowRight') obj.x += 1;
+                    renderEditor();
+
+                    // 방향키를 연타할 때마다 저장되면 부하가 걸리므로, 0.3초 뒤에 한 번만 상태 저장 (디바운싱)
+                    clearTimeout(window.moveDebounceTimer);
+                    window.moveDebounceTimer = setTimeout(() => {
+                        const frame = getActiveFrame();
+                        if (frame) updateThumbnail(frame, true);
+                        saveAppState('move_obj_keyboard');
+                    }, 300);
+                    return;
+                }
+            }
+            if (e.key === 'Delete' || e.key === 'Backspace') { if (selectedObjId) { e.preventDefault(); deleteSelectedObj(); } }
+
+            if (e.ctrlKey || e.metaKey) {
+                const k = e.key.toLowerCase();
+                if (k === 'z') { e.preventDefault(); undoEdit(); }
+                if (k === 'y') { e.preventDefault(); redoEdit(); }
+
+                // [수정] Ctrl+C (선택 객체 복사 및 시스템 클립보드 초기화)
+                if (k === 'c') {
+                    e.preventDefault();
+                    const obj = getActiveObj();
+                    if (obj) {
+                        clipboardObj = { ...obj, id: null };
+                        if (obj.type === 'image') {
+                            const nc = document.createElement('canvas');
+                            nc.width = obj.canvasWidth; nc.height = obj.canvasHeight;
+                            nc.getContext('2d').drawImage(obj.canvas, 0, 0);
+                            clipboardObj.canvas = nc;
+                            clipboardObj.ctx = nc.getContext('2d', { willReadFrequently: true });
+                        }
+
+                        // [핵심] 외부 이미지 복사 내역과 꼬이지 않도록 시스템 클립보드를 비워줍니다.
+                        try {
+                            const tempInput = document.createElement('input');
+                            tempInput.value = 'pentong_internal_copy';
+                            document.body.appendChild(tempInput);
+                            tempInput.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(tempInput);
+                        } catch (err) { }
+
+                        window.showToast('객체가 복사되었습니다.');
+                    }
+                }
+
+                // 주의: 기존에 있던 Ctrl+V (if (k === 'v') { ... }) 블록은 여기서 완전히 삭제합니다!
+                // (아래의 paste 이벤트에서 통합 처리합니다)
+            } else if (!e.altKey) {
+                const k = e.key.toLowerCase();
+                if (k === 'v') setTool('move'); if (k === 'w') setTool('wand'); if (k === 'e') setTool('eraser'); if (k === 'p') setTool('pen'); if (k === 't') setTool('text');
+            }
+        });
+
+        /* ================= 11. 파일 로드 및 공통/개별 프레임 관리 ================= */
+        function addNewBlankFrame(targetTab) {
+            const isGlobal = targetTab === 'global';
+            const delayInput = document.getElementById('global-delay'); const defaultDelay = delayInput ? (parseInt(delayInput.value) || 200) : 200;
+
+            const newFrame = {
+                id: genId(), type: isGlobal ? 'global' : 'regular',
+                layerType: isGlobal ? 'bg' : undefined, delay: defaultDelay, thumbnail: '', objects: []
+            };
+
+            if (isGlobal) globalFrames.push(newFrame); else frames.push(newFrame);
+            if (isGlobal) renderGlobalTimeline(); else renderTimeline();
+            selectFrame(newFrame.id); updateThumbnail(newFrame);
+            saveAppState('add_frame');
+        }
+
+        function checkAndPromptImageUpload(targetTab) {
+            const arr = targetTab === 'global' ? globalFrames : frames;
+            if (arr.length === 0) {
+                window.showPopup('알림', `해당 탭에 선택된 프레임이 존재하지 않습니다.\n먼저 [추가] 버튼을 눌러 빈 도화지를 만들어주세요.`, 'alert', null, 'error');
+                return;
+            }
+            document.getElementById(`file-input-${targetTab}`).click();
+        }
+
+        document.addEventListener('paste', e => {
+            if (document.activeElement.tagName === 'INPUT') return;
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            const files = [];
+            for (let item of items) if (item.type && item.type.startsWith('image/')) files.push(item.getAsFile());
+
+            if (files.length > 0) {
+                // 1. 외부에서 복사한 이미지가 있을 경우 (외부 이미지 우선)
+                const frame = getActiveFrame();
+                if (!frame) { window.showPopup('알림', '먼저 프레임을 추가하거나 선택한 후 붙여넣기 해주세요.', 'alert', null, 'error'); return; }
+                processFiles(files, frame.type === 'global' ? 'global' : 'anim');
+            }
+            else if (clipboardObj) {
+                // 2. 외부 이미지가 없고 내부에서 복사한 객체(clipboardObj)가 있을 경우
+                const frame = getActiveFrame();
+                if (frame) {
+                    // 약간 대각선 아래(20px)에 붙여넣어 겹침 방지
+                    const newObj = { ...clipboardObj, id: genId(), x: 1, y: 1 };
+                    if (clipboardObj.type === 'image') {
+                        const nc = document.createElement('canvas');
+                        nc.width = clipboardObj.canvasWidth; nc.height = clipboardObj.canvasHeight;
+                        nc.getContext('2d').drawImage(clipboardObj.canvas, 0, 0);
+                        newObj.canvas = nc;
+                        newObj.ctx = nc.getContext('2d', { willReadFrequently: true });
+                    }
+                    frame.objects.push(newObj);
+                    selectedObjId = newObj.id;
+                    setTool('move');
+                    renderEditor(); syncPropsUI(); updateThumbnail(frame, true);
+                    saveAppState('paste_obj');
+                    window.showToast('객체를 붙여넣었습니다.');
+                }
+            }
+        });
+
+        function handleFiles(e, targetTab) { if (e.target.files.length > 0) processFiles(e.target.files, targetTab); e.target.value = ''; }
+
+        async function processFiles(files, targetTab) {
+            const imgArray = Array.from(files).filter(f => f && f.type && f.type.startsWith('image/')); if (imgArray.length === 0) return;
+
+            let frame = getActiveFrame();
+            if (!frame || (frame.type === 'global' && targetTab === 'anim') || (frame.type === 'regular' && targetTab === 'global')) {
+                if (targetTab === 'anim' && frames.length > 0) { frame = frames[0]; selectFrame(frame.id); }
+                else if (targetTab === 'global' && globalFrames.length > 0) { frame = globalFrames[0]; selectFrame(frame.id); }
+                else return;
+            }
+
+            window.showLoading(true, "이미지 삽입 중...");
+            let loaded = 0;
+
+            imgArray.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const fCanvas = document.createElement('canvas'); fCanvas.width = img.width; fCanvas.height = img.height;
+                        const fCtx = fCanvas.getContext('2d', { willReadFrequently: true }); fCtx.drawImage(img, 0, 0);
+                        const dx = 1; const dy = 1;
+
+                        const newObj = { id: genId(), type: 'image', canvas: fCanvas, ctx: fCtx, canvasWidth: img.width, canvasHeight: img.height, x: dx, y: dy, w: img.width, h: img.height, rot: 0, flipH: false, filter: 'none' };
+                        frame.objects.push(newObj); selectedObjId = newObj.id;
+
+                        loaded++;
+                        if (loaded === imgArray.length) {
+                            updateThumbnail(frame, true); renderEditor(); syncPropsUI();
+                            window.showLoading(false); setTool('move');
+                            saveAppState('add_image');
+                        }
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function resizeGlobalCanvas() {
+            initGlobalCanvas();
+            frames.forEach(f => updateThumbnail(f)); globalFrames.forEach(f => updateThumbnail(f));
+            renderTimeline(); renderGlobalTimeline();
+            window.showToast(`캔버스 크기가 ${globalW}x${globalH}로 변경되었습니다.`);
+            saveAppState('resize_canvas');
+        }
+
+        let updateTimeout = null;
+        function updateThumbnail(frame, cascade = false) {
+            if (!frame) return;
+            const tcvs = document.createElement('canvas'); tcvs.width = globalW; tcvs.height = globalH;
+
+            if (frame.type === 'global') {
+                drawFrameToContext(tcvs.getContext('2d'), frame);
+                frame.thumbnail = tcvs.toDataURL('image/jpeg', 0.5);
+                const imgEl = document.getElementById(`thumb_${frame.id}`); if (imgEl) imgEl.src = frame.thumbnail;
+
+                if (cascade) {
+                    clearTimeout(updateTimeout);
+                    updateTimeout = setTimeout(() => {
+                        renderGlobalCanvases();
+                        frames.forEach(f => updateThumbnail(f, false));
+                    }, 50);
+                }
+            } else {
+                drawCompositeFrame(tcvs.getContext('2d'), frame);
+                frame.thumbnail = tcvs.toDataURL('image/jpeg', 0.5);
+                const imgEl = document.getElementById(`thumb_${frame.id}`); if (imgEl) imgEl.src = frame.thumbnail;
+            }
+            updateOnionSkin(); // 썸네일 업데이트 시 어니언 스킨도 갱신
+        }
+
+        function selectFrame(id) {
+            if (isPlaying) stopPreview();
+            activeFrameId = id;
+            document.querySelectorAll('.frame-item').forEach(el => el.classList.remove('active'));
+            const item = document.getElementById(`frame_${id}`); if (item) item.classList.add('active');
+
+            const frame = getActiveFrame();
+
+            if (frame) {
+                if (frame.type === 'global') lastActiveGlobalFrameId = id;
+                else lastActiveAnimFrameId = id;
+            }
+
+            if (frame) {
+                document.getElementById('empty-workspace').classList.add('hidden');
+                editorWrapper.classList.remove('hidden');
+                document.getElementById('active-frame-info').classList.remove('hidden');
+                document.getElementById('active-frame-info').textContent = frame.type === 'global' ? `[공통 프레임] 편집 중` : `[애니메이션] 편집 중`;
+
+                selectedObjId = null;
+                renderEditor(); setTool(currentTool); syncPropsUI(); renderGlobalCanvases();
+
+                if (frame.type === 'global' && currentTab !== 'global') switchTab('global', true);
+                if (frame.type === 'regular' && currentTab !== 'anim') switchTab('anim', true);
+            } else {
+                document.getElementById('empty-workspace').classList.remove('hidden');
+                editorWrapper.classList.add('hidden');
+                document.getElementById('active-frame-info').classList.add('hidden');
+                selectedObjId = null; renderEditor(); syncPropsUI();
+            }
+            updateUndoRedoUI();
+            updateOnionSkin(); // 프레임 선택 시 어니언 스킨 갱신
+        }
+
+        function updateGlobalLayerType(id, type) {
+            const f = globalFrames.find(x => x.id === id);
+            if (f) { f.layerType = type; renderGlobalTimeline(); renderGlobalCanvases(); frames.forEach(x => updateThumbnail(x, false)); saveAppState('change_layer_type'); }
+        }
+
+        function renderGlobalTimeline() {
+            document.getElementById('global-frame-count').textContent = globalFrames.length;
+            const container = document.getElementById('global-timeline-container'); container.innerHTML = '';
+            if (globalFrames.length === 0) {
+                container.innerHTML = '<div class="text-[10px] text-center text-slate-400 py-4 pointer-events-none">추가된 공통 프레임이 없습니다.</div>';
+                return;
+            }
+
+            globalFrames.forEach((frame) => {
+                const el = document.createElement('div'); el.id = `frame_${frame.id}`;
+                el.className = `frame-item shrink-0 bg-white rounded-lg shadow-sm overflow-hidden flex flex-col cursor-pointer select-none ${frame.id === activeFrameId ? 'active' : ''}`;
+                el.draggable = true;
+                el.addEventListener('dragstart', handleDragStart); el.addEventListener('dragover', handleDragOver); el.addEventListener('dragleave', handleDragLeave); el.addEventListener('drop', handleDrop); el.addEventListener('dragend', handleDragEnd);
+                el.addEventListener('click', (e) => {
+                    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT' && !e.target.closest('button')) selectFrame(frame.id);
+                });
+
+                el.innerHTML = `
+                                <div class="flex items-center p-1.5 relative group" title="드래그하여 위아래로 순서를 변경할 수 있습니다.">
+                                    <div class="w-16 h-12 bg-slate-100 rounded overflow-hidden checkerboard border border-slate-200 shrink-0">
+                                        <img id="thumb_${frame.id}" src="${frame.thumbnail}" class="w-full h-full object-contain pointer-events-none">
+                                    </div>
+                                    <div class="flex flex-col ml-3 flex-1 justify-center gap-1">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[10px] font-bold text-slate-600">위치 설정</span>
+                                            <select onchange="updateGlobalLayerType('${frame.id}', this.value)" class="border border-slate-200 rounded text-[10px] outline-none">
+                                                <option value="bg" ${frame.layerType === 'bg' ? 'selected' : ''}>배경 (뒤)</option>
+                                                <option value="fg" ${frame.layerType === 'fg' ? 'selected' : ''}>전경 (앞)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button onclick="deleteGlobalFrame('${frame.id}'); event.stopPropagation();" class="w-6 h-6 ml-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="프레임 삭제"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                        `; container.appendChild(el);
+            });
+        }
+
+        function deleteGlobalFrame(id) {
+            globalFrames = globalFrames.filter(f => f.id !== id);
+            if (activeFrameId === id) selectFrame(frames.length > 0 ? frames[0].id : (globalFrames.length > 0 ? globalFrames[0].id : null));
+            else { renderGlobalTimeline(); renderGlobalCanvases(); frames.forEach(x => updateThumbnail(x, false)); }
+            saveAppState('del_frame');
+        }
+
+        function renderTimeline() {
+            document.getElementById('frame-count').textContent = frames.length;
+            const container = document.getElementById('timeline-container'); container.innerHTML = '';
+            frames.forEach((frame, index) => {
+                const el = document.createElement('div'); el.id = `frame_${frame.id}`;
+                el.className = `frame-item shrink-0 bg-white rounded-lg shadow-sm overflow-hidden flex flex-col cursor-pointer select-none ${frame.id === activeFrameId ? 'active' : ''}`;
+                el.draggable = true;
+                el.addEventListener('dragstart', handleDragStart); el.addEventListener('dragover', handleDragOver); el.addEventListener('dragleave', handleDragLeave); el.addEventListener('drop', handleDrop); el.addEventListener('dragend', handleDragEnd);
+                el.addEventListener('click', (e) => {
+                    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+                        selectFrame(frame.id);
+                    }
+                });
+                el.innerHTML = `
+                                <div class="flex items-center p-2 border-b border-slate-100 relative group" title="드래그하여 순서를 변경할 수 있습니다.">
+                                    <div class="font-mono text-xs text-slate-400 w-5 font-bold">${index + 1}</div>
+                                    <div class="w-16 h-12 bg-slate-100 rounded overflow-hidden checkerboard border border-slate-200 ml-1 shrink-0"><img id="thumb_${frame.id}" src="${frame.thumbnail}" class="w-full h-full object-contain pointer-events-none"></div>
+                                    <div class="flex-1"></div>
+                                    <div class="flex gap-1">
+                                        <button onclick="duplicateFrame(${index}); event.stopPropagation();" class="w-7 h-7 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors" title="프레임 복제"><i class="fa-regular fa-copy"></i></button>
+                                        <button onclick="deleteFrame(${index}); event.stopPropagation();" class="w-7 h-7 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="프레임 삭제"><i class="fa-solid fa-xmark"></i></button>
+                                    </div>
+                                </div>
+                                <div class="p-2 bg-slate-50 flex items-center justify-between">
+                                    <span class="text-[11px] text-slate-500 font-medium"><i class="fa-regular fa-clock mr-1"></i>지연</span>
+                                    <div class="flex items-center"><input type="number" value="${frame.delay}" onchange="updateDelay('${frame.id}', this.value)" class="w-14 border border-slate-200 rounded p-1 text-xs text-center outline-none focus:border-blue-400 font-mono"><span class="text-[10px] text-slate-400 ml-1">ms</span></div>
+                                </div>
+                            `; container.appendChild(el);
+            });
+
+            updateStopFrameOptions();
+            if (frames.length > 0 && getActiveFrameIndex() === -1 && getActiveFrame()?.type !== 'global') selectFrame(frames[0].id); else if (frames.length === 0 && globalFrames.length === 0) selectFrame(null);
+        }
+
+        function updateDelay(id, val) { const f = frames.find(f => f.id === id); if (f) { f.delay = parseInt(val) || 100; saveAppState('delay_' + id); } }
+
+        function applyGlobalDelay() {
+            if (frames.length === 0) return;
+            const delayInput = document.getElementById('global-delay'); const val = delayInput ? (parseInt(delayInput.value) || 200) : 200;
+            frames.forEach(f => f.delay = val); renderTimeline(); window.showToast(`전체 프레임이 ${val}ms로 변경되었습니다.`);
+            saveAppState('global_delay');
+        }
+
+        function applySpeedMultiplier() {
+            if (frames.length === 0) return;
+            const multiplier = parseFloat(document.getElementById('speed-multiplier').value) || 1.0;
+            frames.forEach(f => { f.delay = Math.max(10, Math.round(f.delay / multiplier)); });
+            renderTimeline(); window.showToast(`${multiplier}배속이 적용되었습니다.`);
+            saveAppState('global_speed');
+        }
+
+        function deleteFrame(idx) { frames.splice(idx, 1); renderTimeline(); saveAppState('del_frame'); }
+        function duplicateFrame(idx) {
+            const o = frames[idx];
+            const nobj = o.objects.map(x => {
+                if (x.type === 'image') {
+                    const nc = document.createElement('canvas'); nc.width = x.canvasWidth; nc.height = x.canvasHeight; nc.getContext('2d').drawImage(x.canvas, 0, 0);
+                    return { ...x, id: genId(), canvas: nc, ctx: nc.getContext('2d', { willReadFrequently: true }) };
+                }
+                return JSON.parse(JSON.stringify({ ...x, id: genId() }));
+            });
+            const nFrame = { id: genId(), type: 'regular', objects: nobj, delay: o.delay, thumbnail: o.thumbnail };
+            frames.splice(idx + 1, 0, nFrame); renderTimeline(); selectFrame(nFrame.id); updateThumbnail(nFrame);
+            saveAppState('dup_frame');
+        }
+        function clearAllFrames() {
+            if (frames.length === 0 && globalFrames.length === 0) return;
+            window.showPopup('초기화', '모든 프레임 및 공통 배경이 삭제됩니다.', 'confirm', () => { frames = []; globalFrames = []; stopPreview(); renderTimeline(); renderGlobalTimeline(); renderGlobalCanvases(); selectFrame(null); saveAppState('clear_all'); });
+        }
+
+        let draggedIndex = -1;
+        let draggedListType = null;
+
+        function handleDragStart(e) {
+            const container = e.target.closest('.scroll-area');
+            draggedListType = container.dataset.type;
+            draggedIndex = Array.from(e.target.parentNode.children).indexOf(e.target);
+            setTimeout(() => e.target.classList.add('dragging'), 0); e.dataTransfer.effectAllowed = 'move';
+        }
+        function handleDragOver(e) { e.preventDefault(); const t = e.target.closest('.frame-item'); if (!t || t.classList.contains('dragging')) return; const b = t.getBoundingClientRect(); document.querySelectorAll('.frame-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom')); if (e.clientY - (b.y + b.height / 2) > 0) t.classList.add('drag-over-bottom'); else t.classList.add('drag-over-top'); }
+        function handleDragLeave(e) { const t = e.target.closest('.frame-item'); if (t) t.classList.remove('drag-over-top', 'drag-over-bottom'); }
+        function handleDrop(e) {
+            e.preventDefault(); const t = e.target.closest('.frame-item'); if (!t) return;
+            t.classList.remove('drag-over-top', 'drag-over-bottom');
+
+            const container = t.closest('.scroll-area');
+            if (!container || container.dataset.type !== draggedListType) return;
+
+            let dropIndex = Array.from(t.parentNode.children).indexOf(t);
+            if (draggedIndex === dropIndex) return;
+
+            const b = t.getBoundingClientRect(); if (e.clientY - (b.y + b.height / 2) > 0) dropIndex++;
+
+            const targetArray = draggedListType === 'anim' ? frames : globalFrames;
+            const item = targetArray.splice(draggedIndex, 1)[0];
+            if (draggedIndex < dropIndex) dropIndex--;
+            targetArray.splice(dropIndex, 0, item);
+
+            if (draggedListType === 'anim') { renderTimeline(); }
+            else { renderGlobalTimeline(); renderGlobalCanvases(); frames.forEach(f => updateThumbnail(f, false)); }
+            saveAppState('move_frame');
+        }
+        function handleDragEnd(e) { e.target.classList.remove('dragging'); document.querySelectorAll('.frame-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom')); draggedIndex = -1; }
+
+        /* ================= 12. 재생 및 Export (저장) ================= */
+        function drawFrameToContext(ctx, frame, isPreview = false) {
+            frame.objects.forEach(obj => {
+                ctx.save(); ctx.translate(obj.x + obj.w / 2, obj.y + obj.h / 2);
+                if (obj.rot) ctx.rotate(obj.rot * Math.PI / 180);
+                if (obj.flipH) ctx.scale(-1, 1);
+                ctx.translate(-obj.w / 2, -obj.h / 2);
+
+                if (obj.type === 'image') {
+                    if (obj.filter !== 'none') ctx.filter = obj.filter;
+                    ctx.drawImage(obj.canvas, 0, 0, obj.canvasWidth, obj.canvasHeight, 0, 0, obj.w, obj.h);
+                } else if (obj.type === 'text') {
+                    ctx.font = `bold ${obj.fontSize}px 'Noto Sans KR', sans-serif`; ctx.fillStyle = obj.color;
+                    ctx.textBaseline = 'middle'; ctx.textAlign = 'center'; ctx.fillText(obj.text, obj.w / 2, obj.h / 2);
+                }
+                ctx.restore();
+            });
+        }
+
+        function drawCompositeFrame(ctx, regularFrame) {
+            globalFrames.filter(g => g.layerType === 'bg').forEach(g => drawFrameToContext(ctx, g, true));
+            if (regularFrame) drawFrameToContext(ctx, regularFrame, true);
+            globalFrames.filter(g => g.layerType === 'fg').forEach(g => drawFrameToContext(ctx, g, true));
+        }
+
+        function togglePlay() { if (frames.length === 0) return; if (isPlaying) stopPreview(); else startPreview(); }
+
+        function startPreview() {
+            isPlaying = true;
+            document.getElementById('btn-play').innerHTML = '<i class="fa-solid fa-pause"></i>'; document.getElementById('btn-play').classList.replace('text-emerald-600', 'text-amber-500');
+            objectsContainer.classList.add('hidden'); transformBox.classList.add('hidden'); previewCanvas.classList.remove('hidden');
+
+            const bgCvs = document.getElementById('global-bg-canvas'); if (bgCvs) bgCvs.style.display = 'none';
+            const fgCvs = document.getElementById('global-fg-canvas'); if (fgCvs) fgCvs.style.display = 'none';
+
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.add('opacity-50', 'pointer-events-none'));
+            document.getElementById('obj-props-container').classList.add('opacity-30', 'pointer-events-none');
+            document.getElementById('active-frame-info').textContent = "미리보기 재생 중...";
+
+            let baseSeq = frames.map((_, i) => i);
+            if (document.getElementById('global-pingpong').checked && baseSeq.length > 2) {
+                const rev = [...baseSeq].reverse().slice(1, -1); baseSeq = baseSeq.concat(rev);
+            }
+
+            const loopVal = parseInt(document.getElementById('global-loop').value) || 0;
+            const stopIdx = parseInt(document.getElementById('global-stop-frame').value) || -1;
+
+            previewSequence = [];
+            if (loopVal > 0) {
+                for (let i = 0; i < loopVal; i++) previewSequence = previewSequence.concat(baseSeq);
+                if (stopIdx !== -1 && stopIdx >= 0 && stopIdx < frames.length) previewSequence.push(stopIdx);
+            } else { previewSequence = baseSeq; }
+
+            currentSequenceIndex = 0; runPreviewLoop();
+        }
+
+        function stopPreview() {
+            isPlaying = false; clearTimeout(previewTimer);
+            document.getElementById('btn-play').innerHTML = '<i class="fa-solid fa-play"></i>'; document.getElementById('btn-play').classList.replace('text-amber-500', 'text-emerald-600');
+            objectsContainer.classList.remove('hidden'); previewCanvas.classList.add('hidden');
+
+            const bgCvs = document.getElementById('global-bg-canvas'); if (bgCvs) bgCvs.style.display = 'block';
+            const fgCvs = document.getElementById('global-fg-canvas'); if (fgCvs) fgCvs.style.display = 'block';
+
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('opacity-50', 'pointer-events-none'));
+            syncPropsUI(); updateTransformBox();
+
+            const frame = getActiveFrame();
+            document.getElementById('active-frame-info').textContent = frame ? (frame.type === 'global' ? `[공통 프레임] 편집 중` : `[애니메이션] 편집 중`) : '';
+        }
+
+        function runPreviewLoop() {
+            if (!isPlaying || frames.length === 0 || previewSequence.length === 0) return;
+
+            const loopVal = parseInt(document.getElementById('global-loop').value) || 0;
+
+            if (currentSequenceIndex >= previewSequence.length) {
+                if (loopVal > 0) { stopPreview(); window.showToast('지정된 반복 재생이 완료되었습니다.'); return; }
+                else { currentSequenceIndex = 0; }
+            }
+
+            const frameIndex = previewSequence[currentSequenceIndex];
+            const frame = frames[frameIndex];
+
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            drawCompositeFrame(previewCtx, frame);
+
+            document.querySelectorAll('#timeline-container .frame-item').forEach((el, i) => {
+                if (i === frameIndex) el.classList.add('bg-blue-50', 'border-blue-200');
+                else el.classList.remove('bg-blue-50', 'border-blue-200');
+            });
+
+            currentSequenceIndex++;
+            previewTimer = setTimeout(runPreviewLoop, frame.delay);
+        }
+
+        async function exportToPython() {
+            if (frames.length < 2) { window.showPopup('알림', '애니메이션을 저장하려면 최소 2개 이상의 프레임이 필요합니다.', 'alert', null, 'error'); return; }
+            window.showLoading(true, "고품질 GIF 렌더링 중...");
+
+            let exportFrames = frames.map(f => {
+                const tcvs = document.createElement('canvas'); tcvs.width = globalW; tcvs.height = globalH;
+                tcvs.getContext('2d').clearRect(0, 0, globalW, globalH);
+                drawCompositeFrame(tcvs.getContext('2d'), f);
+                return { delay: f.delay, base64: tcvs.toDataURL('image/png').split(',')[1] };
+            });
+
+            const usePingPong = document.getElementById('global-pingpong').checked;
+            if (usePingPong && exportFrames.length > 2) {
+                const reversed = [...exportFrames].reverse().slice(1, -1);
+                exportFrames = exportFrames.concat(reversed);
+            }
+
+            let exportLoopVal = parseInt(document.getElementById('global-loop').value) || 0;
+            const stopFrameIdx = parseInt(document.getElementById('global-stop-frame').value) || -1;
+
+            if (exportLoopVal > 0 && stopFrameIdx !== -1) {
+                let unrolledFrames = [];
+                for (let i = 0; i < exportLoopVal; i++) unrolledFrames = unrolledFrames.concat(exportFrames);
+                if (stopFrameIdx >= 0 && stopFrameIdx < frames.length) unrolledFrames.push(exportFrames[stopFrameIdx]);
+                exportFrames = unrolledFrames; exportLoopVal = 1;
+            }
+
+            let pyApi = null; try { pyApi = (window.pywebview && window.pywebview.api) || (window.parent && window.parent.pywebview && window.parent.pywebview.api); } catch (e) { }
+
+            if (pyApi) {
+                const payload = { settings: { width: globalW, height: globalH, loop: exportLoopVal }, frames: exportFrames };
+                const res = await pyApi.generate_gif(payload);
+                window.showLoading(false);
+                if (res && res.success) {
+                    const saveRes = await pyApi.save_gif_dialog(res.data);
+                    if (saveRes && saveRes.success) window.showToast('GIF 파일 저장이 완료되었습니다.');
+                    else if (saveRes && saveRes.message !== '취소됨') window.showPopup('오류', '저장 실패: ' + saveRes.message, 'alert', null, 'error');
+                } else window.showPopup('오류', '변환 실패: ' + (res ? res.error : '알수없음'), 'alert', null, 'error');
+            } else {
+                window.showLoading(false); window.showPopup('오류', '파이썬 통신 객체를 찾을 수 없습니다.', 'alert', null, 'error');
+            }
+        }
+
+        // 👇👇👇 exportToPython() 함수 바로 아래에 추가 👇👇👇
+        async function exportToWebP() {
+            if (frames.length < 2) { window.showPopup('알림', '애니메이션을 저장하려면 최소 2개 이상의 프레임이 필요합니다.', 'alert', null, 'error'); return; }
+            window.showLoading(true, "고품질 WebP 렌더링 중...");
+
+            let exportFrames = frames.map(f => {
+                const tcvs = document.createElement('canvas'); tcvs.width = globalW; tcvs.height = globalH;
+                tcvs.getContext('2d').clearRect(0, 0, globalW, globalH);
+                drawCompositeFrame(tcvs.getContext('2d'), f);
+                return { delay: f.delay, base64: tcvs.toDataURL('image/png').split(',')[1] };
+            });
+
+            const usePingPong = document.getElementById('global-pingpong').checked;
+            if (usePingPong && exportFrames.length > 2) {
+                const reversed = [...exportFrames].reverse().slice(1, -1);
+                exportFrames = exportFrames.concat(reversed);
+            }
+
+            let exportLoopVal = parseInt(document.getElementById('global-loop').value) || 0;
+            const stopFrameIdx = parseInt(document.getElementById('global-stop-frame').value) || -1;
+
+            if (exportLoopVal > 0 && stopFrameIdx !== -1) {
+                let unrolledFrames = [];
+                for (let i = 0; i < exportLoopVal; i++) unrolledFrames = unrolledFrames.concat(exportFrames);
+                if (stopFrameIdx >= 0 && stopFrameIdx < frames.length) unrolledFrames.push(exportFrames[stopFrameIdx]);
+                exportFrames = unrolledFrames; exportLoopVal = 1;
+            }
+
+            let pyApi = null; try { pyApi = (window.pywebview && window.pywebview.api) || (window.parent && window.parent.pywebview && window.parent.pywebview.api); } catch (e) { }
+
+            if (pyApi && pyApi.generate_webp) {
+                const payload = { settings: { width: globalW, height: globalH, loop: exportLoopVal }, frames: exportFrames };
+                const res = await pyApi.generate_webp(payload);
+                window.showLoading(false);
+                if (res && res.success) {
+                    const saveRes = await pyApi.save_webp_dialog(res.data);
+                    if (saveRes && saveRes.success) window.showToast('WebP 파일 저장이 완료되었습니다.');
+                    else if (saveRes && saveRes.message !== '취소됨') window.showPopup('오류', '저장 실패: ' + saveRes.message, 'alert', null, 'error');
+                } else window.showPopup('오류', 'WebP 변환 실패: ' + (res ? res.error : '알수없음'), 'alert', null, 'error');
+            } else {
+                window.showLoading(false); window.showPopup('오류', '파이썬 통신 객체를 찾을 수 없습니다.', 'alert', null, 'error');
+            }
+        }
+
+        async function exportToAPNG() {
+            if (frames.length < 2) { window.showPopup('알림', '애니메이션을 저장하려면 최소 2개 이상의 프레임이 필요합니다.', 'alert', null, 'error'); return; }
+            window.showLoading(true, "고품질 APNG 렌더링 중...");
+
+            let exportFrames = frames.map(f => {
+                const tcvs = document.createElement('canvas'); tcvs.width = globalW; tcvs.height = globalH;
+                tcvs.getContext('2d').clearRect(0, 0, globalW, globalH);
+                drawCompositeFrame(tcvs.getContext('2d'), f);
+                return { delay: f.delay, base64: tcvs.toDataURL('image/png').split(',')[1] };
+            });
+
+            const usePingPong = document.getElementById('global-pingpong').checked;
+            if (usePingPong && exportFrames.length > 2) {
+                const reversed = [...exportFrames].reverse().slice(1, -1);
+                exportFrames = exportFrames.concat(reversed);
+            }
+
+            let exportLoopVal = parseInt(document.getElementById('global-loop').value) || 0;
+            const stopFrameIdx = parseInt(document.getElementById('global-stop-frame').value) || -1;
+
+            if (exportLoopVal > 0 && stopFrameIdx !== -1) {
+                let unrolledFrames = [];
+                for (let i = 0; i < exportLoopVal; i++) unrolledFrames = unrolledFrames.concat(exportFrames);
+                if (stopFrameIdx >= 0 && stopFrameIdx < frames.length) unrolledFrames.push(exportFrames[stopFrameIdx]);
+                exportFrames = unrolledFrames; exportLoopVal = 1;
+            }
+
+            let pyApi = null; try { pyApi = (window.pywebview && window.pywebview.api) || (window.parent && window.parent.pywebview && window.parent.pywebview.api); } catch (e) { }
+
+            if (pyApi && pyApi.generate_apng) {
+                const payload = { settings: { width: globalW, height: globalH, loop: exportLoopVal }, frames: exportFrames };
+                const res = await pyApi.generate_apng(payload);
+                window.showLoading(false);
+                if (res && res.success) {
+                    const saveRes = await pyApi.save_apng_dialog(res.data);
+                    if (saveRes && saveRes.success) window.showToast('APNG 파일 저장이 완료되었습니다.');
+                    else if (saveRes && saveRes.message !== '취소됨') window.showPopup('오류', '저장 실패: ' + saveRes.message, 'alert', null, 'error');
+                } else window.showPopup('오류', 'APNG 변환 실패: ' + (res ? res.error : '알수없음'), 'alert', null, 'error');
+            } else {
+                window.showLoading(false); window.showPopup('오류', '파이썬 통신 객체를 찾을 수 없습니다.', 'alert', null, 'error');
+            }
+        }
+
+        // [신규] WebM 내보내기 버튼 클릭 시 실행
+        async function exportToWebM() {
+            if (frames.length < 2) { window.showPopup('알림', '애니메이션을 저장하려면 최소 2개 이상의 프레임이 필요합니다.', 'alert', null, 'error'); return; }
+
+            let pyApi = null; try { pyApi = (window.pywebview && window.pywebview.api) || (window.parent && window.parent.pywebview && window.parent.pywebview.api); } catch (e) { }
+            if (!pyApi || !pyApi.check_ffmpeg) { window.showPopup('오류', '파이썬 통신 객체를 찾을 수 없습니다.', 'alert', null, 'error'); return; }
+
+            // 1. 엔진이 이미 깔려있는지 확인
+            const checkRes = await pyApi.check_ffmpeg();
+
+            if (!checkRes.exists) {
+                // 2. 엔진이 없다면 동의를 구하는 팝업 호출
+                showPopup('엔진 다운로드', '고화질 투명 비디오(WebM) 생성을 위해\n추가 변환 엔진(약 40MB) 다운로드가 필요합니다.\n\n최초 1회만 진행되며, 지금 다운로드하시겠습니까?', 'confirm', async (agreed) => {
+                    if (agreed) {
+                        window.showLoading(true, "엔진 다운로드 및 설치 중...\n(인터넷 속도에 따라 1~2분 소요될 수 있습니다)");
+                        const downRes = await pyApi.download_ffmpeg();
+                        window.showLoading(false);
+
+                        if (downRes.success) {
+                            window.showToast("엔진 설치가 완료되었습니다!");
+                            proceedExportWebM(pyApi); // 다운로드 성공 시 바로 렌더링 이어가기
+                        } else {
+                            window.showPopup('오류', '다운로드 실패. 인터넷 연결을 확인해주세요.\n' + downRes.error, 'alert', null, 'error');
+                        }
+                    }
+                });
+            } else {
+                // 3. 엔진이 이미 있으면 팝업 없이 바로 렌더링
+                proceedExportWebM(pyApi);
+            }
+        }
+
+        // [신규] 실제 프레임을 합쳐서 파이썬으로 넘기는 함수
+        async function proceedExportWebM(pyApi) {
+            window.showLoading(true, "투명 비디오(WebM) 렌더링 중...\n(고화질 영상 변환은 몇 초 정도 걸릴 수 있습니다)");
+
+            let exportFrames = frames.map(f => {
+                const tcvs = document.createElement('canvas'); tcvs.width = globalW; tcvs.height = globalH;
+                tcvs.getContext('2d').clearRect(0, 0, globalW, globalH);
+                drawCompositeFrame(tcvs.getContext('2d'), f);
+                return { delay: f.delay, base64: tcvs.toDataURL('image/png').split(',')[1] }; // 투명도 유지를 위해 반드시 png
+            });
+
+            const usePingPong = document.getElementById('global-pingpong').checked;
+            if (usePingPong && exportFrames.length > 2) {
+                const reversed = [...exportFrames].reverse().slice(1, -1);
+                exportFrames = exportFrames.concat(reversed);
+            }
+
+            let exportLoopVal = parseInt(document.getElementById('global-loop').value) || 0;
+            const stopFrameIdx = parseInt(document.getElementById('global-stop-frame').value) || -1;
+
+            if (exportLoopVal > 0 && stopFrameIdx !== -1) {
+                let unrolledFrames = [];
+                for (let i = 0; i < exportLoopVal; i++) unrolledFrames = unrolledFrames.concat(exportFrames);
+                if (stopFrameIdx >= 0 && stopFrameIdx < frames.length) unrolledFrames.push(exportFrames[stopFrameIdx]);
+                exportFrames = unrolledFrames; exportLoopVal = 1;
+            }
+
+            const payload = { settings: { width: globalW, height: globalH, loop: exportLoopVal }, frames: exportFrames };
+            const res = await pyApi.generate_webm(payload);
+
+            window.showLoading(false);
+            if (res && res.success) {
+                const saveRes = await pyApi.save_webm_dialog(res.data);
+                if (saveRes && saveRes.success) window.showToast('투명 비디오 파일(WebM)이 저장되었습니다.\n파워포인트에 바로 삽입해보세요!');
+                else if (saveRes && saveRes.message !== '취소됨') window.showPopup('오류', '저장 실패: ' + saveRes.message, 'alert', null, 'error');
+            } else window.showPopup('오류', 'WebM 변환 실패: ' + (res ? res.error : '알수없음'), 'alert', null, 'error');
+        }
+
+        async function exportToMP4() {
+            if (frames.length < 2) { window.showPopup('알림', '애니메이션을 저장하려면 최소 2개 이상의 프레임이 필요합니다.', 'alert', null, 'error'); return; }
+
+            let pyApi = (window.pywebview && window.pywebview.api) || (window.parent && window.parent.pywebview && window.parent.pywebview.api);
+            const check = await pyApi.check_ffmpeg();
+
+            if (!check.exists) {
+                showPopup('엔진 설치', '고화질 비디오(MP4) 생성을 위해 엔진(약 40MB) 다운로드가 필요합니다. 진행하시겠습니까?', 'confirm', async (ok) => {
+                    if (ok) {
+                        window.showLoading(true, "엔진 다운로드 중...");
+                        const res = await pyApi.download_ffmpeg();
+                        window.showLoading(false);
+                        if (res.success) proceedExportMP4(pyApi);
+                    }
+                });
+            } else {
+                proceedExportMP4(pyApi);
+            }
+        }
+
+        async function proceedExportMP4(pyApi) {
+            window.showLoading(true, "고화질 MP4 비디오 생성 중...\n(반복 횟수가 많으면 영상이 길어져 시간이 걸릴 수 있습니다)");
+
+            let exportFrames = frames.map(f => {
+                const tcvs = document.createElement('canvas'); tcvs.width = globalW; tcvs.height = globalH;
+                tcvs.getContext('2d').clearRect(0, 0, globalW, globalH);
+                drawCompositeFrame(tcvs.getContext('2d'), f);
+                return { delay: f.delay, base64: tcvs.toDataURL('image/png').split(',')[1] };
+            });
+
+            // 1. 핑퐁(왕복) 처리
+            const usePingPong = document.getElementById('global-pingpong').checked;
+            if (usePingPong && exportFrames.length > 2) {
+                const reversed = [...exportFrames].reverse().slice(1, -1);
+                exportFrames = exportFrames.concat(reversed);
+            }
+
+            // 2. 지정 횟수 반복 (Loop) 및 정지 프레임 처리 추가
+            let exportLoopVal = parseInt(document.getElementById('global-loop').value) || 0;
+            const stopFrameIdx = parseInt(document.getElementById('global-stop-frame').value) || -1;
+
+            if (exportLoopVal > 0 && stopFrameIdx !== -1) {
+                let unrolledFrames = [];
+                // 지정된 횟수만큼 프레임을 이어 붙여서 영상을 길게 만듭니다.
+                for (let i = 0; i < exportLoopVal; i++) {
+                    unrolledFrames = unrolledFrames.concat(exportFrames);
+                }
+                // 마지막 멈춤 프레임 추가
+                if (stopFrameIdx >= 0 && stopFrameIdx < frames.length) {
+                    unrolledFrames.push(exportFrames[stopFrameIdx]);
+                }
+                exportFrames = unrolledFrames;
+                exportLoopVal = 1;
+            }
+
+            const payload = { settings: { width: globalW, height: globalH, loop: exportLoopVal }, frames: exportFrames };
+            const res = await pyApi.generate_mp4(payload);
+
+            window.showLoading(false);
+            if (res && res.success) {
+                const saveRes = await pyApi.save_mp4_dialog(res.data);
+                if (saveRes && saveRes.success) window.showToast('MP4 비디오 저장이 완료되었습니다.');
+                else if (saveRes && saveRes.message !== '취소됨') window.showPopup('오류', '저장 실패: ' + saveRes.message, 'alert', null, 'error');
+            } else window.showPopup('오류', '변환 실패: ' + (res ? res.error : '알수없음'), 'alert', null, 'error');
+        }
+
+
+    </script>
+</body>
+</html>

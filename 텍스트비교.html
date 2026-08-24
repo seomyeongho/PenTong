@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>정밀 텍스트 비교 분석기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;900&family=JetBrains+Mono&display=swap');
+        
+        body { 
+            font-family: 'Pretendard', sans-serif; 
+            background-color: #fcfcfc;
+            color: #000000;
+            margin: 0;
+            padding: 20px;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .strong-border {
+            border: 2px solid #1a1a1a !important;
+        }
+
+        /* 입력창 영역 레이아웃 */
+        .input-container {
+            display: flex;
+            gap: 24px;
+            width: 100%;
+            margin-bottom: 40px;
+        }
+        .input-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .input-header {
+            font-size: 14px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 10px;
+            padding-left: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .input-box {
+            width: 100%;
+            height: 480px;
+            padding: 20px;
+            border: 2px solid #1a1a1a;
+            border-radius: 12px;
+            outline: none;
+            font-size: 16px;
+            line-height: 1.6;
+            resize: none;
+            background: white;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.2s ease;
+        }
+        .input-box:focus {
+            border-color: #2563eb !important;
+            background-color: #fafcfe;
+        }
+
+        /* 테이블 디자인 */
+        .diff-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 2px solid #1a1a1a;
+            table-layout: fixed;
+            background: white;
+        }
+        .diff-table th {
+            background-color: #f8fafc;
+            border: 2px solid #1a1a1a;
+            padding: 16px;
+            font-weight: 900;
+            font-size: 14px;
+            text-align: center;
+        }
+        .diff-table td {
+            border: 1px solid #1a1a1a;
+            padding: 18px;
+            font-size: 15px;
+            vertical-align: top;
+            word-break: break-all;
+            line-height: 1.8;
+        }
+        .diff-table td:first-child {
+            background-color: #f9fafb;
+            font-weight: 700;
+            color: #9ca3af;
+        }
+
+        /* 하이라이트 스타일 */
+        .highlight-remove {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            text-decoration: line-through;
+            font-weight: 700;
+            padding: 0 4px;
+            border-radius: 4px;
+        }
+        .highlight-add {
+            background-color: #dcfce7;
+            color: #15803d;
+            font-weight: 700;
+            padding: 0 4px;
+            border-radius: 4px;
+        }
+
+        /* 버튼 스타일 */
+        .action-btn {
+            padding: 14px 44px;
+            border: 2px solid #1a1a1a;
+            border-radius: 10px;
+            font-weight: 900;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 3px 3px 0px #1a1a1a;
+        }
+        .action-btn:active {
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #1a1a1a;
+        }
+        .btn-blue { background-color: #2563eb; color: white; }
+        .btn-blue:hover { background-color: #1d4ed8; }
+        .btn-white { background-color: white; color: #1a1a1a; border-color: #cbd5e1; }
+        .btn-white:hover { border-color: #1a1a1a; background-color: #f8fafc; }
+
+        .badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 800;
+            border: 1.5px solid currentColor;
+            display: inline-block;
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="max-w-[1600px] mx-auto">
+        <!-- 상단 타이틀 -->
+        <header class="mb-12 border-b-2 border-black pb-8">
+            <h1 class="text-4xl font-black mb-3 tracking-tighter">텍스트 비교 분석기</h1>
+            <p class="text-gray-500 font-bold italic text-lg">데이터의 정밀한 차이를 시각화하고 분석 리포트를 제공합니다.</p>
+        </header>
+
+        <!-- 입력 영역 -->
+        <div class="input-container">
+            <div class="input-wrapper">
+                <div class="input-header text-gray-500">
+                    <span class="w-2 h-2 rounded-full bg-gray-300"></span>
+                    ORIGINAL (원본)
+                </div>
+                <textarea id="text1" class="input-box" placeholder="원본 내용을 입력하세요."></textarea>
+            </div>
+            <div class="input-wrapper">
+                <div class="input-header text-blue-600">
+                    <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                    MODIFIED (수정본)
+                </div>
+                <textarea id="text2" class="input-box" placeholder="수정된 내용을 입력하세요."></textarea>
+            </div>
+        </div>
+
+        <!-- 버튼 영역 -->
+        <div class="flex justify-center items-center gap-6 mb-20">
+            <button onclick="runComparison()" class="action-btn btn-blue">
+                차이점 분석 실행
+            </button>
+            <button onclick="resetAll()" class="action-btn btn-white">
+                전체 초기화
+            </button>
+        </div>
+
+        <!-- 결과 리포트 영역 -->
+        <div id="resultArea" class="hidden">
+            <div class="flex items-center justify-between mb-8 border-b-2 border-black pb-5">
+                <h2 class="text-2xl font-black tracking-tight underline decoration-blue-500 decoration-4 underline-offset-8">분석 결과 데이터</h2>
+                <div class="flex gap-6 font-black text-lg">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-400">추가됨</span>
+                        <span class="text-green-600" id="addTotal">0</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-400">삭제됨</span>
+                        <span class="text-red-600" id="removeTotal">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto rounded-xl shadow-sm">
+                <table class="diff-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 100px;">행 번호</th>
+                            <th style="width: 35%;">원본 (이전)</th>
+                            <th style="width: 35%;">수정본 (이후)</th>
+                            <th>분석 요약</th>
+                        </tr>
+                    </thead>
+                    <tbody id="diffResultBody" class="mono">
+                        <!-- JS로 내용 채움 -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="noDifference" class="hidden text-center py-32 bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl mt-4">
+                <p class="text-2xl font-black text-gray-300">비교 결과 데이터가 100% 일치합니다.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const t1 = document.getElementById('text1');
+        const t2 = document.getElementById('text2');
+        const resBody = document.getElementById('diffResultBody');
+        const resArea = document.getElementById('resultArea');
+        const noDiff = document.getElementById('noDifference');
+
+        function resetAll() {
+            if(confirm('모든 데이터를 삭제하고 초기화할까요?')) {
+                t1.value = '';
+                t2.value = '';
+                resArea.classList.add('hidden');
+            }
+        }
+
+        function runComparison() {
+            const v1 = t1.value;
+            const v2 = t2.value;
+            if(!v1 && !v2) return;
+
+            resArea.classList.remove('hidden');
+            resBody.innerHTML = '';
+            
+            const diffLines = Diff.diffLines(v1, v2);
+            
+            let addCount = 0;
+            let removeCount = 0;
+            let line1 = 1;
+            let line2 = 1;
+            let foundDiff = false;
+
+            for (let i = 0; i < diffLines.length; i++) {
+                const part = diffLines[i];
+                const next = diffLines[i+1];
+
+                if (part.removed && next && next.added) {
+                    addResultRow(line1, line2, part.value, next.value, 'CHANGED');
+                    line1 += part.count;
+                    line2 += next.count;
+                    removeCount += part.count;
+                    addCount += next.count;
+                    foundDiff = true;
+                    i++; 
+                } 
+                else if (part.removed) {
+                    addResultRow(line1, '-', part.value, '', 'REMOVED');
+                    line1 += part.count;
+                    removeCount += part.count;
+                    foundDiff = true;
+                } 
+                else if (part.added) {
+                    addResultRow('-', line2, '', part.value, 'ADDED');
+                    line2 += part.count;
+                    addCount += part.count;
+                    foundDiff = true;
+                } 
+                else {
+                    line1 += part.count;
+                    line2 += part.count;
+                }
+            }
+
+            if (!foundDiff) {
+                noDiff.classList.remove('hidden');
+                document.querySelector('.diff-table').style.display = 'none';
+            } else {
+                noDiff.classList.add('hidden');
+                document.querySelector('.diff-table').style.display = 'table';
+            }
+
+            document.getElementById('addTotal').innerText = addCount;
+            document.getElementById('removeTotal').innerText = removeCount;
+            
+            resArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function addResultRow(l1, l2, val1, val2, type) {
+            const tr = document.createElement('tr');
+            let badge = "";
+            let desc = "";
+
+            if (type === 'CHANGED') {
+                tr.style.backgroundColor = "#fafcfe";
+                badge = '<span class="badge text-blue-700">MODIFIED</span>';
+                
+                const charDiff = Diff.diffChars(val1, val2);
+                let c1 = "", c2 = "", rc = 0, ac = 0;
+                charDiff.forEach(p => {
+                    if (p.removed) { 
+                        c1 += `<span class="highlight-remove">${p.value}</span>`; 
+                        rc += p.value.replace(/\n/g, '').length; 
+                    }
+                    else if (p.added) { 
+                        c2 += `<span class="highlight-add">${p.value}</span>`; 
+                        ac += p.value.replace(/\n/g, '').length; 
+                    }
+                    else { 
+                        c1 += p.value; 
+                        c2 += p.value; 
+                    }
+                });
+                val1 = c1; val2 = c2;
+                
+                // 분석 요약 가독성 개선: 0인 경우 표시하지 않음
+                let descParts = [];
+                if (rc > 0) descParts.push(`<strong>${rc}자</strong> 삭제`);
+                if (ac > 0) descParts.push(`<strong>${ac}자</strong> 추가`);
+                desc = descParts.length > 0 ? descParts.join(' / ') : "공백/줄바꿈 변경";
+
+            } else if (type === 'REMOVED') {
+                tr.style.backgroundColor = "#fffafa";
+                badge = '<span class="badge text-red-600">DELETED</span>';
+                val1 = `<span class="highlight-remove">${val1}</span>`;
+                desc = "행 삭제됨";
+            } else if (type === 'ADDED') {
+                tr.style.backgroundColor = "#fafffa";
+                badge = '<span class="badge text-green-700">CREATED</span>';
+                val2 = `<span class="highlight-add">${val2}</span>`;
+                desc = "행 추가됨";
+            }
+
+            let lineInfo = "";
+            if (l1 === '-') {
+                lineInfo = l2;
+            } else if (l2 === '-') {
+                lineInfo = l1;
+            } else if (l1 === l2) {
+                lineInfo = l1;
+            } else {
+                lineInfo = `${l1} → ${l2}`;
+            }
+
+            tr.innerHTML = `
+                <td class="text-center font-black">${lineInfo}</td>
+                <td class="whitespace-pre-wrap">${val1}</td>
+                <td class="whitespace-pre-wrap">${val2}</td>
+                <td class="bg-white">
+                    <div class="flex flex-col items-start gap-1">
+                        ${badge}
+                        <div class="text-[11px] text-gray-400 font-bold italic uppercase tracking-tighter">${desc}</div>
+                    </div>
+                </td>
+            `;
+            resBody.appendChild(tr);
+        }
+    </script>
+</body>
+</html>

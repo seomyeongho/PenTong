@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR 코드 생성기</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRCode.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- html2canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+    <!-- FontAwesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Jua&family=Do+Hyeon&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            user-select: none;
+        }
+
+        input[type="text"], input[type="number"] {
+            user-select: text;
+        }
+
+        /* 폰트 옵션용 클래스 */
+        .font-noto {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        .font-jua {
+            font-family: 'Jua', sans-serif;
+        }
+
+        .font-dohyeon {
+            font-family: 'Do Hyeon', sans-serif;
+        }
+
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 2px;
+        }
+
+        /* 패턴 정의 */
+        .pattern-none {
+            background: #ffffff;
+        }
+
+        .pattern-dots {
+            background-image: radial-gradient(#cbd5e1 15%, transparent 16%);
+            background-size: 10px 10px;
+        }
+
+        .pattern-grid {
+            background-image: linear-gradient(#cbd5e1 1px, transparent 1px), linear-gradient(90deg, #cbd5e1 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .pattern-diagonal {
+            background: repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 10px, #ffffff 10px, #ffffff 20px);
+        }
+
+        .pattern-zigzag {
+            background-color: #ffffff;
+            opacity: 1;
+            background-image: linear-gradient(135deg, #f1f5f9 25%, transparent 25%), linear-gradient(225deg, #f1f5f9 25%, transparent 25%), linear-gradient(45deg, #f1f5f9 25%, transparent 25%), linear-gradient(315deg, #f1f5f9 25%, transparent 25%);
+            background-position: 10px 0, 10px 0, 0 0, 0 0;
+            background-size: 20px 20px;
+            background-repeat: repeat;
+        }
+
+        .pattern-paper {
+            background-color: #fff7ed;
+            background-image: url("data:image/svg+xml,%3Csvg width='6' height='6' viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ea580c' fill-opacity='0.1' fill-rule='evenodd'%3E%3Cpath d='M5 0h1L0 6V5zM6 5v1H5z'/%3E%3C/g%3E%3C/svg%3E");
+        }
+
+        /* 컨트롤 그룹 스타일 - 컴팩트하게 수정 */
+        .control-group {
+            background: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 0.75rem 1rem;
+        }
+
+            .control-group:last-child {
+                border-bottom: none;
+            }
+
+        .section-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #4b5563;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+            .section-title i {
+                margin-right: 0.5rem;
+                color: #6366f1;
+            }
+
+        /* 입력 행 스타일 (라벨 왼쪽, 컨트롤 오른쪽) */
+        .input-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+            .input-row:last-child {
+                margin-bottom: 0;
+            }
+
+        .row-label {
+            width: 80px; /* 고정 너비 라벨 */
+            font-size: 0.75rem;
+            color: #6b7280;
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+
+        .row-control {
+            flex-grow: 1;
+        }
+
+        /* 이모지 그리드 */
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+            max-height: 80px;
+            overflow-y: auto;
+            padding: 2px;
+            background: #f9fafb;
+            border-radius: 0.375rem;
+            border: 1px solid #e5e7eb;
+        }
+
+        .emoji-btn {
+            font-size: 1.1rem;
+            padding: 2px;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            text-align: center;
+        }
+
+            .emoji-btn:hover {
+                background: #e5e7eb;
+            }
+
+        /* 확대 시 픽셀 깨짐 방지 (QR 코드를 선명하게) */
+        #qrcode canvas, #qrcode img {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* Toast 애니메이션 */
+        .toast-enter {
+            transform: translateY(100%) translateX(-50%);
+            opacity: 0;
+        }
+
+        .toast-enter-active {
+            transform: translateY(0) translateX(-50%);
+            opacity: 1;
+            transition: all 0.3s ease-out;
+        }
+
+        .toast-exit {
+            transform: translateY(0) translateX(-50%);
+            opacity: 1;
+        }
+
+        .toast-exit-active {
+            transform: translateY(100%) translateX(-50%);
+            opacity: 0;
+            transition: all 0.3s ease-in;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col md:flex-row overflow-hidden text-gray-800">
+
+    <!-- 좌측: 설정 패널 -->
+    <div id="left-panel" class="w-full md:w-[420px] bg-white shadow-lg z-20 flex flex-col h-full border-r border-gray-200 transition-all duration-300">
+        <!-- 헤더 -->
+        <div class="px-5 py-3 bg-white border-b border-gray-200 shrink-0 flex items-center justify-between">
+            <h1 class="text-lg font-bold text-gray-800 flex items-center">
+                <i class="fa-solid fa-qrcode text-indigo-600 mr-2"></i>QR 코드 생성기
+            </h1>
+            <button onclick="openScanModal()" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 rounded-lg text-sm font-bold shadow-sm transition-all active:scale-95 flex items-center">
+                <i class="fa-solid fa-camera mr-2"></i>QR 스캔
+            </button>
+        </div>
+
+        <!-- 스크롤 영역 -->
+        <div class="overflow-y-auto flex-1 custom-scrollbar">
+
+            <!-- 1. 기본 설정 -->
+            <div class="control-group">
+                <div class="section-title"><i class="fa-solid fa-link"></i>내용 및 색상</div>
+
+                <div class="input-row items-start">
+                    <span class="row-label pt-2">URL/텍스트</span>
+                    <div class="row-control flex flex-col space-y-1">
+                        <input type="text" id="qr-text"
+                               class="w-full px-2 py-1.5 bg-gray-50 border border-gray-300 rounded text-sm focus:outline-none focus:border-indigo-500 transition-all"
+                               placeholder="입력하세요"
+                               oninput="debounceGenerate()">
+                        <div class="flex space-x-1 justify-end">
+                            
+                            <button onclick="copyInputText()" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-[10px] border border-gray-200 transition-colors shadow-sm active:scale-95">
+                                <i class="fa-regular fa-copy mr-1"></i>복사
+                            </button>
+                            <button onclick="openUrl()" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-[10px] border border-gray-200 transition-colors shadow-sm active:scale-95">
+                                <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>열기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+
+
+
+                <div class="input-row">
+                    <span class="row-label">색상</span>
+                    <div class="row-control flex space-x-2">
+                        <div class="flex items-center space-x-1 flex-1 bg-gray-50 border border-gray-300 rounded px-2 py-1">
+                            <input type="color" id="color-dark" value="#000000" class="w-5 h-5 rounded cursor-pointer border-none p-0" oninput="debounceGenerate()">
+                            <span class="text-xs text-gray-500">QR</span>
+                        </div>
+                        <div class="flex items-center space-x-1 flex-1 bg-gray-50 border border-gray-300 rounded px-2 py-1">
+                            <input type="color" id="color-light" value="#ffffff" class="w-5 h-5 rounded cursor-pointer border-none p-0" oninput="debounceGenerate()">
+                            <span class="text-xs text-gray-500">배경</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 프레임 스타일 -->
+            <div class="control-group">
+                <div class="section-title"><i class="fa-solid fa-crop-simple"></i>프레임 스타일</div>
+
+                <div class="input-row">
+                    <span class="row-label">테두리 두께</span>
+                    <div class="row-control flex items-center">
+                        <input type="range" id="border-width" min="0" max="20" value="8" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" oninput="updateStyle()">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <span class="row-label">모서리 둥글기</span>
+                    <div class="row-control flex items-center">
+                        <input type="range" id="border-radius" min="0" max="200" value="20" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" oninput="updateStyle()">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <span class="row-label">안쪽 여백</span>
+                    <div class="row-control flex items-center">
+                        <input type="range" id="padding-size" min="0" max="100" value="30" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" oninput="updateStyle()">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <span class="row-label">옵션</span>
+                    <div class="row-control flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs text-gray-500">프레임 색상</span>
+                            <input type="color" id="border-color" value="#6366f1" class="w-6 h-6 rounded cursor-pointer border border-gray-300 p-0" oninput="updateStyle()">
+                        </div>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="checkbox" id="drop-shadow" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300" onchange="updateStyle()" checked>
+                            <span class="ml-1 text-xs text-gray-500">그림자</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 꾸미기 -->
+            <div class="control-group">
+                <div class="section-title"><i class="fa-solid fa-wand-magic-sparkles"></i>꾸미기</div>
+
+                <div class="input-row">
+                    <span class="row-label">배경 패턴</span>
+                    <div class="row-control grid grid-cols-6 gap-1">
+                        <button onclick="setPattern('pattern-none')" class="h-6 rounded border bg-white hover:border-indigo-500 focus:ring-1 ring-indigo-500" title="없음"></button>
+                        <button onclick="setPattern('pattern-dots')" class="h-6 rounded border pattern-dots hover:border-indigo-500 focus:ring-1 ring-indigo-500" title="도트"></button>
+                        <button onclick="setPattern('pattern-grid')" class="h-6 rounded border pattern-grid hover:border-indigo-500 focus:ring-1 ring-indigo-500" title="격자"></button>
+                        <button onclick="setPattern('pattern-diagonal')" class="h-6 rounded border pattern-diagonal hover:border-indigo-500 focus:ring-1 ring-indigo-500" title="사선"></button>
+                        <button onclick="setPattern('pattern-zigzag')" class="h-6 rounded border pattern-zigzag hover:border-indigo-500 focus:ring-1 ring-indigo-500" title="지그재그"></button>
+                        <button onclick="setPattern('pattern-paper')" class="h-6 rounded border pattern-paper hover:border-indigo-500 focus:ring-1 ring-indigo-500" title="종이"></button>
+                    </div>
+                </div>
+
+                <div class="mt-2">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs text-gray-500 font-medium">중앙 아이콘</span>
+                        <div class="flex items-center space-x-1">
+                            <input type="text" id="center-emoji" class="w-6 text-center border-b border-indigo-300 focus:outline-none bg-transparent text-sm" readonly>
+                            <button onclick="setEmoji('')" class="text-[10px] text-red-500 hover:underline">삭제</button>
+                        </div>
+                    </div>
+
+                    <div class="flex space-x-1 mb-1 overflow-x-auto pb-1 no-scrollbar">
+                        <button onclick="renderEmojis('face')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-[10px] whitespace-nowrap">표정</button>
+                        <button onclick="renderEmojis('heart')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-[10px] whitespace-nowrap">하트</button>
+                        <button onclick="renderEmojis('animal')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-[10px] whitespace-nowrap">동물</button>
+                        <button onclick="renderEmojis('food')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-[10px] whitespace-nowrap">음식</button>
+                        <button onclick="renderEmojis('object')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-[10px] whitespace-nowrap">사물</button>
+                    </div>
+                    <div id="emoji-container" class="emoji-grid custom-scrollbar"></div>
+                </div>
+
+                <div class="mt-3 space-y-2">
+                    <div class="input-row">
+                        <span class="row-label">내부 문구</span>
+                        <input type="text" id="inner-label-text"
+                               class="row-control px-2 py-1 bg-gray-50 border border-gray-300 rounded text-sm focus:outline-none focus:border-indigo-500"
+                               placeholder="SCAN ME" oninput="updateStyle()">
+                    </div>
+                    <div class="input-row">
+                        <span class="row-label">외부 문구</span>
+                        <input type="text" id="outer-label-text"
+                               class="row-control px-2 py-1 bg-gray-50 border border-gray-300 rounded text-sm focus:outline-none focus:border-indigo-500"
+                               placeholder="설명 입력" oninput="updateStyle()">
+                    </div>
+
+                    <div class="flex items-center justify-between pt-1">
+                        <div class="flex space-x-1">
+                            <button onclick="setLabelFont('font-noto')" class="px-2 py-0.5 bg-gray-100 border border-gray-200 rounded text-[10px] hover:bg-gray-200 font-noto">고딕</button>
+                            <button onclick="setLabelFont('font-jua')" class="px-2 py-0.5 bg-gray-100 border border-gray-200 rounded text-[10px] hover:bg-gray-200 font-jua">주아체</button>
+                            <button onclick="setLabelFont('font-dohyeon')" class="px-2 py-0.5 bg-gray-100 border border-gray-200 rounded text-[10px] hover:bg-gray-200 font-dohyeon">도현체</button>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[10px] text-gray-400">글자색</span>
+                            <input type="color" id="label-color" value="#4b5563" class="w-5 h-5 rounded cursor-pointer border border-gray-300 p-0" oninput="updateStyle()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 모바일용 하단 버튼 (PC에선 숨김) -->
+        <div id="mobile-footer" class="p-3 border-t border-gray-200 bg-white md:hidden shrink-0 flex space-x-2">
+            <button onclick="copyToClipboard()"
+                    class="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-bold text-sm shadow active:scale-95 transition flex items-center justify-center">
+                <i class="fa-regular fa-copy mr-2"></i> 복사하기
+            </button>
+            <button onclick="handlePresentationToggle()"
+                    class="bg-gray-600 text-white px-4 py-2.5 rounded-lg font-bold shadow active:scale-95 transition flex items-center justify-center">
+                <i class="fa-solid fa-expand"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 우측: 미리보기 패널 -->
+    <div id="right-panel" class="flex-1 bg-gray-100 flex items-center justify-center relative overflow-hidden transition-all duration-300">
+
+        <!-- 발표 모드 토글 버튼 (플로팅) - 디자인 숨기고 크게 보기 -->
+        <button onclick="handlePresentationToggle()" id="toggle-presentation-btn"
+                class="hidden fixed top-6 right-6 z-[60] bg-white hover:bg-gray-200 text-gray-900 px-6 py-2 rounded-full font-bold shadow-2xl transition-all active:scale-95 items-center">
+            <i class="fa-solid fa-compress mr-2"></i> 원래대로 (ESC)
+        </button>
+
+        <!-- 발표 모드 줌 안내 텍스트 -->
+        <div id="zoom-tip" class="hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[60] bg-black bg-opacity-50 text-white px-4 py-2 rounded-full text-xs pointer-events-none transition-opacity duration-300">
+            <i class="fa-solid fa-mouse mr-1"></i> 마우스 휠로 크기 조절
+        </div>
+
+        <!-- 배경 장식 -->
+        <div id="bg-decorations" class="absolute inset-0 z-0 opacity-30 pointer-events-none transition-opacity duration-300">
+            <div class="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-50"></div>
+            <div class="absolute bottom-[-10%] left-[-5%] w-[40vw] h-[40vw] bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-50"></div>
+        </div>
+
+        <div class="flex flex-col items-center z-10 w-full px-4">
+
+            <!-- 캔버스 영역 -->
+            <div id="capture-area" class="bg-transparent p-4 rounded-xl transition-transform duration-300 flex flex-col items-center justify-center transform hover:scale-[1.01] origin-center">
+
+                <!-- 디자인 컨테이너 -->
+                <div id="design-container"
+                     class="bg-white border-solid border-indigo-500 flex flex-col items-center justify-center relative transition-all duration-300 box-border"
+                     style="min-width: 200px; min-height: 200px;">
+
+                    <!-- QR 코드 래퍼 -->
+                    <div class="relative">
+                        <div id="qrcode" class="bg-white"></div>
+                        <div id="center-icon-overlay" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl hidden pointer-events-none drop-shadow-md z-10">
+                            😎
+                        </div>
+                    </div>
+
+                    <!-- 테두리 안 문구 -->
+                    <div id="inner-label-display" class="mt-2 text-center font-bold text-lg hidden break-words w-full px-2 max-w-[200px]">
+                        SCAN ME
+                    </div>
+                </div>
+
+                <!-- 테두리 밖 문구 -->
+                <div id="outer-label-display" class="mt-3 text-center font-bold text-lg hidden break-words w-full max-w-[300px] text-gray-700">
+                    Outer Text
+                </div>
+            </div>
+
+            <!-- PC용 액션 버튼 묶음 -->
+            <div id="action-buttons" class="mt-6 hidden md:flex space-x-4 transition-opacity duration-300">
+                <button onclick="copyToClipboard()" id="copy-btn"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center text-lg">
+                    <i class="fa-regular fa-copy mr-2"></i> 이미지 복사하기
+                </button>
+                <button onclick="handlePresentationToggle()"
+                        class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center text-lg">
+                    <i class="fa-solid fa-expand mr-2"></i> 촬영용 확대
+                </button>
+            </div>
+
+            <div id="tip-text" class="mt-4 text-center text-gray-400 text-xs transition-opacity duration-300">
+                팁: '안쪽 여백'을 조절하여 전체 크기를 변경할 수 있습니다.
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 메시지 -->
+    <div id="toast" class="fixed bottom-10 left-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-2xl flex items-center space-x-3 toast-enter pointer-events-none z-50">
+        <i id="toast-icon" class="fa-solid fa-check text-green-400"></i>
+        <span id="toast-msg" class="text-sm font-medium">복사되었습니다.</span>
+    </div>
+
+    <div id="scan-modal" class="fixed inset-0 bg-gray-900 bg-opacity-60 z-[100] hidden flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 relative flex flex-col">
+            <button onclick="closeScanModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-2xl transition-colors">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <h2 class="text-xl font-bold text-gray-800 mb-5 flex items-center">
+                <i class="fa-solid fa-camera text-indigo-600 mr-2"></i>QR 코드 스캔
+            </h2>
+
+            <div id="scan-dropzone" class="w-full min-h-[250px] border-2 border-dashed border-indigo-300 bg-indigo-50 rounded-lg flex flex-col items-center justify-center text-center mb-5 relative overflow-hidden transition-all">
+                <div id="scan-instruction" class="p-6">
+                    <i class="fa-regular fa-clipboard text-5xl text-indigo-400 mb-4"></i>
+                    <p class="text-base font-medium text-gray-600 leading-relaxed">이곳을 클릭하고<br><span class="text-indigo-600 font-bold text-lg">Ctrl + V</span>를 눌러<br>캡처한 이미지를 붙여넣으세요.</p>
+                </div>
+                <img id="scanned-image" class="absolute inset-0 w-full h-full object-contain hidden bg-transparent" src="" alt="Scanned QR">
+            </div>
+
+            <div id="scan-result-area" class="hidden flex-col space-y-4">
+                <div class="bg-gray-100 p-4 rounded-lg border border-gray-200">
+                    <p class="text-sm text-gray-500 mb-1 font-bold">해독된 내용:</p>
+                    <p id="scan-result-text" class="text-base text-gray-800 break-all select-all font-medium"></p>
+                </div>
+
+                <div class="flex space-x-3">
+                    <button onclick="copyScannedResult()" class="flex-1 py-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-bold shadow-sm transition-colors">
+                        <i class="fa-regular fa-copy mr-1"></i> 복사
+                    </button>
+                    <button onclick="openScannedResult()" class="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-sm transition-colors">
+                        <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> 열기
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let qrcodeObj = null;
+        let debounceTimer;
+        let isPresentation = false; // 발표(확대) 모드 상태 저장
+        let presentationScale = 1; // 휠 스크롤을 위한 현재 스케일 저장
+
+        const DEFAULT_URL = 'https://youtube.com/@감각영어-x6v';
+
+        const emojiData = {
+            face: ["😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "😚", "😙", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🤫", "🤔", "🤐", "🤨", "😐", "😑", "😶", "😏", "😒", "🙄", "😬", "🤥", "😌", "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕", "🤢", "🤮", "🤧", "🥵", "🥶", "🥴", "😵", "🤯", "🤠", "🥳", "😎", "🤓", "🧐", "😕", "😟", "🙁", "☹️", "😮", "😯", "😲", "😳", "🥺", "😦", "😧", "😨", "😰", "😥", "😢", "😭", "😱", "😖", "😣", "😞", "😓", "😩", "😫", "🥱", "😤"],
+            heart: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "☮️", "✝️", "☪️", "🕉️", "☸️", "✡️", "🔯", "🕎", "☯️", "☦️"],
+            animal: ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "cow", "🐷", "🐽", "🐸", "🐵", "🙈", "🙉", "🙊", "🐒", "🐔", "🐧", "🐦", "🐤", "🐣", "🐥", "鸭", "🦅", "🦉", "🦇", "🐺", "🐗", "🐴", "🦄", "🐝", "🐛", "🦋", "🐌", "🐞", "🐜", "🦟", "🦗", "🕷️", "🕸️", "🦂", "🐢", "🐍", "🦎", "🦖", "🦕", "🐙", "🦑", "🦐", "🦞", "🦀", "🐡", "🐠", "🐟", "🐬", "🐳", "🐋", "🦈", "🐊", "🐅", "🐆", "🦓", "🦍", "🦧", "🐘", "🦛", "🦏", "🐪", "🐫", "🦒", "🦘", "🐃", "🐂", "🐄", "🐎", "🐖", "🐏", "🐑", "🦙", "🐐", "🦌", "🐕", "🐩", "🦮", "🐕‍🦺", "🐈", "🐓", "🦃", "🦚", "🦜", "🦢", "🦩", "🕊️", "🐇", "🦝", "🦨", "🦡", "🦦", "🦥", "🐁", "🐀", "🐿️", "🦔"],
+            food: ["🍏", "🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🍈", "🍒", "🍑", "🥭", "🍍", "🥥", "🥝", "🍅", "🍆", "🥑", "🥦", "🥬", "🥒", "🌶️", "🌽", "🥕", "🧄", "🧅", "🥔", "🍠", "🥐", "🥯", "🍞", "🥖", "🥨", "🧀", "🥚", "🍳", "🧈", "🥞", "🧇", "🥓", "🥩", "🍗", "🍖", "🦴", "🌭", "🍔", "🍟", "🍕", "🥪", "🥙", "🧆", "🌮", "🌯", "🥗", "🥘", "🥫", "🍝", "🍜", "🍲", "🍛", "🍣", "🍱", "🥟", "🦪", "🍤", "🍙", "🍚", "🍘", "🍥", "🥠", "🥮", "🍢", "🍡", "🍧", "🍨", "🍦", "🥧", "🧁", "🍰", "🎂", "🍮", "🍭", "🍬", "🍫", "🍿", "🍩", "🍪", "🌰", "🥜", "🍯", "🥛", "🍼", "☕", "🍵", "🧃", "🥤", "🍶", "🍺", "🍻", "🥂", "🍷", "🥃", "🍸", "🍹", "🧉", "🍾"],
+            object: ["⌚", "📱", "📲", "💻", "⌨️", "🖥️", "🖨️", "🖱️", "🖲️", "🕹️", "🗜️", "💽", "💾", "💿", "📀", "📼", "📷", "📸", "📹", "🎥", "📽️", "🎞️", "📞", "☎️", "📟", "📠", "📺", "📻", "🎙️", "🎚️", "🎛️", "🧭", "⏱️", "⏲️", "⏰", "🕰️", "⌛", "⏳", "📡", "🔋", "🔌", "💡", "🔦", "🕯️", "🪔", "🧯", "🛢️", "💸", "💵", "💴", "💶", "💷", "💰", "💳", "💎", "⚖️", "🧰", "🔧", "🔨", "⚒️", "🛠️", "⛏️", "🔩", "⚙️", "🧱", "⛓️", "🧲", "🔫", "💣", "🧨", "🪓", "🔪", "🗡️", "⚔️", "🛡️", "🚬", "⚰️", "⚱️", "🏺", "🔮", "📿", "🧿", "💈", "⚗️", "🔭", "🔬", "🕳️", "🩹", "🩺", "💊", "💉", "🩸", "🧬", "🦠", "🧫", "🧪", "🌡️", "🧹", "🧺", "🧻", "🚽", "🚰", "🚿", "🛁", "🛀", "🧼", "🪒", "🧽", "🧴", "🛎️", "🔑", "🗝️", "🚪", "🪑", "🛋️", "🛏️", "🛌", "🧸", "🖼️", "🛍️", "🛒", "🎁", "🎈", "🎏", "🎀", "🎊", "🎉", "🎎", "🏮", "🎐", "🧧", "✉️", "📩", "📨", "📧", "💌", "📥", "📤", "📦", "🏷️", "📪", "📫", "📬", "📭", "📮", "📯", "📜", "📃", "📄", "📑", "🧾", "📊", "📈", "📉", "🗒️", "🗓️", "📆", "📅", "📇", "🗃️", "🗳️", "🗄️", "📋", "📁", "📂", "🗂️", "🗞️", "📰", "📓", "📔", "📒", "📕", "📗", "📘", "📙", "📚", "📖", "🔖", "🧷", "🔗", "📎", "🖇️", "📐", "📏", "🧮", "📌", "📍", "✂️", "🖊️", "🖋️", "✒️", "🖌️", "🖍️", "📝", "✏️", "🔍", "🔎", "🔏", "🔐", "🔒", "🔓"]
+        };
+
+        window.onload = function () {
+            document.getElementById('qr-text').value = DEFAULT_URL;
+            generateQR();
+            renderEmojis('face');
+            updateStyle();
+        };
+
+        function debounceGenerate() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                generateQR();
+            }, 300);
+        }
+
+        function renderEmojis(category) {
+            const container = document.getElementById('emoji-container');
+            container.innerHTML = "";
+            const emojis = emojiData[category] || emojiData['face'];
+            emojis.forEach(emoji => {
+                const btn = document.createElement('div');
+                btn.className = 'emoji-btn';
+                btn.innerText = emoji;
+                btn.onclick = () => setEmoji(emoji);
+                container.appendChild(btn);
+            });
+        }
+
+        function generateQR() {
+            let originalText = document.getElementById('qr-text').value.trim();
+            let text = originalText || DEFAULT_URL;
+
+            if ((text.startsWith('http://') || text.startsWith('https://')) && /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text)) {
+                try {
+                    text = encodeURI(text);
+                } catch (e) {
+                    console.log("Encoding failed, using original text");
+                }
+            }
+
+            const colorDark = document.getElementById('color-dark').value;
+            const colorLight = document.getElementById('color-light').value;
+            const qrContainer = document.getElementById('qrcode');
+
+            const levels = [QRCode.CorrectLevel.H, QRCode.CorrectLevel.Q, QRCode.CorrectLevel.M, QRCode.CorrectLevel.L];
+            let generated = false;
+
+            for (let level of levels) {
+                try {
+                    qrContainer.innerHTML = "";
+                    qrcodeObj = new QRCode(qrContainer, {
+                        text: text,
+                        width: 160,
+                        height: 160,
+                        colorDark: colorDark,
+                        colorLight: colorLight,
+                        correctLevel: level
+                    });
+                    generated = true;
+                    break;
+                } catch (e) {
+                    continue;
+                }
+            }
+
+            if (!generated) {
+                qrContainer.innerHTML = '<div class="flex items-center justify-center h-full text-red-500 text-xs text-center p-2 break-all">데이터가 너무 깁니다.</div>';
+                showToast('내용이 너무 길어 QR을 생성할 수 없습니다.', 'error');
+            }
+        }
+
+        function updateStyle() {
+            const container = document.getElementById('design-container');
+
+            const borderWidth = document.getElementById('border-width').value;
+            const borderColor = document.getElementById('border-color').value;
+            const borderRadius = document.getElementById('border-radius').value;
+            const padding = document.getElementById('padding-size').value;
+
+            container.style.borderWidth = `${borderWidth}px`;
+            container.style.borderColor = borderColor;
+            container.style.borderRadius = `${borderRadius}px`;
+            container.style.padding = `${padding}px`;
+
+            const hasShadow = document.getElementById('drop-shadow').checked;
+            container.style.boxShadow = hasShadow ? "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)" : "none";
+
+            const emojiVal = document.getElementById('center-emoji').value;
+            const iconOverlay = document.getElementById('center-icon-overlay');
+            if (emojiVal) {
+                iconOverlay.innerText = emojiVal;
+                iconOverlay.classList.remove('hidden');
+            } else {
+                iconOverlay.classList.add('hidden');
+            }
+
+            const innerText = document.getElementById('inner-label-text').value;
+            const outerText = document.getElementById('outer-label-text').value;
+            const innerDisplay = document.getElementById('inner-label-display');
+            const outerDisplay = document.getElementById('outer-label-display');
+            const labelColor = document.getElementById('label-color').value;
+
+            if (innerText) {
+                innerDisplay.innerText = innerText;
+                innerDisplay.style.color = labelColor;
+                innerDisplay.classList.remove('hidden');
+            } else {
+                innerDisplay.classList.add('hidden');
+            }
+
+            if (outerText) {
+                outerDisplay.innerText = outerText;
+                // 배경이 어두워지는 발표 모드일 때 외부 텍스트 가독성을 위해 흰색으로 덮어쓸지 여부 처리
+                outerDisplay.style.color = isPresentation ? '#ffffff' : labelColor;
+                outerDisplay.classList.remove('hidden');
+            } else {
+                outerDisplay.classList.add('hidden');
+            }
+
+            // 스케일 재계산 (발표 모드일 경우 크기 조정)
+            if (isPresentation) {
+                const captureArea = document.getElementById('capture-area');
+                captureArea.style.transform = `scale(${presentationScale})`;
+            }
+        }
+
+        function setLabelFont(fontClass) {
+            const innerDisplay = document.getElementById('inner-label-display');
+            const outerDisplay = document.getElementById('outer-label-display');
+            [innerDisplay, outerDisplay].forEach(el => {
+                el.classList.remove('font-noto', 'font-jua', 'font-dohyeon');
+                el.classList.add(fontClass);
+            });
+        }
+
+        function setEmoji(emoji) {
+            document.getElementById('center-emoji').value = emoji;
+            updateStyle();
+        }
+
+        function setPattern(patternClass) {
+            const container = document.getElementById('design-container');
+            container.classList.remove('pattern-none', 'pattern-dots', 'pattern-grid', 'pattern-diagonal', 'pattern-zigzag', 'pattern-paper');
+            container.classList.add(patternClass);
+        }
+
+        /* ----- 스캔용 확대 (발표 모드) 로직 ----- */
+        function handlePresentationToggle() {
+            if (isPresentation) exitPresentation();
+            else enterPresentation();
+        }
+
+        function enterPresentation() {
+            isPresentation = true;
+            document.getElementById('left-panel').classList.add('hidden');
+            document.getElementById('mobile-footer').classList.add('hidden');
+
+            const rightPanel = document.getElementById('right-panel');
+            rightPanel.classList.remove('bg-gray-100');
+            rightPanel.classList.add('bg-gray-900'); // 스캔용 어두운 배경
+
+            // 기존 UI 요소 숨기기
+            document.getElementById('bg-decorations').classList.replace('opacity-30', 'opacity-0');
+            document.getElementById('action-buttons').classList.add('hidden');
+            document.getElementById('tip-text').classList.add('hidden');
+
+            // 외부 텍스트 색상을 흰색으로 변경 (어두운 배경 대비)
+            const outerDisplay = document.getElementById('outer-label-display');
+            outerDisplay.style.color = '#ffffff';
+
+            // 토글(원래대로) 버튼 보이기
+            const floatingBtn = document.getElementById('toggle-presentation-btn');
+            floatingBtn.classList.remove('hidden');
+            floatingBtn.classList.add('flex');
+
+            // 줌 안내 텍스트 보이기
+            const zoomTip = document.getElementById('zoom-tip');
+            zoomTip.classList.remove('hidden');
+
+            // 브라우저 전체화면 요청
+            if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen().catch(e => console.log("Fullscreen API error:", e));
+            }
+
+            calculateInitialScale();
+            window.addEventListener('resize', calculateInitialScale);
+
+            // 휠 이벤트 추가 (rightPanel 변수 중복 선언 수정 완료)
+            rightPanel.addEventListener('wheel', handleWheelZoom, { passive: false });
+        }
+
+        function exitPresentation() {
+            isPresentation = false;
+            document.getElementById('left-panel').classList.remove('hidden');
+            document.getElementById('mobile-footer').classList.remove('hidden');
+
+            const rightPanel = document.getElementById('right-panel');
+            rightPanel.classList.add('bg-gray-100');
+            rightPanel.classList.remove('bg-gray-900');
+
+            document.getElementById('bg-decorations').classList.replace('opacity-0', 'opacity-30');
+            document.getElementById('action-buttons').classList.remove('hidden');
+            document.getElementById('tip-text').classList.remove('hidden');
+
+            const floatingBtn = document.getElementById('toggle-presentation-btn');
+            floatingBtn.classList.add('hidden');
+            floatingBtn.classList.remove('flex');
+
+            // 줌 안내 텍스트 숨기기
+            const zoomTip = document.getElementById('zoom-tip');
+            zoomTip.classList.add('hidden');
+
+            // 크기 및 텍스트 색상 원래대로 복구
+            const captureArea = document.getElementById('capture-area');
+            captureArea.style.transform = 'scale(1)';
+            updateStyle(); // 텍스트 색상 등 초기화
+
+            window.removeEventListener('resize', calculateInitialScale);
+
+            // 휠 이벤트 제거 (rightPanel 변수 중복 선언 수정 완료)
+            rightPanel.removeEventListener('wheel', handleWheelZoom);
+
+            if (document.fullscreenElement) {
+                document.exitFullscreen().catch(e => console.log(e));
+            }
+        }
+
+        function calculateInitialScale() {
+            if (!isPresentation) return;
+            const captureArea = document.getElementById('capture-area');
+            captureArea.style.transform = 'scale(1)'; // 초기화하여 실제 크기 측정
+
+            const rect = captureArea.getBoundingClientRect();
+            // 가용 공간 (화면의 85%)
+            const availableWidth = window.innerWidth * 0.85;
+            const availableHeight = window.innerHeight * 0.85;
+
+            const scaleX = availableWidth / rect.width;
+            const scaleY = availableHeight / rect.height;
+            // 너무 커지는 것을 방지하기 위해 최대 스케일 제한 설정
+            presentationScale = Math.min(scaleX, Math.min(scaleY, 4));
+
+            captureArea.style.transform = `scale(${presentationScale})`;
+        }
+
+        function handleWheelZoom(event) {
+            if (!isPresentation) return;
+            event.preventDefault(); // 기본 스크롤 방지
+
+            const zoomSpeed = 0.1;
+            // 휠 올리면 확대(음수 deltaY), 내리면 축소(양수 deltaY)
+            if (event.deltaY < 0) {
+                presentationScale += zoomSpeed;
+            } else {
+                presentationScale -= zoomSpeed;
+            }
+
+            // 스케일 제한 (최소 0.5배, 최대 8배)
+            presentationScale = Math.max(0.5, Math.min(presentationScale, 8));
+
+            const captureArea = document.getElementById('capture-area');
+            captureArea.style.transform = `scale(${presentationScale})`;
+        }
+
+        // ESC 키 등으로 브라우저 전체화면이 해제되었을 때 동기화
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && isPresentation) {
+                exitPresentation();
+            }
+        });
+
+        /* ----- 복사 로직 ----- */
+        async function copyToClipboard() {
+            const element = document.getElementById('capture-area');
+            const btn = document.getElementById('copy-btn');
+
+            if (btn) {
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 처리 중...';
+                btn.classList.add('opacity-75', 'cursor-wait');
+            }
+
+            try {
+                const canvas = await html2canvas(element, {
+                    scale: 3,
+                    backgroundColor: null,
+                    logging: false,
+                    useCORS: true
+                });
+
+                canvas.toBlob(async (blob) => {
+                    if (!blob) {
+                        showToast('이미지 생성 실패', 'error');
+                        return;
+                    }
+                    try {
+                        const item = new ClipboardItem({ 'image/png': blob });
+                        await navigator.clipboard.write([item]);
+                        showToast('디자인이 복사되었습니다!', 'success');
+                    } catch (err) {
+                        console.error(err);
+                        showToast('복사 실패. 보안 설정을 확인하세요.', 'error');
+                    }
+                });
+
+            } catch (error) {
+                console.error(error);
+                showToast('캡처 중 오류 발생', 'error');
+            } finally {
+                if (btn) {
+                    btn.innerHTML = '<i class="fa-regular fa-copy mr-2"></i> 이미지 복사하기';
+                    btn.classList.remove('opacity-75', 'cursor-wait');
+                }
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const msgEl = document.getElementById('toast-msg');
+            const iconEl = document.getElementById('toast-icon');
+
+            msgEl.innerText = message;
+
+            if (type === 'error') {
+                iconEl.className = 'fa-solid fa-circle-exclamation text-red-400';
+            } else {
+                iconEl.className = 'fa-solid fa-check text-green-400';
+            }
+
+            toast.classList.remove('toast-enter');
+            toast.classList.add('toast-enter-active');
+
+            setTimeout(() => {
+                toast.classList.remove('toast-enter-active');
+                toast.classList.add('toast-exit-active');
+                setTimeout(() => {
+                    toast.classList.remove('toast-exit-active');
+                    toast.classList.add('toast-enter');
+                }, 300);
+            }, 3000);
+        }
+
+        /* ----- URL/텍스트 전용 액션 로직 ----- */
+        function copyInputText() {
+            const text = document.getElementById('qr-text').value;
+            if (!text) {
+                showToast('복사할 내용이 없습니다.', 'error');
+                return;
+            }
+
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('텍스트가 복사되었습니다!', 'success');
+            }).catch(err => {
+                console.error(err);
+                showToast('복사 실패. 보안 설정을 확인하세요.', 'error');
+            });
+        }
+
+        function openUrl() {
+            const text = document.getElementById('qr-text').value.trim();
+            if (!text) {
+                showToast('열어볼 내용이 없습니다.', 'error');
+                return;
+            }
+
+            // http:// 또는 https:// 로 시작하는지 확인하여 URL 검증
+            if (text.startsWith('http://') || text.startsWith('https://')) {
+                window.open(text, '_blank');
+            } else {
+                // 단순 텍스트일 경우 무시하지 않고 기존에 만들어두신 Toast로 안내
+                showToast('URL 형식이 아닙니다 (http:// 또는 https:// 필요)', 'error');
+            }
+        }
+
+        /* ----- 팝업 스캔 (Ctrl+V) 로직 ----- */
+        let scannedText = ""; // 해독된 텍스트 저장용
+
+        function openScanModal() {
+            const modal = document.getElementById('scan-modal');
+            modal.classList.remove('hidden');
+
+            // 모달 초기화
+            resetScanModal();
+
+            // 붙여넣기 이벤트 리스너 등록
+            document.addEventListener('paste', handlePasteEvent);
+        }
+
+        function closeScanModal() {
+            const modal = document.getElementById('scan-modal');
+            modal.classList.add('hidden');
+
+            // 모달 닫힐 때 이벤트 리스너 제거 (중복 방지)
+            document.removeEventListener('paste', handlePasteEvent);
+        }
+
+        function resetScanModal() {
+            document.getElementById('scan-instruction').classList.remove('hidden');
+            document.getElementById('scanned-image').classList.add('hidden');
+            document.getElementById('scanned-image').src = "";
+            document.getElementById('scan-result-area').classList.add('hidden');
+            document.getElementById('scan-result-text').innerText = "";
+            scannedText = "";
+
+            const dropzone = document.getElementById('scan-dropzone');
+            dropzone.classList.remove('border-green-500', 'border-red-500');
+            dropzone.classList.add('border-indigo-300');
+        }
+
+        function handlePasteEvent(e) {
+            // 클립보드에 이미지 데이터가 있는지 확인
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            let imageItem = null;
+
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf("image") === 0) {
+                    imageItem = items[i];
+                    break;
+                }
+            }
+
+            if (!imageItem) {
+                showToast('클립보드에 이미지가 없습니다.', 'error');
+                return;
+            }
+
+            // 이미지를 파일 형태로 꺼냄
+            const blob = imageItem.getAsFile();
+            const reader = new FileReader();
+
+            reader.onload = function (event) {
+                const imgUrl = event.target.result;
+
+                // 팝업 화면에 이미지 띄우기
+                const imgElement = document.getElementById('scanned-image');
+                imgElement.src = imgUrl;
+                imgElement.classList.remove('hidden');
+                document.getElementById('scan-instruction').classList.add('hidden');
+
+                // Canvas를 이용해 jsQR로 이미지 데이터 읽기
+                const img = new Image();
+                img.onload = function () {
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d', { willReadFrequently: true });
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    context.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                    const dropzone = document.getElementById('scan-dropzone');
+
+                    if (code && code.data) {
+                        // QR 해독 성공
+                        scannedText = code.data;
+                        document.getElementById('scan-result-text').innerText = scannedText;
+                        document.getElementById('scan-result-area').classList.remove('hidden');
+                        document.getElementById('scan-result-area').classList.add('flex');
+
+                        dropzone.classList.replace('border-indigo-300', 'border-green-500');
+                        showToast('QR 코드를 해독했습니다!', 'success');
+                    } else {
+                        // QR 해독 실패
+                        dropzone.classList.replace('border-indigo-300', 'border-red-500');
+                        showToast('이미지에서 QR 코드를 찾을 수 없습니다.', 'error');
+                    }
+                };
+                img.src = imgUrl;
+            };
+
+            reader.readAsDataURL(blob);
+        }
+
+        function copyScannedResult() {
+            if (!scannedText) return;
+            navigator.clipboard.writeText(scannedText).then(() => {
+                showToast('해독된 텍스트가 복사되었습니다!', 'success');
+            }).catch(err => {
+                showToast('복사 실패', 'error');
+            });
+        }
+
+        function openScannedResult() {
+            if (!scannedText) return;
+            if (scannedText.startsWith('http://') || scannedText.startsWith('https://')) {
+                window.open(scannedText, '_blank');
+            } else {
+                showToast('URL 형식이 아닙니다.', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

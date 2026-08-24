@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사용자 설정 - 펜통</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f3f3f3;
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .login-card {
+            background-color: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            width: 380px;
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 25px;
+            font-size: 22px;
+            font-weight: bold;
+            letter-spacing: -0.5px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label.field-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+            outline: none;
+            transition: all 0.2s ease;
+            background-color: #fafafa;
+            color: #333;
+            font-family: inherit;
+        }
+
+            input[type="text"]:focus {
+                border-color: #217346;
+                background-color: #fff;
+                box-shadow: 0 0 0 3px rgba(33, 115, 70, 0.1);
+            }
+
+        .theme-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 5px;
+        }
+
+        .theme-option {
+            position: relative;
+            cursor: pointer;
+        }
+
+            .theme-option input[type="radio"] {
+                position: absolute;
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .theme-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+            transition: all 0.2s ease;
+            height: 70px;
+        }
+
+        .theme-emoji {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .theme-name {
+            font-size: 13px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .theme-option:hover .theme-card {
+            background-color: #f0f0f0;
+            border-color: #ccc;
+        }
+
+        .theme-option input[type="radio"]:checked + .theme-card {
+            border-color: #217346;
+            background-color: #e8f5e9;
+            box-shadow: 0 0 0 2px rgba(33, 115, 70, 0.2);
+        }
+
+            .theme-option input[type="radio"]:checked + .theme-card .theme-name {
+                color: #217346;
+                font-weight: bold;
+            }
+
+        .theme-option input[type="radio"]:focus + .theme-card {
+            box-shadow: 0 0 0 3px rgba(33, 115, 70, 0.4);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #217346;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            margin-top: 10px;
+        }
+
+            button:hover {
+                background-color: #1e6b41;
+            }
+
+            button:active {
+                transform: scale(0.98);
+            }
+
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: rgba(51, 51, 51, 0.9);
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1000;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+            .toast.show {
+                visibility: visible;
+                opacity: 1;
+                bottom: 50px;
+            }
+    </style>
+</head>
+<body>
+
+    <div class="login-card">
+        <h2>사용자 설정</h2>
+
+        <div class="input-group">
+            <label class="field-label" for="affiliation">소속 (학교명 또는 부서)</label>
+            <input type="text" id="affiliation" placeholder="예: 한국초등학교" autofocus onkeyup="handleEnter(event, 'username')">
+        </div>
+
+        <div class="input-group">
+            <label class="field-label" for="username">사용자 이름 (성함)</label>
+            <input type="text" id="username" placeholder="예: 홍길동" onkeyup="handleEnter(event, 'theme-start')">
+        </div>
+
+        <div class="input-group">
+            <label class="field-label">시작 화면 유형</label>
+            <div class="theme-grid">
+
+                <label class="theme-option">
+                    <input type="radio" name="theme" value="cherry_blossom" id="theme-start">
+                    <div class="theme-card">
+                        <span class="theme-emoji">🌸</span>
+                        <span class="theme-name">벚꽃</span>
+                    </div>
+                </label>
+
+                <label class="theme-option">
+                    <input type="radio" name="theme" value="blackhole">
+                    <div class="theme-card">
+                        <span class="theme-emoji">🌌</span>
+                        <span class="theme-name">블랙홀</span>
+                    </div>
+                </label>
+
+                <label class="theme-option">
+                    <input type="radio" name="theme" value="monster_world">
+                    <div class="theme-card">
+                        <span class="theme-emoji">👾</span>
+                        <span class="theme-name">몬스터세상</span>
+                    </div>
+                </label>
+
+                <label class="theme-option">
+                    <input type="radio" name="theme" value="none" checked>
+                    <div class="theme-card">
+                        <img src="PenTongIcon.ico" style="width:40px; height:40px;" />
+                        <span class="theme-name">환영합니다</span>
+                    </div>
+                </label>
+
+            </div>
+        </div>
+
+        <button onclick="saveUser()">설정 완료 및 시작하기</button>
+    </div>
+
+    <div id="toast" class="toast">메시지</div>
+
+    <script>
+        // ✅ 핵심 수정: pywebviewready 이벤트를 놓쳐도 동작하는 방어 패턴
+        function initApp() {
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.get_user_info) {
+                window.pywebview.api.get_user_info().then(function (data) {
+                    if (data) {
+                        applySettings(data.name, data.affiliation, data.theme);
+                    }
+                }).catch(function (err) {
+                    console.log("저장된 설정 불러오기 실패 (신규 사용자일 수 있음):", err);
+                });
+            }
+        }
+
+        // pywebviewready가 이미 발생했으면 바로 실행, 아직이면 이벤트 대기
+        if (window.pywebview && window.pywebview.api) {
+            initApp();
+        } else {
+            window.addEventListener('pywebviewready', initApp);
+        }
+
+        // 설정값 UI 적용 함수
+        function applySettings(name, affiliation, theme) {
+            if (affiliation) {
+                document.getElementById('affiliation').value = affiliation;
+            }
+            if (name) {
+                document.getElementById('username').value = name;
+            }
+            if (theme) {
+                const radio = document.querySelector('input[name="theme"][value="' + theme + '"]');
+                if (radio) radio.checked = true;
+            }
+        }
+
+        function showToast(message) {
+            const x = document.getElementById("toast");
+            x.innerText = message;
+            x.className = "toast show";
+            setTimeout(function () { x.className = x.className.replace("show", ""); }, 3000);
+        }
+
+        function handleEnter(event, nextId) {
+            if (event.keyCode === 13) {
+                if (nextId === 'submit') {
+                    saveUser();
+                } else if (nextId === 'theme-start') {
+                    document.getElementById('theme-start').focus();
+                } else {
+                    document.getElementById(nextId).focus();
+                }
+            }
+        }
+
+        function saveUser() {
+            const affInput = document.getElementById('affiliation');
+            const nameInput = document.getElementById('username');
+            const selectedTheme = document.querySelector('input[name="theme"]:checked');
+
+            const affiliation = affInput.value.trim();
+            const name = nameInput.value.trim();
+            const theme = selectedTheme ? selectedTheme.value : "none";
+
+            if (!affiliation) {
+                showToast("소속을 입력해 주세요.");
+                affInput.focus();
+                return;
+            }
+
+            if (!name) {
+                showToast("성함을 입력해 주세요.");
+                nameInput.focus();
+                return;
+            }
+
+            // ✅ 핵심 수정: pywebview 미준비 시 조용히 실패하지 않고 재시도
+            if (!window.pywebview || !window.pywebview.api) {
+                showToast("초기화 중입니다. 잠시 후 다시 눌러주세요.");
+                window.addEventListener('pywebviewready', saveUser, { once: true });
+                return;
+            }
+
+            pywebview.api.initialize_user(name, affiliation, theme).catch(function (err) {
+                showToast("시스템 오류: " + err);
+            });
+        }
+        
+    </script>
+</body>
+</html>

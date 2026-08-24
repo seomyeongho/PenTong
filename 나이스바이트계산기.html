@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>나이스 바이트 계산기</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://bossanova.uk/jspreadsheet/v4/jexcel.js"></script>
+    <link rel="stylesheet" href="https://bossanova.uk/jspreadsheet/v4/jexcel.css" type="text/css" />
+    <script src="https://jsuites.net/v4/jsuites.js"></script>
+    <link rel="stylesheet" href="https://jsuites.net/v4/jsuites.css" type="text/css" />
+
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/variable/pretendardvariable.css" />
+
+    <style>
+        body {
+            font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+        }
+
+        /* ⭐️ 버그 수정: JSpreadsheet 내부 스크롤 끄고 브라우저 네이티브 Sticky 사용 ⭐️ */
+        .jexcel-container {
+            box-shadow: none !important;
+            border: none !important;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .jexcel {
+            width: 100% !important;
+            border-top: 1px solid #e2e8f0;
+            border-left: 1px solid #e2e8f0;
+            border-collapse: separate !important;
+            border-spacing: 0;
+        }
+
+            /* 헤더 스타일: 스크롤 시 상단에 고정되도록 수정 (표 중간 복제 버그 원천 차단) */
+            .jexcel > thead > tr > td {
+                background-color: #f8fafc !important;
+                font-weight: 600;
+                color: #475569;
+                padding: 12px 4px;
+                border-bottom: 1px solid #cbd5e1;
+                border-right: 1px solid #e2e8f0;
+                border-top: none;
+                border-left: none;
+                font-size: 13px;
+                text-align: center;
+                word-break: keep-all;
+                position: sticky;
+                top: 0;
+                z-index: 10;
+            }
+
+            /* 본문 셀 스타일 */
+            .jexcel > tbody > tr > td {
+                padding: 8px 6px;
+                border-bottom: 1px solid #cbd5e1;
+                border-right: 1px solid #cbd5e1;
+                border-top: none;
+                border-left: none;
+                vertical-align: middle;
+                font-size: 14px;
+            }
+
+                .jexcel > tbody > tr > td[data-x="2"] {
+                    white-space: pre-wrap !important;
+                    text-align: left;
+                    line-height: 1.6;
+                }
+
+                .jexcel > tbody > tr > td.readonly {
+                    background-color: #fafafa;
+                    color: #64748b;
+                }
+
+        .jexcel_textarea {
+            line-height: 1.6 !important;
+            font-family: inherit !important;
+            padding: 8px !important;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f8fafc;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+            }
+
+        /* Custom Popup */
+        .modal-overlay {
+            transition: opacity 0.15s ease-out;
+        }
+
+        .modal-content {
+            transition: transform 0.15s ease-out, opacity 0.15s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen flex flex-col overflow-hidden text-slate-800">
+
+    <header class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0 shadow-sm z-20">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-inner">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-slate-900 tracking-tight">나이스 바이트 계산기</h1>
+                <p class="text-xs text-indigo-600 font-bold mt-1">※ 작성 중 Enter = 줄바꿈 / 작성 완료 = 다른 셀 마우스 클릭</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="px-6 py-3 flex gap-2 shrink-0 items-center bg-white border-b border-slate-200 flex-wrap z-10">
+
+        <div class="flex items-center bg-indigo-50 rounded-lg px-3 h-[34px] border border-indigo-100 mr-2">
+            <span class="text-sm font-bold text-indigo-800 mr-2">제한 바이트</span>
+            <input type="number" id="global-limit" value="300" class="w-16 text-center font-bold text-indigo-700 border border-indigo-200 bg-white rounded focus:ring-2 focus:ring-indigo-500 outline-none transition-all py-0.5" onchange="updateAllRows()">
+        </div>
+
+        <button onclick="loadSampleData()" class="h-[34px] px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-sm font-semibold transition-colors border border-slate-200 flex items-center justify-center">
+            샘플 채우기
+        </button>
+        <button onclick="resetData()" class="h-[34px] px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-md text-sm font-semibold transition-colors border border-rose-200 flex items-center justify-center">
+            초기화
+        </button>
+
+        <div class="h-5 w-px bg-slate-300 mx-1"></div>
+
+        <button onclick="copyAllData()" class="h-[34px] px-3 bg-white hover:bg-indigo-50 text-indigo-700 rounded-md text-sm font-bold transition-colors border border-indigo-200 shadow-sm flex items-center justify-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            전체 복사
+        </button>
+        <button onclick="copyContentOnly()" class="h-[34px] px-3 bg-white hover:bg-emerald-50 text-emerald-700 rounded-md text-sm font-bold transition-colors border border-emerald-200 shadow-sm flex items-center justify-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+            내용만 복사
+        </button>
+
+        <div class="h-5 w-px bg-slate-300 mx-1"></div>
+
+        <button onclick="cleanUpText('spaces')" class="h-[34px] px-3 bg-white hover:bg-slate-50 text-slate-600 rounded-md text-sm font-medium transition-colors border border-slate-300 flex items-center justify-center">
+            다중 공백 제거
+        </button>
+        <button onclick="cleanUpText('newlines')" class="h-[34px] px-3 bg-white hover:bg-slate-50 text-slate-600 rounded-md text-sm font-medium transition-colors border border-slate-300 flex items-center justify-center">
+            불필요한 줄바꿈 제거
+        </button>
+
+        <div class="h-5 w-px bg-slate-300 mx-1"></div>
+
+        <button onclick="openHelpModal()" class="h-[34px] px-3 bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            도움말
+        </button>
+
+        <div class="flex-1"></div>
+
+        <div class="flex items-center gap-2 text-sm bg-indigo-50 px-3 h-[34px] rounded-lg border border-indigo-200 shadow-sm">
+            <span class="font-bold text-indigo-800">기준:</span>
+            <select id="kor-byte-select" class="bg-white border border-indigo-200 text-indigo-900 font-bold rounded outline-none px-1 py-0.5 cursor-pointer shadow-sm text-xs" onchange="updateAllRows()">
+                <option value="3" selected>한글 3Byte</option>
+                <option value="2">한글 2Byte</option>
+            </select>
+            <span class="text-indigo-300 font-bold">|</span>
+            <select id="enter-byte-select" class="bg-white border border-indigo-200 text-indigo-900 font-bold rounded outline-none px-1 py-0.5 cursor-pointer shadow-sm text-xs" onchange="updateAllRows()">
+                <option value="2" selected>줄바꿈 2Byte</option>
+                <option value="1">줄바꿈 1Byte</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="flex-1 w-full relative bg-white border-b border-slate-200 overflow-auto" id="table-wrapper">
+        <div id="spreadsheet"></div>
+    </div>
+
+    <div class="bg-slate-800 text-slate-200 px-6 py-3 flex justify-between items-center text-sm font-medium shrink-0 z-20">
+        <div class="flex items-center gap-3">
+            <span>총 등록 <span id="total-count" class="font-bold text-white text-base">0</span>명</span>
+            <span class="text-slate-600">|</span>
+            <span>내용 미작성 <span id="empty-count" class="text-slate-400 text-base">0</span>명</span>
+        </div>
+        <div class="flex gap-6">
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                <span>정상 (완료) <span id="ok-count" class="font-bold text-emerald-400 text-base">0</span>명</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+                <span>바이트 초과 <span id="over-count" class="font-bold text-rose-400 text-base">0</span>명</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="custom-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center">
+        <div class="modal-overlay absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+        <div class="modal-content relative bg-white rounded-2xl shadow-xl p-7 max-w-sm w-full mx-4 transform scale-95 opacity-0 border border-slate-100">
+            <h3 id="modal-title" class="text-lg font-bold text-slate-900 mb-2">알림</h3>
+            <p id="modal-message" class="text-sm text-slate-600 mb-6 whitespace-pre-line leading-relaxed"></p>
+            <div class="flex justify-end gap-2">
+                <button id="modal-cancel-btn" class="hidden px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">취소</button>
+                <button id="modal-ok-btn" class="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="help-modal" class="fixed inset-0 z-[65] hidden flex items-center justify-center p-4">
+        <div class="modal-overlay absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onclick="closeHelpModal()"></div>
+        <div class="modal-content relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col transform scale-95 opacity-0 border border-slate-100">
+            <div class="flex justify-between items-center px-6 py-4 border-b border-slate-200 bg-slate-50 rounded-t-2xl shrink-0">
+                <h3 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    나이스 바이트 계산기 사용 안내
+                </h3>
+                <button onclick="closeHelpModal()" class="text-slate-400 hover:text-slate-700 transition-colors p-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6 text-slate-700 text-base leading-relaxed space-y-6">
+                <div>
+                    <h4 class="font-bold text-indigo-700 mb-2 border-b-2 border-indigo-100 pb-1">📌 기본 사용법</h4>
+                    <ul class="list-disc list-inside space-y-1.5 text-sm ml-1 text-slate-600">
+                        <li>엑셀에서 복사한 학생 데이터를 표에 <strong>그대로 붙여넣기(Ctrl+V)</strong> 할 수 있습니다.</li>
+                        <li><strong>'작성 내용' 셀을 더블클릭하거나 바로 타이핑</strong>을 시작하면 내용 편집 모드로 들어갑니다.</li>
+                        <li>내용 편집 시 <strong>Enter 키를 누르면 메모장처럼 즉시 줄바꿈</strong>이 적용됩니다.</li>
+                        <li>입력을 마치려면 <strong>Tab 키</strong>를 누르거나, <strong>다른 셀을 마우스로 클릭</strong>하세요.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold text-indigo-700 mb-2 border-b-2 border-indigo-100 pb-1">📊 색상 및 통계 의미</h4>
+                    <ul class="list-disc list-inside space-y-1.5 text-sm ml-1 text-slate-600">
+                        <li><span class="text-rose-600 font-bold bg-rose-50 px-1 rounded">-N (빨간색)</span> : 바이트가 초과되었습니다. <strong>지워야 할 한글 글자 수</strong>를 의미합니다.</li>
+                        <li><span class="text-sky-600 font-bold bg-sky-50 px-1 rounded">N (파란색)</span> : <strong>추가로 입력 가능한 한글 글자 수</strong>를 보여줍니다.</li>
+                        <li><span class="text-emerald-600 font-bold bg-emerald-50 px-1 rounded">정상</span> : 제한 바이트 내에 안전하게 작성되었습니다.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold text-indigo-700 mb-2 border-b-2 border-indigo-100 pb-1">💡 유용한 팁</h4>
+                    <ul class="list-disc list-inside space-y-1.5 text-sm ml-1 text-slate-600">
+                        <li><strong>다중 공백/불필요한 줄바꿈 제거:</strong> 띄어쓰기가 두 칸 이상 들어간 곳이나 빈 줄을 자동으로 최적화합니다.</li>
+                        <li><strong>내용만 복사:</strong> 생기부 입력을 위해 '작성 내용' 텍스트만 일괄 복사하여 나이스에 바로 붙여넣기 하세요.</li>
+                        <li><strong>기준 변경:</strong> 나이스 버전에 맞춰 한글/줄바꿈의 바이트 기준을 우측 상단에서 언제든 변경할 수 있습니다.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex justify-end shrink-0">
+                <button onclick="closeHelpModal()" class="px-8 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-md">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-message" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-800/95 backdrop-blur-sm text-white px-6 py-3 rounded-full shadow-lg font-bold text-sm transition-all duration-300 opacity-0 translate-y-4 pointer-events-none z-[70] tracking-wide">
+        메시지
+    </div>
+
+    <script>
+        let table = null;
+        let isUpdating = false;
+
+        // --- Custom Popup & Toast System ---
+        const modal = document.getElementById('custom-modal');
+        const modalContent = modal.querySelector('.modal-content');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const btnOk = document.getElementById('modal-ok-btn');
+        const btnCancel = document.getElementById('modal-cancel-btn');
+        let confirmCallback = null;
+
+        function showModal(title, message, isConfirm = false, onConfirm = null) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            btnCancel.classList.toggle('hidden', !isConfirm);
+            confirmCallback = isConfirm ? onConfirm : null;
+
+            modal.classList.remove('hidden');
+            void modal.offsetWidth;
+            modalContent.classList.remove('scale-95', 'opacity-0');
+            modalContent.classList.add('scale-100', 'opacity-100');
+        }
+
+        function hideModal() {
+            modalContent.classList.remove('scale-100', 'opacity-100');
+            modalContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => { modal.classList.add('hidden'); }, 150);
+        }
+
+        btnOk.addEventListener('click', () => { hideModal(); if (confirmCallback) confirmCallback(); });
+        btnCancel.addEventListener('click', hideModal);
+
+        function showAlert(message) { showModal('알림', message, false); }
+        function showConfirm(message, onConfirm) { showModal('확인', message, true, onConfirm); }
+
+        let toastTimeout;
+        function showToast(msg) {
+            const toast = document.getElementById('toast-message');
+            toast.innerText = msg;
+            toast.classList.remove('opacity-0', 'translate-y-4');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-4');
+            }, 3000);
+        }
+
+        // --- 도움말 팝업 제어 ---
+        const helpModal = document.getElementById('help-modal');
+        const helpModalContent = helpModal.querySelector('.modal-content');
+
+        function openHelpModal() {
+            helpModal.classList.remove('hidden');
+            void helpModal.offsetWidth;
+            helpModalContent.classList.remove('scale-95', 'opacity-0');
+            helpModalContent.classList.add('scale-100', 'opacity-100');
+        }
+
+        function closeHelpModal() {
+            helpModalContent.classList.remove('scale-100', 'opacity-100');
+            helpModalContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => { helpModal.classList.add('hidden'); }, 150);
+        }
+
+        // --- 글자 수 계산 로직 ---
+        function isEmptyString(val) { return val === null || val === undefined || String(val).trim() === ''; }
+
+        function calculateStats(content) {
+            if (isEmptyString(content)) return { korLen: 0, engNumLen: 0, spaceLen: 0, enterLen: 0, specLen: 0, bytes: 0 };
+
+            content = String(content);
+            const korMatch = content.match(/[가-힣ㄱ-ㅎㅏ-ㅣ]/g);
+            const engNumMatch = content.match(/[a-zA-Z0-9]/g);
+            const spaceMatch = content.match(/ /g);
+            const enterMatch = content.match(/\n/g);
+
+            const korLen = korMatch ? korMatch.length : 0;
+            const engNumLen = engNumMatch ? engNumMatch.length : 0;
+            const spaceLen = spaceMatch ? spaceMatch.length : 0;
+            const enterLen = enterMatch ? enterMatch.length : 0;
+            const specLen = Math.max(0, content.length - (korLen + engNumLen + spaceLen + enterLen));
+
+            const korBytes = parseInt(document.getElementById('kor-byte-select').value);
+            const enterBytes = parseInt(document.getElementById('enter-byte-select').value);
+
+            let bytes = 0;
+            for (let i = 0; i < content.length; i++) {
+                let charCode = content.charCodeAt(i);
+                if (charCode === 10) bytes += enterBytes;
+                else if (charCode <= 0x00007F) bytes += 1;
+                else bytes += korBytes;
+            }
+            return { korLen, engNumLen, spaceLen, enterLen, specLen, bytes };
+        }
+
+        // --- 타이핑 시 실시간 화면 갱신 ---
+        function updateVisualRow(rowIdx, content) {
+            const stats = calculateStats(content);
+            const limit = parseInt(document.getElementById('global-limit').value) || 300;
+            const korBytes = parseInt(document.getElementById('kor-byte-select').value);
+            const remain = limit - stats.bytes;
+
+            // 바이트 기준에 맞게 지워야 할/추가할 한글 개수 계산 (내림)
+            const remainKor = Math.floor(remain / korBytes);
+            const status = isEmptyString(content) ? '미작성' : (stats.bytes > limit ? '초과' : '정상');
+
+            const setDom = (colIdx, val) => {
+                const cell = table.getCellFromCoords(colIdx, rowIdx);
+                if (!cell) return;
+                cell.innerText = val;
+
+                if (colIdx === 5) { // 상태
+                    if (val === '초과') { cell.style.color = '#e11d48'; cell.style.fontWeight = '900'; cell.style.backgroundColor = '#ffe4e6'; }
+                    else if (val === '정상') { cell.style.color = '#059669'; cell.style.fontWeight = '900'; cell.style.backgroundColor = '#d1fae5'; }
+                    else { cell.style.color = '#94a3b8'; cell.style.fontWeight = 'normal'; cell.style.backgroundColor = ''; }
+                }
+                if (colIdx === 4) { // 잔여 바이트
+                    cell.style.color = remain < 0 ? '#e11d48' : '#2563eb';
+                    cell.style.fontWeight = remain < 0 ? '900' : 'normal';
+                }
+                if (colIdx === 3) { // 현재 바이트
+                    cell.style.fontWeight = stats.bytes > 0 ? 'bold' : 'normal';
+                }
+                if (colIdx === 6) { // 가능(한글)
+                    cell.style.color = remainKor < 0 ? '#e11d48' : (remainKor > 0 ? '#0284c7' : '#94a3b8');
+                    cell.style.fontWeight = remainKor !== 0 ? 'bold' : 'normal';
+                    cell.style.backgroundColor = remainKor < 0 ? '#ffe4e6' : '#f0f9ff';
+                }
+            };
+
+            setDom(3, stats.bytes);
+            setDom(4, remain);
+            setDom(5, status);
+            setDom(6, remainKor);
+            setDom(7, stats.korLen);
+            setDom(8, stats.engNumLen);
+            setDom(9, stats.spaceLen);
+            setDom(10, stats.enterLen);
+            setDom(11, stats.specLen);
+        }
+
+        // --- Enter 및 Input 이벤트 글로벌 가로채기 ---
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                const editor = document.activeElement;
+                if (editor && (editor.classList.contains('jexcel_textarea') || editor.tagName.toLowerCase() === 'textarea')) {
+                    const td = editor.closest('td');
+                    if (td && td.getAttribute('data-x') === '2') {
+                        e.stopImmediatePropagation();
+                    }
+                }
+            }
+        }, true);
+
+        document.addEventListener('input', function (e) {
+            const editor = e.target;
+            if (editor && (editor.classList.contains('jexcel_textarea') || editor.tagName.toLowerCase() === 'textarea')) {
+                const td = editor.closest('td');
+                if (td && td.getAttribute('data-x') === '2') {
+                    const rowIdx = td.getAttribute('data-y');
+                    updateVisualRow(rowIdx, editor.value);
+                    editor.style.height = 'auto';
+                    editor.style.height = editor.scrollHeight + 'px';
+                }
+            }
+        }, true);
+
+        // --- Spreadsheet Initialization ---
+        const initialEmptyData = Array.from({ length: 30 }, () => ['', '', '', '', '', '', '', '', '', '', '', '']);
+
+        function initJspreadsheet() {
+            table = jspreadsheet(document.getElementById('spreadsheet'), {
+                data: initialEmptyData,
+                columns: [
+                    { type: 'text', title: '학번', width: 70, align: 'center' },
+                    { type: 'text', title: '이름', width: 80, align: 'center' },
+                    { type: 'text', title: '작성 내용 (더블클릭/수정)', width: 350, align: 'left', wordWrap: true },
+                    { type: 'numeric', title: '현재Byte', width: 75, readOnly: true, align: 'center' },
+                    { type: 'numeric', title: '잔여Byte', width: 75, readOnly: true, align: 'center' },
+                    { type: 'text', title: '상태', width: 70, readOnly: true, align: 'center' },
+                    { type: 'numeric', title: '가능(한글)', width: 85, readOnly: true, align: 'center' },
+                    { type: 'numeric', title: '한글', width: 45, readOnly: true, align: 'center' },
+                    { type: 'numeric', title: '영숫자', width: 50, readOnly: true, align: 'center' },
+                    { type: 'numeric', title: '공백', width: 45, readOnly: true, align: 'center' },
+                    { type: 'numeric', title: '줄바꿈', width: 50, readOnly: true, align: 'center' },
+                    { type: 'numeric', title: '기호', width: 45, readOnly: true, align: 'center' }
+                ],
+                defaultColWidth: 80,
+                rowResize: true,
+                columnDrag: false,
+                allowInsertRow: true,
+                allowInsertColumn: false,
+                allowDeleteRow: true,
+                allowDeleteColumn: false,
+
+                // 버그 수정: tableOverflow 옵션 제거 (CSS sticky 사용)
+
+                onchange: function (instance, cell, col, row, val) {
+                    if (col == 0 || col == 1 || col == 2) processRowCalculation(row);
+                },
+
+                updateTable: function (instance, cell, col, row, val, label, cellName) {
+                    if (col == 5) {
+                        if (val === '초과') { cell.style.color = '#e11d48'; cell.style.fontWeight = '900'; cell.style.backgroundColor = '#ffe4e6'; }
+                        else if (val === '정상') { cell.style.color = '#059669'; cell.style.fontWeight = '900'; cell.style.backgroundColor = '#d1fae5'; }
+                        else { cell.style.color = '#94a3b8'; cell.style.fontWeight = 'normal'; cell.style.backgroundColor = ''; }
+                    } else if (col == 4) {
+                        if (val !== '' && !isNaN(val)) {
+                            cell.style.color = parseInt(val) < 0 ? '#e11d48' : '#2563eb';
+                            cell.style.fontWeight = parseInt(val) < 0 ? '900' : 'normal';
+                        } else cell.style.color = '';
+                    } else if (col == 3) {
+                        cell.style.fontWeight = (val !== '' && val > 0) ? 'bold' : 'normal';
+                    } else if (col == 6) {
+                        if (val !== '') {
+                            const numVal = parseInt(val);
+                            cell.style.color = numVal < 0 ? '#e11d48' : (numVal > 0 ? '#0284c7' : '#94a3b8');
+                            cell.style.fontWeight = numVal !== 0 ? 'bold' : 'normal';
+                            cell.style.backgroundColor = numVal < 0 ? '#ffe4e6' : '#f0f9ff';
+                        }
+                    }
+                    if (col >= 7 && col <= 11) {
+                        cell.style.color = '#64748b';
+                        cell.style.backgroundColor = '#fafafa';
+                    }
+                },
+                ondeletedrow: updateStats,
+                oninsertrow: updateStats,
+                onload: updateAllRows
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', initJspreadsheet);
+
+        // --- Data Operations ---
+        function loadSampleData() {
+            const data = table.getData();
+            let hasData = false;
+            for (let i = 0; i < data.length; i++) {
+                if (!isEmptyString(data[i][0]) || !isEmptyString(data[i][1]) || !isEmptyString(data[i][2])) {
+                    hasData = true; break;
+                }
+            }
+
+            const executeFill = () => {
+                const samples = [
+                    ['10101', '김학생', '이 학생은 학업 성취도가 높고 타의 모범이 되는 학생입니다. 특히 프로젝트 활동에서 리더십을 발휘하여 팀원들을 이끌었습니다.'],
+                    ['10102', '이모범', '다양한 교내 행사에 적극적으로 참여하며, 봉사정신이 투철하여 학급의 궂은 일을 도맡아 하는 훌륭한 인성을 갖추었습니다.\n교우 관계도 매우 원만합니다.'],
+                    ['10103', '박초과', '물리 교과에 대한 흥미가 남다르며, 실험에서 뛰어난 직관력을 발휘합니다. 학급 내에서도 교우들과 원만하게 지내며 매사에 솔선수범하는 자세를 보입니다. 하지만 가끔 과제 기한을 놓치는 경우가 있어 시간 관리 능력을 기를 필요가 있습니다. 동아리 활동에서도 기장을 맡아 뛰어난 리더십을 발휘했으며, 앞으로의 발전이 더욱 기대되는 훌륭한 학생입니다. 창의적인 사고방식이 돋보입니다.'],
+                ];
+                for (let i = 0; i < samples.length; i++) {
+                    table.setValueFromCoords(0, i, samples[i][0]);
+                    table.setValueFromCoords(1, i, samples[i][1]);
+                    table.setValueFromCoords(2, i, samples[i][2]);
+                }
+                updateAllRows();
+                showToast('샘플 데이터가 입력되었습니다.');
+            };
+
+            if (hasData) { showConfirm('기존 데이터가 덮어씌워집니다. 진행하시겠습니까?', executeFill); }
+            else { executeFill(); }
+        }
+
+        function resetData() {
+            showConfirm('모든 데이터를 초기화하시겠습니까?', () => {
+                const freshEmptyData = Array.from({ length: 30 }, () => ['', '', '', '', '', '', '', '', '', '', '', '']);
+                table.setData(freshEmptyData);
+                updateAllRows();
+                showToast('데이터가 초기화되었습니다.');
+            });
+        }
+
+        function copyAllData() {
+            const data = table.getData();
+            let copyText = "";
+            let hasData = false;
+
+            data.forEach(row => {
+                if (!isEmptyString(row[0]) || !isEmptyString(row[1]) || !isEmptyString(row[2])) {
+                    let content = String(row[2] || '');
+                    if (content.includes('\n') || content.includes('"')) content = '"' + content.replace(/"/g, '""') + '"';
+                    copyText += `${row[0] || ''}\t${row[1] || ''}\t${content}\n`;
+                    hasData = true;
+                }
+            });
+
+            if (!hasData) { showToast('복사할 데이터가 없습니다.'); return; }
+            executeCopy(copyText, '학번, 이름, 작성 내용이 복사되었습니다.');
+        }
+
+        function copyContentOnly() {
+            const data = table.getData();
+            let copyText = "";
+            let hasData = false;
+
+            data.forEach(row => {
+                if (!isEmptyString(row[0]) || !isEmptyString(row[1]) || !isEmptyString(row[2])) {
+                    let content = String(row[2] || '');
+                    if (content.includes('\n') || content.includes('"')) content = '"' + content.replace(/"/g, '""') + '"';
+                    copyText += `${content}\n`;
+                    hasData = true;
+                }
+            });
+
+            if (!hasData) { showToast('복사할 데이터가 없습니다.'); return; }
+            executeCopy(copyText, '작성 내용만 복사되었습니다.');
+        }
+
+        function executeCopy(text, successMsg) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showToast(successMsg);
+        }
+
+        function processRowCalculation(row) {
+            if (isUpdating || !table) return;
+            isUpdating = true;
+
+            try {
+                const limit = parseInt(document.getElementById('global-limit').value) || 300;
+                const korBytes = parseInt(document.getElementById('kor-byte-select').value);
+                const id = table.getValueFromCoords(0, row);
+                const name = table.getValueFromCoords(1, row);
+                const content = table.getValueFromCoords(2, row);
+
+                if (isEmptyString(id) && isEmptyString(name) && isEmptyString(content)) {
+                    for (let c = 3; c <= 11; c++) table.setValueFromCoords(c, row, '', true);
+                } else if (isEmptyString(content)) {
+                    const remainKor = Math.floor(limit / korBytes);
+                    table.setValueFromCoords(3, row, 0, true);
+                    table.setValueFromCoords(4, row, limit, true);
+                    table.setValueFromCoords(5, row, '미작성', true);
+                    table.setValueFromCoords(6, row, remainKor, true);
+                    for (let c = 7; c <= 11; c++) table.setValueFromCoords(c, row, 0, true);
+                } else {
+                    const stats = calculateStats(content);
+                    const remain = limit - stats.bytes;
+                    const remainKor = Math.floor(remain / korBytes);
+
+                    table.setValueFromCoords(3, row, stats.bytes, true);
+                    table.setValueFromCoords(4, row, remain, true);
+                    table.setValueFromCoords(5, row, stats.bytes > limit ? '초과' : '정상', true);
+                    table.setValueFromCoords(6, row, remainKor, true);
+                    table.setValueFromCoords(7, row, stats.korLen, true);
+                    table.setValueFromCoords(8, row, stats.engNumLen, true);
+                    table.setValueFromCoords(9, row, stats.spaceLen, true);
+                    table.setValueFromCoords(10, row, stats.enterLen, true);
+                    table.setValueFromCoords(11, row, stats.specLen, true);
+                }
+            } finally {
+                isUpdating = false;
+                updateStats();
+            }
+        }
+
+        function updateAllRows() {
+            if (!table) return;
+            const data = table.getData();
+            for (let i = 0; i < data.length; i++) processRowCalculation(i);
+        }
+
+        function updateStats() {
+            if (!table || isUpdating) return;
+            const data = table.getData();
+            let total = 0, empty = 0, ok = 0, over = 0;
+
+            data.forEach(row => {
+                const hasData = !isEmptyString(row[0]) || !isEmptyString(row[1]) || !isEmptyString(row[2]);
+                if (hasData) {
+                    total++;
+                    const status = row[5];
+                    if (status === '미작성') empty++;
+                    else if (status === '정상') ok++;
+                    else if (status === '초과') over++;
+                }
+            });
+
+            document.getElementById('total-count').innerText = total;
+            document.getElementById('empty-count').innerText = empty;
+            document.getElementById('ok-count').innerText = ok;
+            document.getElementById('over-count').innerText = over;
+        }
+
+        function cleanUpText(type) {
+            showConfirm(`작성된 전체 데이터의 ${type === 'spaces' ? '다중 공백' : '불필요한 줄바꿈'}을 즉시 정리하시겠습니까?`, () => {
+                const data = table.getData();
+                isUpdating = true;
+                try {
+                    for (let i = 0; i < data.length; i++) {
+                        let text = data[i][2];
+                        if (!isEmptyString(text)) {
+                            text = String(text);
+                            if (type === 'spaces') text = text.replace(/ +/g, ' ');
+                            else if (type === 'newlines') text = text.replace(/\n\s*\n/g, '\n');
+                            if (text !== data[i][2]) table.setValueFromCoords(2, i, text, true);
+                        }
+                    }
+                } finally {
+                    isUpdating = false;
+                    updateAllRows();
+                    showToast('전체 텍스트 정리가 완료되었습니다.');
+                }
+            });
+        }
+
+        // --- PyWebView Integration Stub ---
+        window.getCalculatorData = function () { return table.getData(); };
+        window.setCalculatorData = function (jsonData) {
+            try {
+                table.setData(JSON.parse(jsonData));
+                updateAllRows();
+            } catch (e) { console.error("Data parsing error", e); }
+        };
+    </script>
+</body>
+</html>

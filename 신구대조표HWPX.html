@@ -1,0 +1,1067 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pentong 신구대조표 생성기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.1.0/diff.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f3f4f6;
+            overflow-x: hidden;
+        }
+
+        .file-card {
+            width: 320px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 2px dashed #d1d5db;
+            background: white;
+        }
+
+            .file-card.ready {
+                border-color: #10b981;
+                background-color: #f0fdf4;
+                transform: translateY(-5px);
+                box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.1);
+            }
+
+        .diff-container {
+            background-color: white;
+            padding: 40px 30px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            min-height: 210mm;
+            height: auto;
+            margin-bottom: 50px;
+        }
+
+        tr {
+            cursor: pointer;
+            transition: background-color 0.1s;
+            position: relative;
+        }
+
+            tr.selected {
+                background-color: #eff6ff !important;
+            }
+
+                tr.selected td {
+                    border-color: #3b82f6 !important;
+                    border-width: 2px !important;
+                    position: relative;
+                    z-index: 10;
+                }
+
+        .dragging-mode {
+            user-select: none !important;
+        }
+
+        #actionMenu {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            padding: 8px;
+            flex-direction: row;
+            gap: 6px;
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        #actionMenu button {
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+            #actionMenu button:disabled {
+                opacity: 0.3;
+                cursor: not-allowed;
+                color: #999 !important;
+            }
+
+        #actionMenu .btn-delete {
+            color: #ef4444;
+        }
+
+            #actionMenu .btn-delete:hover:not(:disabled) {
+                background: #fef2f2;
+            }
+
+        #actionMenu .btn-primary {
+            color: #2563eb;
+        }
+
+            #actionMenu .btn-primary:hover:not(:disabled) {
+                background: #eff6ff;
+            }
+
+        .modal-wrap {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+            .modal-wrap.active {
+                display: flex;
+            }
+
+        .modal-box {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 90%;
+        }
+
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #1f2937;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 12px 24px;
+            position: fixed;
+            z-index: 3000;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-size: 14px;
+            opacity: 0;
+            transition: all 0.3s;
+        }
+
+            #toast.show {
+                visibility: visible;
+                opacity: 1;
+                bottom: 40px;
+            }
+
+        .no-copy {
+            user-select: none;
+        }
+
+        /* ========================================== */
+        /* [추가] 개별 드래그 타겟 하이라이트 효과 */
+        /* ========================================== */
+        .drag-hover-old {
+            border-color: #10b981 !important; /* 초록색 테두리 */
+            background-color: #f0fdf4 !important;
+            transform: scale(1.02);
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.2);
+        }
+
+        .drag-hover-new {
+            border-color: #3b82f6 !important; /* 파란색 테두리 */
+            background-color: #eff6ff !important;
+            transform: scale(1.02);
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.2);
+        }
+
+    </style>
+</head>
+<body class="h-screen flex flex-col" onmousedown="handleGlobalMouseDown(event)" onmouseup="handleGlobalMouseUp(event)" onclick="handleGlobalClick(event)">
+
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
+        <div class="flex items-center">
+            <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded mr-2 font-bold uppercase tracking-wider shadow-sm">Pentong</span>
+            <h1 class="text-xl font-bold text-gray-800">신구대조표 생성기</h1>
+        </div>
+        <div id="headerActionButtons" class="space-x-2 flex items-center">
+            <button onclick="openHelpModal()" class="px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg text-sm transition font-bold flex items-center">
+                <span class="mr-1">💡</span> 도움말
+            </button>
+            <button onclick="clearAll()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition font-medium">전체 초기화</button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden">
+        <div id="inputSection" class="flex-1 flex flex-col items-center justify-center bg-white p-8">
+            <div class="mb-10 text-center">
+                <h2 class="text-3xl font-bold text-gray-800 mb-2">HWPX 파일 비교 분석</h2>
+                <p class="text-gray-500">두 개의 한글 파일을 선택하여 조문별 차이점을 자동으로 대조합니다.</p>
+            </div>
+
+            <div class="flex space-x-12 mb-12">
+                <div class="file-card p-8 rounded-2xl flex flex-col items-center" id="oldFileCard">
+                    <div class="text-5xl mb-4">📄</div>
+                    <h3 class="text-xl font-bold text-gray-700 mb-2">현행 규정</h3>
+                    <p class="text-sm text-gray-400 mb-8 text-center px-4 w-full truncate" id="oldFileName">비교의 기준이 되는<br>기존 파일을 선택하세요.</p>
+                    <button onclick="loadHwpx('old')" class="w-full py-3 bg-gray-100 hover:bg-blue-50 text-blue-600 rounded-xl font-bold transition flex justify-center items-center">
+                        <span class="mr-2">📁</span> 파일 불러오기
+                    </button>
+                </div>
+
+                <div class="file-card p-8 rounded-2xl flex flex-col items-center" id="newFileCard">
+                    <div class="text-5xl mb-4">📝</div>
+                    <h3 class="text-xl font-bold text-blue-600 mb-2">개정 규정안</h3>
+                    <p class="text-sm text-gray-400 mb-8 text-center px-4 w-full truncate" id="newFileName">수정 사항이 반영된<br>새로운 파일을 선택하세요.</p>
+                    <button onclick="loadHwpx('new')" class="w-full py-3 bg-gray-100 hover:bg-blue-50 text-blue-600 rounded-xl font-bold transition flex justify-center items-center">
+                        <span class="mr-2">📁</span> 파일 불러오기
+                    </button>
+                </div>
+            </div>
+
+            <button id="btnStartDiff" onclick="generateStandardDiff()" disabled class="px-16 py-5 bg-gray-200 text-gray-400 rounded-full text-xl font-bold shadow-sm transition-all cursor-not-allowed">
+                신구대조표 생성하기
+            </button>
+        </div>
+
+        <div id="resultSection" class="hidden flex-col w-full h-full bg-gray-100 relative overflow-hidden">
+            <div class="p-3 border-b border-gray-200 flex justify-between items-center bg-white shadow-sm z-10">
+                <div class="flex items-center space-x-3 ml-2">
+                    <span id="diffStats" class="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">분석 완료</span>
+                    <button id="btnRestore" onclick="openRestoreModal()" class="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-sm font-bold">♻️ 삭제 취소 <span id="deletedCount">0</span></button>
+                    <div class="h-4 w-px bg-gray-300 mx-1"></div>
+                    <div class="flex items-center space-x-3 bg-blue-50 px-4 py-1.5 rounded-full border border-blue-100">
+                        <span class="text-sm font-bold text-blue-800">보기 옵션:</span>
+                        <label class="flex items-center text-sm text-gray-700 cursor-pointer"><input type="radio" name="viewOption" value="all" checked onchange="applyViewTransform()" class="mr-1 accent-blue-600"> 전체</label>
+                        <label class="flex items-center text-sm text-gray-700 cursor-pointer"><input type="radio" name="viewOption" value="changed" onchange="applyViewTransform()" class="mr-1 accent-blue-600"> 변경항목만</label>
+                        <div class="h-4 w-px bg-blue-200 mx-1"></div>
+                        <label class="flex items-center text-sm font-bold text-blue-700 cursor-pointer" title="조항 마커(제O조, 1., 가.)가 있는 동일 항목을 축약합니다.">
+                            <input type="checkbox" id="chkOmitEqual" checked onchange="applyViewTransform()" class="mr-1 accent-blue-600 w-4 h-4">
+                            동일 내용 생략
+                        </label>
+                        <div class="h-4 w-px bg-blue-200 mx-1"></div>
+                        <label class="flex items-center text-sm font-bold text-blue-700 cursor-pointer">
+                            <input type="checkbox" id="chkShowRemark" checked onchange="renderTable()" class="mr-1 accent-blue-600 w-4 h-4">
+                            비고 표시
+                        </label>
+                    </div>
+                </div>
+
+                <div class="space-x-2 flex items-center">
+                    <!--<button onclick="openHelpModal()" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 rounded text-sm transition font-bold flex items-center">
+                        <span class="mr-1">💡</span> 도움말
+                    </button>-->
+                    <button onclick="backToEdit()" class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded text-sm transition font-medium">다시 선택</button>
+                    <button onclick="copyTable()" class="px-6 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition shadow-lg font-bold flex items-center">
+                        <span class="mr-2">📋</span> 표 복사하기
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto p-8 flex justify-center items-start bg-gray-200" id="scrollContainer">
+                <div class="diff-container w-full relative" style="max-width: 297mm;" id="tableWrapper">
+                    <h2 class="text-2xl font-bold text-center mb-6" style="font-family: 'Batang', serif;">신 · 구 조 문 대 비 표</h2>
+                    <table id="diffTable" class="diff-table" style="width: 100%; table-layout: fixed; border-collapse: collapse; font-family: 'Batang', 'Malgun Gothic', serif; font-size: 14px; color: #000; margin: 0 auto; border: 1px solid #000;">
+                        <colgroup>
+                            <col style="width: 46%;">
+                            <col style="width: 46%;">
+                            <col style="width: 8%;">
+                        </colgroup>
+                        <thead>
+                            <tr style="background-color: #f3f3f3;">
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; font-size: 15px;">현 행</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; font-size: 15px;">개 정 안</th>
+                                <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; font-size: 15px;">비 고</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="actionMenu" class="no-copy">
+        <button id="btnMerge" class="btn-primary" onclick="handleMerge()">병합</button>
+        <button id="btnUnmerge" class="btn-primary" onclick="handleUnmerge()">병합취소</button>
+        <button id="btnDelete" class="btn-delete" onclick="handleDelete()">삭제</button>
+        <div class="w-px h-6 bg-gray-200 mx-1 self-center"></div>
+        <button class="text-gray-400" onclick="clearSelection()">취소</button>
+    </div>
+
+    <div id="restoreModal" class="modal-wrap">
+        <div class="modal-box">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">삭제 내역 복구</h3>
+            <div id="deletedList" class="max-h-60 overflow-y-auto mb-6"></div>
+            <div class="flex justify-end"><button onclick="closeRestoreModal()" class="px-5 py-2 bg-gray-800 text-white rounded-lg">닫기</button></div>
+        </div>
+    </div>
+
+    <div id="customModal" class="modal-wrap z-[5000]">
+        <div class="modal-box">
+            <h3 class="text-lg font-bold mb-2" id="modalTitle">알림</h3>
+            <div id="modalContent"></div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeModal()" class="px-6 py-2 bg-gray-800 text-white rounded-lg">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="helpModal" class="modal-wrap z-[6000]">
+        <div class="modal-box max-w-2xl" style="width: 95%;">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 class="text-xl font-bold text-gray-800">💡 Pentong 신구대조표 생성기 이용 안내</h3>
+                <button onclick="closeHelpModal()" class="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="max-h-[60vh] overflow-y-auto pr-2 space-y-6 text-gray-700 text-sm">
+
+                <section>
+                    <h4 class="font-bold text-blue-700 text-base mb-2">1. 프로그램 사용법</h4>
+                    <ol class="list-decimal list-inside space-y-1 ml-2">
+                        <li><strong>[현행 규정]</strong>과 <strong>[개정 규정안]</strong> HWPX 파일을 각각 불러옵니다.</li>
+                        <li><strong>[신구대조표 생성기]</strong> 버튼을 클릭하여 대조표를 생성합니다.</li>
+                        <li>생성된 결과를 확인하고, 우측 상단 <strong>[보기 옵션]</strong>(생략 기능, 비고란 유무 등)을 조정합니다.</li>
+                        <li><strong>[📋 표 복사하기]</strong>를 눌러 빈 한글 문서(A4 가로 방향 권장)에 붙여넣기(Ctrl+V) 합니다.</li>
+                    </ol>
+                </section>
+
+                <section>
+                    <h4 class="font-bold text-blue-700 text-base mb-2">2. HWP 파일을 HWPX로 저장하는 방법</h4>
+                    <p class="ml-2 mb-1">본 프로그램은 한글의 개방형 표준 문서 포맷인 <strong>HWPX</strong> 확장자만 지원합니다.</p>
+                    <ul class="list-disc list-inside space-y-1 ml-4 mt-1 bg-gray-50 p-3 rounded border border-gray-200">
+                        <li>한글(한컴오피스) 프로그램에서 문서를 엽니다.</li>
+                        <li>좌측 상단 메뉴에서 <strong>[파일] > [다른 이름으로 저장하기]</strong>를 클릭합니다.</li>
+                        <li>파일 형식(파일 이름 밑의 드롭다운)을 <strong>'한글 문서 (*.hwpx)'</strong>로 선택하고 저장합니다.</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4 class="font-bold text-blue-700 text-base mb-2">3. ⚠️ 원본과 표 모양이 다르게 출력될 수 있습니다</h4>
+                    <p class="ml-2 mb-2">대조표 내부로 들어온 셀의 크기나 표의 형태가 원본 한글 문서와 100% 일치하지 않을 수 있습니다.</p>
+                    <div class="bg-amber-50 border border-amber-200 p-3 rounded-lg ml-2 text-xs text-amber-800 leading-relaxed">
+                        <strong>[발생 이유]</strong><br>
+                        한글 프로그램(HWP)은 고유의 복잡한 표 병합 규칙, 보이지 않는 투명 선, 셀 내부 여백 등 매우 독자적인 렌더링 방식을 사용합니다. 이를 일반적인 웹 표준(HTML) 표 데이터로 변환하는 과정에서 부득이하게 레이아웃의 손실이나 차이가 발생합니다.<br><br>
+                        따라서 본 프로그램이 생성한 대조표는 <strong>'내용 분석 및 초안 작성용'</strong>으로 활용해 주시고, 세부적인 표 디자인이나 줄 맞춤 등은 복사 후 한글 프로그램 내에서 직접 다듬어 주시길 권장합니다.
+                    </div>
+                </section>
+
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeHelpModal()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast">알림 메시지</div>
+
+    <script>
+        let originalData = []; // 💡 [핵심] 원본 데이터를 보관하는 절대 영역
+        let currentData = [];  // 💡 화면과 1:1로 매칭되는 실제 조작용 독립 데이터
+        let deletedItems = [];
+        let selectedIndices = new Set();
+        let lastSelectedIndex = -1; let isDragging = false; let dragStartIndex = -1;
+        let internalHwpxData = { old: "", new: "" };
+
+        function showModal(title, msg) {
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalContent').innerHTML = `<p class="text-gray-600">${msg}</p>`;
+            document.getElementById('customModal').classList.add('active');
+        }
+        function closeModal() { document.getElementById('customModal').classList.remove('active'); }
+        // 💡 여기에 이 두 줄만 추가하시면 됩니다!
+        function openHelpModal() { document.getElementById('helpModal').classList.add('active'); }
+        function closeHelpModal() { document.getElementById('helpModal').classList.remove('active'); }
+
+        function showToast(message) {
+            const toast = document.getElementById("toast"); toast.innerText = message;
+            toast.className = "show"; setTimeout(() => toast.className = toast.className.replace("show", ""), 2500);
+        }
+
+        function loadHwpx(target) {
+            const pyApi = window.pywebview || window.parent.pywebview;
+            if (!pyApi) { showModal('오류', '펜통 프로그램 내부에서만 실행 가능합니다.'); return; }
+
+            pyApi.api.read_hwpx_file().then((res) => {
+                if (res) {
+                    const text = res.text || res;
+                    const filename = res.filename || "파일 분석 성공";
+                    internalHwpxData[target] = text;
+                    const card = document.getElementById(target + 'FileCard');
+                    const nameLabel = document.getElementById(target + 'FileName');
+                    card.classList.add('ready');
+                    nameLabel.innerHTML = `<span class='text-green-600 font-bold'>${filename}</span>`;
+                    nameLabel.title = filename;
+                    showToast(`${target === 'old' ? '현행' : '개정'} 파일 로드 완료`);
+                    checkReady();
+                }
+            }).catch((err) => { showModal('오류', '파일 분석 중 문제 발생'); });
+        }
+
+        function checkReady() {
+            const btn = document.getElementById('btnStartDiff');
+            if (internalHwpxData.old && internalHwpxData.new) {
+                btn.disabled = false;
+                btn.classList.replace('bg-gray-200', 'bg-blue-600');
+                btn.classList.replace('text-gray-400', 'text-white');
+                btn.classList.replace('cursor-not-allowed', 'hover:bg-blue-700');
+                btn.classList.add('shadow-xl', 'scale-105');
+            }
+        }
+
+        function clearAll() {
+            internalHwpxData = { old: "", new: "" };
+            ['old', 'new'].forEach(t => {
+                const card = document.getElementById(t + 'FileCard');
+                const nameLabel = document.getElementById(t + 'FileName');
+                card.classList.remove('ready');
+                nameLabel.innerHTML = t === 'old' ? "비교의 기준이 되는<br>기존 파일을 선택하세요." : "수정 사항이 반영된<br>새로운 파일을 선택하세요.";
+                nameLabel.title = "";
+            });
+            const btn = document.getElementById('btnStartDiff');
+            btn.disabled = true; btn.innerHTML = "신구대조표 생성하기";
+            btn.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-700', 'shadow-xl', 'scale-105');
+            btn.classList.add('bg-gray-200', 'text-gray-400', 'cursor-not-allowed');
+            backToEdit();
+        }
+
+        function backToEdit() {
+            document.getElementById('inputSection').classList.remove('hidden'); document.getElementById('inputSection').classList.add('flex');
+            document.getElementById('resultSection').classList.add('hidden'); document.getElementById('resultSection').classList.remove('flex');
+            clearSelection();
+        }
+
+        function generateStandardDiff() {
+            const oldLines = internalHwpxData.old.split('\n\n').map(l => l.trimEnd()).filter(l => l.trim() !== "");
+            const newLines = internalHwpxData.new.split('\n\n').map(l => l.trimEnd()).filter(l => l.trim() !== "");
+
+            const btn = document.getElementById('btnStartDiff');
+            btn.innerHTML = '<span class="animate-pulse">⏳ 대조표 생성중...</span>'; btn.disabled = true;
+
+            setTimeout(() => {
+                // 초고속 알고리즘으로 분석 후 원본(originalData)으로 저장
+                originalData = alignLinesDP(oldLines, newLines);
+                applyViewTransform(); // 💡 여기서 필터 적용 후 currentData 생성
+
+                document.getElementById('inputSection').classList.add('hidden'); document.getElementById('inputSection').classList.remove('flex');
+                document.getElementById('resultSection').classList.remove('hidden'); document.getElementById('resultSection').classList.add('flex');
+                btn.innerHTML = '신구대조표 생성하기'; btn.disabled = false;
+            }, 50);
+        }
+
+        function formatText(text) { return !text ? "" : text.replace(/\n/g, "<br>"); }
+
+        // 💡 [수정] 1), 가) 등의 반괄호 기호 인식 추가 및 레벨 세분화
+        // 💡 [수정] '1항', '제1항' 등 다양한 조문 기호 인식 추가
+        function getMarkerInfo(text) {
+            if (!text) return { marker: null, level: null, isTable: false };
+
+            const isTable = text.includes('<table');
+            if (isTable) return { marker: '표', level: 99, isTable: true };
+
+            const cleanText = text.replace(/<[^>]*>/g, '').trim();
+
+            let m = cleanText.match(/^(제\s*\d+\s*조(?:의\s*\d+)?)/);
+            if (m) return { marker: m[1].replace(/\s/g, ''), level: 1, isTable: false };
+
+            m = cleanText.match(/^(부\s*칙)/);
+            if (m) return { marker: m[1].replace(/\s/g, ''), level: 1, isTable: false };
+
+            // 💡 NEW: ① 뿐만 아니라 '제1항', '1항' 등도 레벨2(항)로 정확히 인식합니다.
+            m = cleanText.match(/^([①-⑳]|제\s*\d+\s*항|\d+\s*항)/);
+            if (m) return { marker: m[1].replace(/\s/g, ''), level: 2, isTable: false };
+
+            m = cleanText.match(/^(\d+)\.\s?/);
+            if (m) return { marker: m[1] + '.', level: 3, isTable: false };
+
+            m = cleanText.match(/^([가-하])\.\s?/);
+            if (m) return { marker: m[1] + '.', level: 4, isTable: false };
+
+            m = cleanText.match(/^(\d+)\)\s?/);
+            if (m) return { marker: m[1] + ')', level: 5, isTable: false };
+
+            m = cleanText.match(/^([가-하])\)\s?/);
+            if (m) return { marker: m[1] + ')', level: 6, isTable: false };
+
+            if (!cleanText) return { marker: null, level: 0, isTable: false };
+            let snippet = cleanText.length > 8 ? cleanText.substring(0, 8) + "..." : cleanText;
+            return { marker: `「${snippet}」`, level: 0, isTable: false };
+        }
+
+
+        // 💡 [수정] 시작 맥락을 결합하여 "제2조 1항 ~ 3항" 형태로 출력
+        function applyViewTransform() {
+            const viewOption = document.querySelector('input[name="viewOption"]:checked').value;
+            const doOmit = document.getElementById('chkOmitEqual')?.checked;
+
+            currentData = []; // 리셋
+            let i = 0;
+
+            while (i < originalData.length) {
+                let row = originalData[i];
+
+                if (viewOption === 'changed' && row.type === 'equal') {
+                    i++; continue;
+                }
+
+                if (doOmit && row.type === 'equal') {
+                    let info = getMarkerInfo(row.old);
+                    let baseLevel = info.level;
+                    let lastValidMarker = info.marker;
+                    let eqGroup = [];
+
+                    let j = i;
+                    while (j < originalData.length && originalData[j].type === 'equal') {
+                        let nextInfo = getMarkerInfo(originalData[j].old);
+
+                        if (eqGroup.length > 0) {
+                            if (info.isTable !== nextInfo.isTable) break;
+                            if (baseLevel === 0 && nextInfo.level > 0) break;
+                            if (baseLevel > 0 && nextInfo.level > 0 && nextInfo.level < baseLevel) break;
+                        }
+
+                        eqGroup.push({ data: originalData[j], index: j });
+
+                        // 💡 일반 텍스트(레벨0)가 아닌 진짜 조항일 때만 끝 번호를 갱신 (지저분한 텍스트 꼬리표 방지)
+                        if (nextInfo.level > 0) {
+                            lastValidMarker = nextInfo.marker;
+                        } else if (baseLevel === 0) {
+                            lastValidMarker = nextInfo.marker;
+                        }
+
+                        j++;
+                    }
+
+                    if (eqGroup.length >= 2 || info.isTable) {
+                        let leftT = ""; let rightT = "";
+
+                        if (info.isTable) {
+                            leftT = eqGroup.length > 1 ? `표 ${eqGroup.length}개 (생 략)` : `표 (생 략)`;
+                            rightT = eqGroup.length > 1 ? `표 ${eqGroup.length}개 (현행과 같음)` : `표 (현행과 같음)`;
+                        } else {
+                            // 💡 [핵심] 상위 조항에서 하위 조항으로 시작하면 하나로 묶어줍니다 (예: "제2조" + "1항" = "제2조 1항")
+                            let startStr = info.marker || "";
+                            let currentLevel = info.level;
+                            let k = 1;
+                            while (k < eqGroup.length) {
+                                let nextInfo = getMarkerInfo(eqGroup[k].data.old);
+                                if (nextInfo.marker && nextInfo.level > 0 && nextInfo.level > currentLevel) {
+                                    startStr += " " + nextInfo.marker;
+                                    currentLevel = nextInfo.level;
+                                    k++;
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            let endStr = lastValidMarker || "";
+
+                            // [제1조, 1항] 처럼 1:1로만 연결된 경우 -> "제1조 1항 (생 략)"
+                            if (k === eqGroup.length) {
+                                leftT = `${startStr} (생 략)`;
+                                rightT = `${startStr} (현행과 같음)`;
+                            } else {
+                                // 시작 기호와 끝 기호가 같으면(또는 끝을 못 찾았으면) 한 번만 출력
+                                if (!endStr || endStr === startStr || endStr === info.marker) {
+                                    leftT = `${startStr} (생 략)`;
+                                    rightT = `${startStr} (현행과 같음)`;
+                                } else {
+                                    // 💡 완성된 출력: "제2조 1항 ~ 3항 (생 략)"
+                                    leftT = `${startStr} ~ ${endStr} (생 략)`;
+                                    rightT = `${startStr} ~ ${endStr} (현행과 같음)`;
+                                }
+                            }
+                        }
+
+                        currentData.push({
+                            type: 'omitted',
+                            old: leftT,
+                            new: rightT,
+                            remarkHTML: `<span style='color: #9ca3af; font-weight:bold;'>현행 유지<br><span style="font-size:11px; font-weight:normal;">(${eqGroup.length}개 항목 축약)</span></span>`
+                        });
+                        i = j;
+                        continue;
+                    }
+                }
+
+                currentData.push({ ...row });
+                i++;
+            }
+            clearSelection();
+            renderTable();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('resultBody'); if (!tbody) return;
+            const thead = document.querySelector('#diffTable thead');
+            const colgroup = document.querySelector('#diffTable colgroup');
+            const showRemark = document.getElementById('chkShowRemark')?.checked;
+
+            tbody.innerHTML = '';
+
+            // 💡 비고 표시 여부에 따른 열 너비 및 헤더 동적 설정
+            if (showRemark) {
+                colgroup.innerHTML = '<col style="width: 46%;"><col style="width: 46%;"><col style="width: 8%;">';
+                thead.innerHTML = `<tr style="background-color: #f3f3f3;">
+                        <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; font-size: 15px;">현 행</th>
+                        <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; font-size: 15px;">개 정 안</th>
+                        <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; font-size: 15px;">비 고</th>
+                    </tr>`;
+            } else {
+                colgroup.innerHTML = '<col style="width: 50%;"><col style="width: 50%;">';
+                thead.innerHTML = `<tr style="background-color: #f3f3f3;">
+                        <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; font-size: 15px;">현 행</th>
+                        <th style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; font-size: 15px;">개 정 안</th>
+                    </tr>`;
+            }
+
+            let stats = { total: 0, modify: 0, delete: 0, insert: 0 };
+
+            // 💡 오류 수정: getDisplayData() 대신 이미 변환 완료된 currentData를 사용합니다!
+            currentData.forEach((row, idx) => {
+                stats.total++;
+                const tr = document.createElement('tr');
+                tr.dataset.index = idx;
+                tr.className = selectedIndices.has(idx) ? "selected" : "";
+
+                tr.onmousedown = (e) => handleRowMouseDown(idx, e);
+                tr.onmouseenter = (e) => handleRowMouseEnter(idx, e);
+
+                const tdOld = document.createElement('td');
+                const tdNew = document.createElement('td');
+                const tds = [tdOld, tdNew];
+
+                // 비고가 켜져 있을 때만 비고 칸 생성
+                let tdRemark = null;
+                if (showRemark) {
+                    tdRemark = document.createElement('td');
+                    tds.push(tdRemark);
+                }
+
+                tds.forEach(td => {
+                    td.style.border = "1px solid #000"; td.style.padding = "10px"; td.style.verticalAlign = "top";
+                    td.style.lineHeight = "1.6"; td.style.wordBreak = "break-all";
+                });
+                if (tdRemark) { tdRemark.style.textAlign = "center"; tdRemark.style.fontSize = "13px"; }
+
+                if (row.type === 'omitted') {
+                    tr.style.backgroundColor = "#fafafa";
+                    tdOld.innerHTML = `<div style="text-align:center; color:#4b5563; font-weight:bold; font-size:15px;">${row.old}</div>`;
+                    tdNew.innerHTML = `<div style="text-align:center; color:#4b5563; font-weight:bold; font-size:15px;">${row.new}</div>`;
+                    if (tdRemark) tdRemark.innerHTML = row.remarkHTML;
+                } else {
+                    const isTable = (row.old && row.old.includes('<table')) || (row.new && row.new.includes('<table'));
+
+                    if (row.type === 'equal') {
+                        tdOld.innerHTML = isTable ? row.old : formatText(row.old);
+                        tdNew.innerHTML = isTable ? row.new : formatText(row.new);
+                        if (tdRemark) tdRemark.innerHTML = "<span style='color: #aaa;'>현행 유지</span>";
+                    } else if (row.type === 'modify') {
+                        stats.modify++;
+                        if (isTable) {
+                            let parser = new DOMParser();
+                            let oldDoc = parser.parseFromString(row.old || "<table></table>", 'text/html');
+                            let newDoc = parser.parseFromString(row.new || "<table></table>", 'text/html');
+                            let oldTds = oldDoc.querySelectorAll('td'); let newTds = newDoc.querySelectorAll('td');
+                            let maxTds = Math.max(oldTds.length, newTds.length);
+
+                            for (let j = 0; j < maxTds; j++) {
+                                let oldCell = oldTds[j]; let newCell = newTds[j];
+                                let oldT = oldCell ? oldCell.innerHTML.replace(/<br\s*[\/]?>/gi, '\n') : "";
+                                let newT = newCell ? newCell.innerHTML.replace(/<br\s*[\/]?>/gi, '\n') : "";
+
+                                if (oldT !== newT && typeof Diff !== 'undefined') {
+                                    let cellDiff = Diff.diffChars(oldT, newT);
+                                    let oldHtml = "", newHtml = "";
+                                    cellDiff.forEach(part => {
+                                        let val = part.value.replace(/\n/g, '<br>');
+                                        if (part.added) newHtml += `<span style="color:blue; font-weight:bold;">${val}</span>`;
+                                        else if (part.removed) oldHtml += `<span style="color:red; text-decoration:line-through;">${val}</span>`;
+                                        else { oldHtml += val; newHtml += val; }
+                                    });
+                                    if (oldCell) oldCell.innerHTML = oldHtml;
+                                    if (newCell) newCell.innerHTML = newHtml;
+                                }
+                            }
+                            tdOld.innerHTML = oldDoc.body.innerHTML; tdNew.innerHTML = newDoc.body.innerHTML;
+                        } else {
+                            if (typeof Diff !== 'undefined') {
+                                const charDiff = Diff.diffChars(row.old || "", row.new || "");
+                                charDiff.forEach(part => {
+                                    const val = formatText(part.value);
+                                    if (part.added) tdNew.innerHTML += `<span style="color:blue; font-weight:bold;">${val}</span>`;
+                                    else if (part.removed) tdOld.innerHTML += `<span style="color:red; text-decoration:line-through;">${val}</span>`;
+                                    else { tdOld.innerHTML += val; tdNew.innerHTML += val; }
+                                });
+                            } else {
+                                tdOld.innerHTML = formatText(row.old); tdNew.innerHTML = formatText(row.new);
+                            }
+                        }
+                        if (tdRemark) tdRemark.innerHTML = "<span class='text-blue-600 font-bold'>수 정</span>";
+                    } else if (row.type === 'delete') {
+                        stats.delete++;
+                        tdOld.innerHTML = isTable ? row.old : formatText(row.old);
+                        tdNew.innerHTML = "<span style='color:#999; font-style:italic;'>&lt;삭 제&gt;</span>";
+                        if (tdRemark) tdRemark.innerHTML = "<span class='text-red-600 font-bold'>삭 제</span>";
+                    } else if (row.type === 'insert') {
+                        stats.insert++;
+                        tdOld.innerHTML = "<span style='color:#999; font-style:italic;'>&lt;신 설&gt;</span>";
+                        tdNew.innerHTML = isTable ? row.new : formatText(row.new);
+                        if (tdRemark) tdRemark.innerHTML = "<span class='text-green-600 font-bold'>신 설</span>";
+                    }
+                    if (row.mergedFrom && tdRemark) tdRemark.innerHTML += "<br><small>(병합됨)</small>";
+                }
+
+                tr.appendChild(tdOld); tr.appendChild(tdNew);
+                if (tdRemark) tr.appendChild(tdRemark);
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('diffStats').innerHTML = `분석: <b>${stats.total}</b>건 (수정:${stats.modify} 신설:${stats.insert} 삭제:${stats.delete})`;
+            updateActionMenu();
+        }
+
+        // --- 마우스 이벤트 리스너 (직관적 드래그 원상복구) ---
+        function handleGlobalMouseDown(event) { }
+        function handleRowMouseDown(index, event) {
+            isDragging = true; dragStartIndex = index; document.body.classList.add('dragging-mode');
+            if (event.shiftKey && lastSelectedIndex !== -1) {
+                const start = Math.min(lastSelectedIndex, index); const end = Math.max(lastSelectedIndex, index);
+                for (let i = start; i <= end; i++) selectedIndices.add(i);
+            } else if (event.ctrlKey || event.metaKey) {
+                if (selectedIndices.has(index)) selectedIndices.delete(index); else selectedIndices.add(index);
+            } else { selectedIndices.clear(); selectedIndices.add(index); }
+            lastSelectedIndex = index; renderTable();
+        }
+        function handleRowMouseEnter(index, event) {
+            if (!isDragging) return;
+            const start = Math.min(dragStartIndex, index); const end = Math.max(dragStartIndex, index);
+            if (!event.ctrlKey && !event.metaKey) selectedIndices.clear();
+            for (let i = start; i <= end; i++) selectedIndices.add(i); renderTable();
+        }
+        function handleGlobalMouseUp(event) { if (isDragging) { isDragging = false; document.body.classList.remove('dragging-mode'); if (selectedIndices.size > 0) showFloatingMenu(event); } }
+        function handleGlobalClick(event) { const table = document.getElementById('diffTable'); const menu = document.getElementById('actionMenu'); if (table && !table.contains(event.target) && menu && !menu.contains(event.target)) clearSelection(); }
+        function clearSelection() { selectedIndices.clear(); lastSelectedIndex = -1; renderTable(); document.getElementById('actionMenu').style.display = 'none'; }
+
+        function showFloatingMenu(event) {
+            const menu = document.getElementById('actionMenu'); menu.style.display = 'flex';
+            let x = event.clientX + 5; let y = event.clientY + 5;
+            if (x + 250 > window.innerWidth) x = window.innerWidth - 260; if (y + 120 > window.innerHeight) y = window.innerHeight - 130;
+            menu.style.left = `${x}px`; menu.style.top = `${y}px`;
+        }
+        function updateActionMenu() {
+            const count = selectedIndices.size; document.getElementById('btnMerge').disabled = count < 2;
+            let hasMerged = false; selectedIndices.forEach(idx => { if (currentData[idx] && currentData[idx].mergedFrom) hasMerged = true; });
+            document.getElementById('btnDelete').disabled = count === 0 || hasMerged;
+            let canUnmerge = count === 1 && currentData[Array.from(selectedIndices)[0]]?.mergedFrom; document.getElementById('btnUnmerge').disabled = !canUnmerge;
+        }
+
+        // 💡 병합 로직: 선택된 화면 텍스트 그대로 결합
+        function handleMerge() {
+            const sortedIndices = Array.from(selectedIndices).sort((a, b) => a - b);
+            let mOld = "", mNew = "", originals = [];
+            sortedIndices.forEach(idx => {
+                const row = currentData[idx]; originals.push({ ...row });
+                if (row.old) mOld += (mOld ? "\n\n" : "") + row.old;
+                if (row.new) mNew += (mNew ? "\n\n" : "") + row.new;
+            });
+            const newRow = { type: (mOld === mNew ? 'equal' : 'modify'), old: mOld, new: mNew, mergedFrom: originals };
+            for (let i = sortedIndices.length - 1; i >= 0; i--) currentData.splice(sortedIndices[i], 1);
+            currentData.splice(sortedIndices[0], 0, newRow); showToast('항목을 병합했습니다.'); clearSelection();
+        }
+        function handleUnmerge() {
+            const idx = Array.from(selectedIndices)[0]; const row = currentData[idx]; if (!row || !row.mergedFrom) return;
+            currentData.splice(idx, 1, ...row.mergedFrom); showToast('병합을 취소했습니다.'); clearSelection();
+        }
+        function handleDelete() {
+            const sortedIndices = Array.from(selectedIndices).sort((a, b) => b - a);
+            const backupItems = sortedIndices.map(idx => ({ data: currentData[idx], originalIndex: idx })).reverse();
+            deletedItems.push({ timestamp: new Date().toLocaleTimeString(), items: backupItems });
+            sortedIndices.forEach(idx => currentData.splice(idx, 1)); showToast('항목을 삭제했습니다.'); clearSelection();
+        }
+
+        function openRestoreModal() {
+            const list = document.getElementById('deletedList'); list.innerHTML = '';
+            if (deletedItems.length === 0) list.innerHTML = '<p class="text-center py-4 text-gray-400">삭제 내역이 없습니다.</p>';
+            else {
+                [...deletedItems].reverse().forEach((group, gIdx) => {
+                    const div = document.createElement('div'); div.className = "p-3 border rounded mb-2 hover:bg-amber-50 cursor-pointer flex justify-between items-center";
+                    const title = group.items[0].data.old || group.items[0].data.new || "내용 없음";
+                    div.innerHTML = `<div><p class="text-sm font-bold truncate w-64">${title}</p><p class="text-[10px] text-gray-400">${group.timestamp}</p></div><button class="text-blue-600 font-bold text-xs">복구</button>`;
+                    div.onclick = () => { restoreItems(deletedItems.length - 1 - gIdx); }; list.appendChild(div);
+                });
+            } document.getElementById('restoreModal').classList.add('active');
+        }
+        function closeRestoreModal() { document.getElementById('restoreModal').classList.remove('active'); }
+        function restoreItems(groupIndex) {
+            const group = deletedItems[groupIndex]; const sortedGroup = [...group.items].sort((a, b) => a.originalIndex - b.originalIndex);
+            sortedGroup.forEach(item => { currentData.splice(item.originalIndex, 0, item.data); });
+            deletedItems.splice(groupIndex, 1); renderTable(); showToast('복구되었습니다.');
+            if (deletedItems.length === 0) closeRestoreModal(); else openRestoreModal();
+        }
+
+        // 💡 [초고속 최적화 메모리 폭발 방지 대조 로직]
+        function alignLinesDP(oldLines, newLines) {
+            const getMarker = (text) => { const m = text.trim().match(/^(제\s*\d+\s*조(?:의\s*\d+)?|부\s*칙|[①-⑳]|\d+\.\s?|[가-하]\.\s?)/); return m ? m[1].replace(/\s/g, '') : null; };
+            const getBigrams = (str) => { if (!str) return null; const bg = new Map(); for (let i = 0; i < str.length - 1; i++) { const pair = str.substring(i, i + 2); bg.set(pair, (bg.get(pair) || 0) + 1); } return bg; };
+
+            const oldData = oldLines.map(text => ({ text, marker: getMarker(text), bg: getBigrams(text) }));
+            const newData = newLines.map(text => ({ text, marker: getMarker(text), bg: getBigrams(text) }));
+
+            const getSim = (d1, d2) => {
+                if (d1.text === d2.text) return 1; if (!d1.bg || !d2.bg) return 0;
+                let intersection = 0, total = 0;
+                for (const [bg, count1] of d1.bg.entries()) { if (d2.bg.has(bg)) intersection += Math.min(count1, d2.bg.get(bg)); total += count1; }
+                for (const count2 of d2.bg.values()) total += count2; return total === 0 ? 0 : (2.0 * intersection) / total;
+            };
+
+            const dp = Array(oldData.length + 1).fill(null).map(() => new Float32Array(newData.length + 1).fill(0));
+            for (let i = 1; i <= oldData.length; i++) dp[i][0] = i * 2.5; for (let j = 1; j <= newData.length; j++) dp[0][j] = j * 2.5;
+
+            for (let i = 1; i <= oldData.length; i++) {
+                for (let j = 1; j <= newData.length; j++) {
+                    const d1 = oldData[i - 1], d2 = newData[j - 1], sim = getSim(d1, d2), m1 = d1.marker, m2 = d2.marker;
+                    let cost_sub = (d1.text === d2.text) ? 0 : 5.0 * (1.0 - sim);
+                    if (m1 && m2) { if (m1 === m2) cost_sub -= 2.0; else if (sim > 0.6) cost_sub -= 1.0; }
+                    if (cost_sub < 0.1 && d1.text !== d2.text) cost_sub = 0.1;
+                    dp[i][j] = Math.min(dp[i - 1][j] + 2.5, dp[i][j - 1] + 2.5, dp[i - 1][j - 1] + cost_sub);
+                }
+            }
+
+            const result = []; let i = oldData.length, j = newData.length;
+            while (i > 0 || j > 0) {
+                if (i > 0 && j > 0) {
+                    const d1 = oldData[i - 1], d2 = newData[j - 1], sim = getSim(d1, d2), m1 = d1.marker, m2 = d2.marker;
+                    let cost_sub = (d1.text === d2.text) ? 0 : 5.0 * (1.0 - sim);
+                    if (m1 && m2) { if (m1 === m2) cost_sub -= 2.0; else if (sim > 0.6) cost_sub -= 1.0; }
+                    if (cost_sub < 0.1 && d1.text !== d2.text) cost_sub = 0.1;
+
+                    if (Math.abs(dp[i][j] - (dp[i - 1][j - 1] + cost_sub)) < 0.0001) { result.unshift({ type: d1.text === d2.text ? 'equal' : 'modify', old: d1.text, new: d2.text }); i--; j--; }
+                    else if (Math.abs(dp[i][j] - (dp[i - 1][j] + 2.5)) < 0.0001) { result.unshift({ type: 'delete', old: d1.text, new: null }); i--; }
+                    else { result.unshift({ type: 'insert', old: null, new: d2.text }); j--; }
+                } else if (i > 0) { result.unshift({ type: 'delete', old: oldData[i - 1].text, new: null }); i--; }
+                else { result.unshift({ type: 'insert', old: null, new: newData[j - 1].text }); j--; }
+            } return result;
+        }
+
+        function copyTable() {
+            const table = document.getElementById('diffTable');
+            const clone = table.cloneNode(true);
+            const showRemark = document.getElementById('chkShowRemark')?.checked;
+
+            // 1. 복사에 불필요한 UI 요소(no-copy 클래스) 및 선택 강조 효과 제거
+            clone.querySelectorAll('.no-copy').forEach(el => el.remove());
+            clone.querySelectorAll('tr.selected').forEach(tr => tr.classList.remove('selected'));
+
+            // 2. 한글(HWP) A4 가로 여백 기준 '절대 너비' 강제 고정 (950px)
+            const TABLE_WIDTH = 950;
+            clone.style.width = TABLE_WIDTH + "px";
+            clone.style.tableLayout = "fixed";
+            clone.style.borderCollapse = "collapse";
+            clone.setAttribute("width", TABLE_WIDTH);
+
+            // 3. 비고 표시 여부에 따른 열 너비(픽셀) 강제 주입
+            const cols = clone.querySelectorAll('colgroup col');
+            const ths = clone.querySelectorAll('thead th');
+
+            if (showRemark && cols.length >= 3) {
+                // [비고 있음] 현행 437px(46%) : 개정 437px(46%) : 비고 76px(8%)
+                const w1 = 437, w2 = 437, w3 = 76;
+                [cols, ths].forEach(els => {
+                    if (els[0]) { els[0].style.width = w1 + "px"; els[0].setAttribute("width", w1); }
+                    if (els[1]) { els[1].style.width = w2 + "px"; els[1].setAttribute("width", w2); }
+                    if (els[2]) { els[2].style.width = w3 + "px"; els[2].setAttribute("width", w3); }
+                });
+            } else {
+                // [비고 없음] 현행 475px(50%) : 개정 475px(50%)
+                const w = 475;
+                [cols, ths].forEach(els => {
+                    if (els[0]) { els[0].style.width = w + "px"; els[0].setAttribute("width", w); }
+                    if (els[1]) { els[1].style.width = w + "px"; els[1].setAttribute("width", w); }
+                });
+            }
+
+            // 4. 셀 스타일 최적화 (글자 단위 줄바꿈 + 테두리 고정)
+            clone.querySelectorAll('th, td').forEach(cell => {
+                cell.style.border = "1px solid black";
+                cell.style.wordBreak = "break-all"; // 💡 글자 단위 줄바꿈
+                cell.style.padding = "5px 8px";
+                cell.style.backgroundColor = ""; // 강조 배경색 제거
+
+                // 생략 조항(omitted) 스타일 보정
+                const div = cell.querySelector('div');
+                if (div) div.style.wordBreak = "break-all";
+            });
+
+            // 5. 내부에 중첩된 표(Table)가 있을 경우 너비 뚫림 및 선 겹침 방지
+            clone.querySelectorAll('tbody table').forEach(t => {
+                t.style.width = "96%";         // 💡 100% -> 96%로 살짝 줄임
+                t.style.margin = "2px auto";   // 💡 상하 여백 2px, 좌우 중앙 정렬
+                t.style.tableLayout = "fixed";
+                t.setAttribute("width", "96%");
+            });
+
+            // 6. 클립보드 복사 실행 (임시 요소를 활용한 HTML 복사)
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            tempDiv.appendChild(clone);
+            document.body.appendChild(tempDiv);
+
+            const range = document.createRange();
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            range.selectNode(clone);
+            selection.addRange(range);
+
+            try {
+                document.execCommand('copy');
+                const msg = showRemark ? '표 복사 완료! (비고 포함)' : '표 복사 완료! (비고 제외)';
+                showToast(msg);
+            } catch (err) {
+                showModal('오류', '복사에 실패했습니다.');
+            }
+
+            // 7. 클린업
+            selection.removeAllRanges();
+            document.body.removeChild(tempDiv);
+        }
+        // ==========================================
+        // [추가] 개별 박스 정밀 드래그 앤 드롭 제어
+        // ==========================================
+        let lastDragX = 0;
+        let lastDragY = 0;
+        const oldCard = document.getElementById('oldFileCard');
+        const newCard = document.getElementById('newFileCard');
+
+        // 1. 부모 창의 마우스 위치를 실시간으로 추적 (방패막이 너머로 좌표 획득)
+        if (window.parent && window.parent.document) {
+            window.parent.document.addEventListener('dragover', (e) => {
+                lastDragX = e.clientX;
+                lastDragY = e.clientY;
+                highlightCardUnderMouse();
+            });
+
+            // 드래그가 끝나거나 창 밖으로 나가면 하이라이트 초기화
+            window.parent.document.addEventListener('dragleave', (e) => {
+                if (!e.relatedTarget) resetHighlights();
+            });
+            window.parent.document.addEventListener('drop', () => resetHighlights());
+        }
+
+        // 2. 마우스 좌표를 현재 iframe 내부 좌표로 변환하여 카드 하이라이트
+        function highlightCardUnderMouse() {
+            let localX = lastDragX;
+            let localY = lastDragY;
+
+            // iframe의 위치 오프셋(리본 메뉴 등) 보정
+            if (window.frameElement) {
+                const rect = window.frameElement.getBoundingClientRect();
+                localX = lastDragX - rect.left;
+                localY = lastDragY - rect.top;
+            }
+
+            // 해당 좌표에 있는 요소 찾기
+            const elem = document.elementFromPoint(localX, localY);
+
+            resetHighlights();
+
+            // 어느 카드 위에 있는지 판별하여 하이라이트 적용
+            if (elem && oldCard.contains(elem)) {
+                oldCard.classList.add('drag-hover-old');
+            } else if (elem && newCard.contains(elem)) {
+                newCard.classList.add('drag-hover-new');
+            }
+        }
+
+        function resetHighlights() {
+            oldCard.classList.remove('drag-hover-old');
+            newCard.classList.remove('drag-hover-new');
+        }
+
+        // 3. iframe 내부 진입 시 부모 방패막이 활성화 (기존 시스템 연동)
+        document.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            if (window.parent && window.parent.document) {
+                const shield = window.parent.document.getElementById('global-drop-zone');
+                if (shield) shield.classList.add('active');
+            }
+        });
+        document.addEventListener('dragover', (e) => e.preventDefault());
+        document.addEventListener('drop', (e) => e.preventDefault());
+
+        // 4. 파이썬이 던져주는 파일 경로를 받아 좌표 기반으로 정확히 꽂아넣기
+        window.addDroppedFiles = async function (paths) {
+            resetHighlights();
+
+            const validPaths = paths.filter(p => p.toLowerCase().endsWith('.hwpx'));
+            if (validPaths.length === 0) {
+                showModal("알림", "HWPX 파일만 추가할 수 있습니다.");
+                return;
+            }
+
+            // 마우스가 드롭된 최종 좌표를 기준으로 타겟 판별
+            let target = null;
+            let localX = lastDragX;
+            let localY = lastDragY;
+
+            if (window.frameElement) {
+                const rect = window.frameElement.getBoundingClientRect();
+                localX = lastDragX - rect.left;
+                localY = lastDragY - rect.top;
+            }
+
+            const elem = document.elementFromPoint(localX, localY);
+            if (elem && oldCard.contains(elem)) target = 'old';
+            else if (elem && newCard.contains(elem)) target = 'new';
+
+            // 박스 밖의 엉뚱한 곳에 놓았을 경우
+            if (!target) {
+                showToast("파일을 '현행 규정' 또는 '개정 규정안' 박스 위에 정확히 놓아주세요.");
+                return;
+            }
+
+            // 지정된 타겟(old 또는 new)에 파일 적용
+            await processDroppedPath(target, validPaths[0]);
+        };
+
+        // 5. 파일 경로 처리 (파이썬과 통신)
+        async function processDroppedPath(target, path) {
+            const pyApi = window.pywebview || window.parent.pywebview;
+            if (!pyApi) return;
+
+            try {
+                // 파이썬으로 경로를 보내 파일 내용을 읽어옵니다.
+                const res = await pyApi.api.read_hwpx_file(path);
+                if (res) {
+                    const text = res.text || res;
+                    const filename = res.filename || path.split(/[\\/]/).pop();
+
+                    internalHwpxData[target] = text;
+                    const card = document.getElementById(target + 'FileCard');
+                    const nameLabel = document.getElementById(target + 'FileName');
+
+                    card.classList.add('ready');
+                    nameLabel.innerHTML = `<span class='text-green-600 font-bold'>${filename}</span>`;
+                    nameLabel.title = filename;
+
+                    showToast(`${target === 'old' ? '현행' : '개정'} 파일 로드 완료`);
+                    checkReady();
+                }
+            } catch (err) {
+                showModal('오류', '파일을 불러오는 중 문제가 발생했습니다.<br>' + err);
+            }
+        }
+    </script>
+</body>
+</html>

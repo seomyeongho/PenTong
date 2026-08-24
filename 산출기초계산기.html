@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>산출기초 계산기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap');
+        
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; }
+        
+        /* Grid Styling */
+        .excel-grid {
+            display: grid;
+            grid-template-columns: 40px minmax(300px, 1fr) 120px 120px 40px 60px 90px; /* No, Basis, Amount, Calc, Lv, Cat, Status */
+            border-top: 1px solid #e2e8f0;
+            border-left: 1px solid #e2e8f0;
+        }
+
+        .header-cell {
+            background-color: #f1f5f9;
+            color: #475569;
+            font-weight: 700;
+            font-size: 0.75rem;
+            padding: 10px;
+            text-align: center;
+            border-right: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+            user-select: none;
+            letter-spacing: -0.025em;
+        }
+
+        .cell {
+            background: white;
+            border-right: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Basis Input with dynamic indentation */
+        .basis-input {
+            width: 100%;
+            height: 100%;
+            border: none;
+            padding: 8px 12px;
+            font-size: 0.9rem;
+            outline: none;
+            background: transparent;
+            font-family: 'Noto Sans KR', sans-serif;
+            transition: padding-left 0.2s ease;
+        }
+        
+        .cell input:focus {
+            box-shadow: inset 0 0 0 2px #3b82f6;
+            z-index: 10;
+        }
+
+        /* Status Indicators */
+        .status-pass { background-color: #dcfce7 !important; color: #166534; }
+        .status-fail { background-color: #fee2e2 !important; color: #991b1b; }
+        .status-calc { background-color: #eff6ff !important; color: #1e40af; }
+        .status-header { background-color: #fff7ed !important; color: #9a3412; font-weight: 600; } 
+        .status-total { background-color: #f3e8ff !important; color: #6b21a8; font-weight: 800; }
+
+        /* Readonly Calc Field */
+        .cell.read-only {
+            background-color: #f8fafc;
+            color: #64748b;
+            font-family: 'Roboto Mono', monospace;
+            justify-content: flex-end;
+            padding-right: 12px;
+            font-size: 0.85rem;
+        }
+        
+        .row-num {
+            background-color: #f8fafc;
+            color: #94a3b8;
+            justify-content: center;
+            font-size: 0.7rem;
+            border-right: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+            user-select: none;
+        }
+
+        .amount-input { 
+            text-align: right; 
+            font-family: 'Roboto Mono', monospace; 
+            font-weight: 500; 
+            width: 100%;
+            height: 100%;
+            border: none;
+            padding: 8px 12px;
+            outline: none;
+            background: transparent;
+        }
+
+        /* Hierarchy Text Styles */
+        .text-lvl-1 { font-weight: 700; color: #0f172a; }
+        .text-lvl-2 { font-weight: 600; color: #1e293b; }
+        .text-lvl-3 { font-weight: 500; color: #334155; }
+        .text-lvl-4 { color: #475569; }
+        .text-lvl-5 { color: #475569; }
+        .text-lvl-6 { color: #64748b; }
+        .text-lvl-7 { color: #64748b; }
+
+        /* Pastel Row Backgrounds applied directly to cells */
+        .bg-lvl-1 { background-color: #e0f2fe !important; } /* 연한 하늘색 (Level 1) */
+        .bg-subtotal { background-color: #fce7f3 !important; } /* 연한 분홍색 (소계) */
+        .bg-grandtotal { background-color: #fef3c7 !important; } /* 연한 노란색 (합계/총계) */
+
+        /* Badges for Category */
+        .badge {
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            display: inline-block;
+            text-align: center;
+        }
+        .bg-cat-total { background-color: #6366f1; color: white; } /* Indigo 500 */
+        .bg-cat-sub { background-color: #0ea5e9; color: white; }   /* Sky 500 */
+        .bg-cat-calc { background-color: #ec4899; color: white; }  /* Pink 500 */
+
+        #modal-overlay {
+            backdrop-filter: blur(2px);
+            background-color: rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col text-slate-800 relative">
+
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white p-4 shadow-lg shrink-0 flex justify-between items-center z-20">
+        <div>
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i class="fas fa-calculator"></i> 산출기초 계산기
+            </h1>
+            <p class="text-xs text-indigo-200 mt-1 opacity-90">엑셀의 [산출기초]와 [금액] 열을 복사하여 붙여넣으세요.</p>
+        </div>
+        <div class="flex items-center gap-6">
+            <!-- Stats -->
+            <div class="flex gap-4 text-right">
+                <div>
+                    <div class="text-xs text-red-200 uppercase font-bold tracking-wider">오류</div>
+                    <div class="text-xl font-bold font-mono text-red-100" id="error-count">0건</div>
+                </div>
+                <div class="border-r border-indigo-400 h-8 self-center opacity-50"></div>
+                <div>
+                    <div class="text-xs text-indigo-200 uppercase font-bold tracking-wider">세출요구 총 합계</div>
+                    <div class="text-2xl font-bold font-mono" id="grand-total">0</div>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex gap-2">
+                <button onclick="calculateAll()" class="bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-2 rounded-lg transition text-sm shadow-sm font-medium border border-emerald-400">
+                    <i class="fas fa-sync-alt mr-1"></i>다시 계산
+                </button>
+                <button onclick="addRow()" class="bg-indigo-500 hover:bg-indigo-400 text-white px-3 py-2 rounded-lg transition text-sm shadow-sm font-medium border border-indigo-400">
+                    <i class="fas fa-plus mr-1"></i>행 추가
+                </button>
+                <button onclick="showHelpModal()" class="bg-slate-500 hover:bg-slate-400 text-white px-3 py-2 rounded-lg transition text-sm shadow-sm font-medium border border-slate-400">
+                    <i class="fas fa-question-circle mr-1"></i>도움말
+                </button>
+                <button onclick="showResetModal()" class="bg-white text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg transition text-sm font-bold shadow-sm">
+                    <i class="fas fa-rotate-right mr-1"></i>초기화
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Grid Container -->
+    <div class="flex-grow overflow-auto bg-gray-50 p-4">
+        <div class="max-w-7xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden border border-gray-200 ring-1 ring-gray-900/5">
+
+            <!-- Grid Headers -->
+            <div class="excel-grid" style="border-bottom: none;">
+                <div class="header-cell">No</div>
+                <div class="header-cell text-left pl-4">산출기초 (내역)</div>
+                <div class="header-cell">입력 금액</div>
+                <div class="header-cell">계산/중간합계</div>
+                <div class="header-cell">Lv</div>
+                <div class="header-cell">구분</div>
+                <div class="header-cell">검증</div>
+            </div>
+
+            <!-- Grid Body -->
+            <div id="grid-body" class="excel-grid bg-white" style="border-top: none;">
+                <!-- Rows will be injected here JS -->
+            </div>
+        </div>
+
+        <div class="max-w-7xl mx-auto mt-3 text-xs text-gray-500 flex justify-between px-2 font-medium">
+            <span class="flex items-center gap-1"><i class="fas fa-info-circle text-indigo-400"></i> 1., 가., 1), 가), (1), (가) 단계의 상위 항목은 하위 항목들의 합계를 자동 계산합니다.</span>
+            <span class="flex items-center gap-1"><i class="fas fa-check-circle text-green-500"></i> '소계'는 이전 소계 이후의 1레벨 항목을 합산하며, '합계'는 전체를 합산하여 검증합니다.</span>
+        </div>
+    </div>
+
+    <!-- Hidden textarea for paste handling focus trap -->
+    <textarea id="paste-trap" class="fixed top-0 left-0 opacity-0 pointer-events-none"></textarea>
+
+    <!-- Custom Modal for Reset Confirmation -->
+    <div id="modal-overlay" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-80 transform transition-all scale-100 border border-gray-100">
+            <div class="text-center mb-6">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                    <i class="fas fa-trash-alt text-red-500 text-lg"></i>
+                </div>
+                <h3 class="text-lg font-bold text-gray-900">새로 작성하시겠습니까?</h3>
+                <p class="text-sm text-gray-500 mt-2">입력된 모든 내용이 삭제됩니다.</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="closeResetModal()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition">
+                    취소
+                </button>
+                <button onclick="confirmReset()" class="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition shadow-md shadow-red-200">
+                    초기화
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="help-modal-overlay" class="fixed inset-0 z-50 flex items-center justify-center hidden" style="backdrop-filter: blur(2px); background-color: rgba(0, 0, 0, 0.3);">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-11/12 max-w-2xl max-h-[80vh] flex flex-col transform transition-all scale-100 border border-gray-100">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                <h3 class="text-xl font-bold text-gray-900">
+                    <i class="fas fa-question-circle text-indigo-500 mr-2"></i>프로그램 사용 방법
+                </h3>
+                <button onclick="closeHelpModal()" class="text-gray-400 hover:text-gray-600 transition">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="overflow-y-auto pr-2 text-sm text-gray-700 space-y-5 flex-grow font-medium">
+                <div>
+                    <h4 class="font-bold text-indigo-600 mb-1"><i class="fas fa-paste mr-1"></i> 1. 데이터 붙여넣기 (엑셀 연동)</h4>
+                    <p class="pl-4 text-gray-600">엑셀 파일에서 <strong>[산출기초]</strong>와 <strong>[금액]</strong> 두 열을 동시에 드래그하여 복사(Ctrl+C)한 뒤, 프로그램의 빈 칸에 붙여넣기(Ctrl+V) 하시면 자동으로 여러 줄이 한 번에 입력됩니다.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-indigo-600 mb-1"><i class="fas fa-sitemap mr-1"></i> 2. 계층 구조 및 수식 자동 계산</h4>
+                    <ul class="pl-4 text-gray-600 list-disc list-inside space-y-1">
+                        <li><strong>레벨 인식:</strong> 1. ➔ 가. ➔ 1) ➔ 가) ➔ (1) ➔ (가) ➔ - 순서로 최대 7단계의 계층을 자동으로 인식하여 들여쓰기 합니다.</li>
+                        <li><strong>수식 계산:</strong> <code>10,000원 * 5명 * 3일 =</code> 처럼 연산자(+, -, *, /, x, ÷)가 포함된 줄은 자동으로 계산식을 추출하여 결과값을 보여줍니다.</li>
+                        <li><strong>상위 항목 자동 합산:</strong> 하위 항목(계산식)들의 합은 그 위의 상위 항목에 자동으로 누적되어 보여집니다.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold text-indigo-600 mb-1"><i class="fas fa-layer-group mr-1"></i> 3. 소계 및 합계 검증</h4>
+                    <ul class="pl-4 text-gray-600 list-disc list-inside space-y-1">
+                        <li><strong>소계:</strong> 내역에 <code>소계</code>를 입력하면, 이전 소계 이후부터 작성된 1레벨(하늘색) 항목들의 합을 구합니다.</li>
+                        <li><strong>합계:</strong> 내역에 <code>총합계</code>, <code>세출요구</code> 등을 입력하면 문서 전체의 1레벨 항목을 총합산합니다.</li>
+                    </ul>
+                </div>
+                <div class="bg-red-50 p-3 rounded-lg border border-red-100">
+                    <h4 class="font-bold text-red-600 mb-1"><i class="fas fa-exclamation-triangle mr-1"></i> 4. 오류(불일치) 검증</h4>
+                    <p class="text-gray-600 text-xs">사용자가 직접 입력한 '입력 금액'과 프로그램이 계산한 '계산/중간합계'가 다를 경우, 해당 행에 붉은색 <span class="font-bold text-red-600">X 불일치</span> 마크가 표시되며 우측 상단 오류 카운트가 올라갑니다. 이를 통해 수식이나 합계의 실수를 쉽게 찾을 수 있습니다.</p>
+                </div>
+            </div>
+
+            <div class="mt-6 text-right border-t border-gray-100 pt-4">
+                <button onclick="closeHelpModal()" class="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg transition">닫기</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const gridBody = document.getElementById('grid-body');
+        const grandTotalEl = document.getElementById('grand-total');
+        const errorCountEl = document.getElementById('error-count');
+        const modalOverlay = document.getElementById('modal-overlay');
+        const helpModalOverlay = document.getElementById('help-modal-overlay');
+
+        function showHelpModal() { helpModalOverlay.classList.remove('hidden'); }
+        function closeHelpModal() { helpModalOverlay.classList.add('hidden'); }
+
+        let rows = [];
+        let rowCounter = 1;
+
+        window.onload = () => {
+            initGrid();
+        };
+
+        function initGrid() {
+            createRow({ basis: "1. 미래교육연구역량강화", amount: "5,600,000" });
+            createRow({ basis: "가. 교육정책연구", amount: "5,600,000" });
+            createRow({ basis: "1) 강사수당(일반강사1)", amount: "5,600,000" });
+            createRow({ basis: "가) 기본 강사 수당", amount: "4,800,000" });
+            createRow({ basis: "(1) 기본 200,000원 * 2명 * 8회", amount: "3,200,000" });
+            createRow({ basis: "(2) 초과 100,000원 * 2명 * 8회", amount: "1,500,000" }); // 고의적 오류 발생 예시 (정답: 1,600,000)
+            createRow({ basis: "나) 보조 강사 수당", amount: "800,000" });
+            createRow({ basis: "(1) 중학교 파견 강사", amount: "800,000" });
+            createRow({ basis: "(가) 50,000원 * 2명 * 8회", amount: "800,000" });
+            createRow({ basis: "소   계", amount: "5,600,000" });
+            createRow({ basis: "2. 운영비", amount: "1,000,000" });
+            createRow({ basis: "가. 사무용품비", amount: "1,000,000" });
+            createRow({ basis: "- 10,000원 * 100개", amount: "1,000,000" });
+            createRow({ basis: "[소 계]", amount: "1,000,000" });
+            createRow({ basis: "세출요구 총 합계", amount: "6,600,000" });
+            for (let i = 0; i < 3; i++) createRow();
+            calculateAll();
+        }
+
+        function createRow(data = {}) {
+            const rowId = rowCounter++;
+
+            // Elements
+            const noDiv = document.createElement('div');
+            noDiv.className = 'row-num cell';
+            noDiv.innerText = rowId;
+
+            const basisCell = document.createElement('div');
+            basisCell.className = 'cell';
+            const basisInput = document.createElement('input');
+            basisInput.className = 'basis-input';
+            basisInput.placeholder = "내역 입력...";
+            basisInput.value = data.basis || '';
+            basisCell.appendChild(basisInput);
+
+            const amountCell = document.createElement('div');
+            amountCell.className = 'cell';
+            const amountInput = document.createElement('input');
+            amountInput.className = 'amount-input';
+            amountInput.placeholder = "-";
+            amountInput.value = data.amount || '';
+            amountCell.appendChild(amountInput);
+
+            const calcCell = document.createElement('div');
+            calcCell.className = 'cell read-only';
+            calcCell.innerText = '-';
+
+            const lvlCell = document.createElement('div');
+            lvlCell.className = 'cell read-only';
+            lvlCell.style.justifyContent = 'center';
+            lvlCell.style.fontWeight = 'bold';
+            lvlCell.innerText = '-';
+
+            const catCell = document.createElement('div');
+            catCell.className = 'cell read-only';
+            catCell.style.justifyContent = 'center';
+            catCell.innerHTML = '-';
+
+            const statusCell = document.createElement('div');
+            statusCell.className = 'cell read-only';
+            statusCell.style.justifyContent = 'center';
+            statusCell.style.fontWeight = 'bold';
+            statusCell.innerText = '-';
+
+            // Append
+            gridBody.appendChild(noDiv);
+            gridBody.appendChild(basisCell);
+            gridBody.appendChild(amountCell);
+            gridBody.appendChild(calcCell);
+            gridBody.appendChild(lvlCell);
+            gridBody.appendChild(catCell);
+            gridBody.appendChild(statusCell);
+
+            // Data Object
+            const rowObj = {
+                id: rowId,
+                dom: {
+                    rowNum: noDiv,
+                    basisCell: basisCell,
+                    basisInput: basisInput,
+                    amountInput: amountInput,
+                    calcCell: calcCell,
+                    lvlCell: lvlCell,
+                    catCell: catCell,
+                    statusCell: statusCell
+                },
+                level: 99,
+                isLeaf: true,
+                calculatedValue: 0
+            };
+            rows.push(rowObj);
+
+            // Events
+            basisInput.addEventListener('input', debounceCalculate);
+            amountInput.addEventListener('input', debounceCalculate);
+
+            // Paste
+            basisInput.addEventListener('paste', (e) => handlePaste(e, rowObj));
+            amountInput.addEventListener('paste', (e) => handlePaste(e, rowObj));
+
+            if (data.basis) setTimeout(debounceCalculate, 0);
+        }
+
+        function addRow() {
+            createRow();
+            const container = document.querySelector('.overflow-auto');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function showResetModal() { modalOverlay.classList.remove('hidden'); }
+        function closeResetModal() { modalOverlay.classList.add('hidden'); }
+        function confirmReset() {
+            gridBody.innerHTML = '';
+            rows = [];
+            rowCounter = 1;
+            for (let i = 0; i < 15; i++) createRow();
+            calculateAll();
+            closeResetModal();
+        }
+
+        let debounceTimer;
+        function debounceCalculate() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(calculateAll, 50);
+        }
+
+        // --- Core Logic ---
+        function calculateAll() {
+            let errorCount = 0;
+            let rootTotal = 0;
+
+            // 1. Pass: Determine Level & IsFormula
+            rows.forEach(row => {
+                const rawBasis = row.dom.basisInput.value.trim();
+                const rawAmount = row.dom.amountInput.value.replace(/,/g, '');
+                const noSpaceBasis = rawBasis.replace(/\s+/g, '');
+
+                let level = 99; // Default for empty rows (빈 줄은 99로 처리하여 로직에서 무시)
+                let isSubtotal = false;
+                let isGrandTotal = false;
+
+                if (rawBasis !== '') {
+                    level = 8; // Default text
+
+                    // 합계, 소계, 총계 유연한 정규식 처리 (공백 무시)
+                    if (/^(소계|\[소계\]|<소계>)/.test(noSpaceBasis)) {
+                        level = 0;
+                        isSubtotal = true;
+                    } else if (/^(합계|총계|세출요구|총합계|\[합계\])/.test(noSpaceBasis)) {
+                        level = 0;
+                        isGrandTotal = true;
+                    }
+                    // 일반 계층 레벨
+                    else if (/^\d+\./.test(rawBasis)) level = 1;          // 1.
+                    else if (/^[가-힣]+\./.test(rawBasis)) level = 2; // 가.
+                    else if (/^\d+\)/.test(rawBasis)) level = 3;      // 1)
+                    else if (/^[가-힣]+\)/.test(rawBasis)) level = 4; // 가)
+                    else if (/^\(\d+\)/.test(rawBasis)) level = 5;    // (1)
+                    else if (/^\([가-힣]+\)/.test(rawBasis)) level = 6; // (가)
+                    else if (/^[-ㅇ□]/.test(rawBasis)) level = 7;     // -
+                }
+
+                // Indentation UI
+                const indent = (level === 0 || level >= 8) ? 0 : (level - 1) * 20;
+                row.dom.basisInput.style.paddingLeft = (12 + indent) + 'px';
+
+                // Formula Check
+                const cleanBasis = getCleanFormula(rawBasis);
+                const hasOperator = /[+\-*/xX×÷]/.test(rawBasis.replace(/,/g, ''));
+                let formulaVal = 0;
+                let isFormula = false;
+
+                if (cleanBasis && hasOperator) {
+                    try {
+                        formulaVal = new Function('return ' + cleanBasis)();
+                        if (isFinite(formulaVal) && !isNaN(formulaVal)) {
+                            isFormula = true;
+                        }
+                    } catch (e) { }
+                }
+
+                row.level = level;
+                row.isSubtotal = isSubtotal;
+                row.isGrandTotal = isGrandTotal;
+                row.isFormula = isFormula;
+                row.manualAmount = parseFloat(rawAmount) || 0;
+                row.formulaValue = formulaVal;
+
+                if (isFormula) {
+                    row.calculatedValue = formulaVal;
+                } else {
+                    row.calculatedValue = 0;
+                }
+            });
+
+            // 2. Pass: Determine Parent/Leaf & Sum Children
+            rows.forEach((row, i) => {
+                if (row.level === 0 || row.level === 99) {
+                    // level 0 (소계/합계)는 이 패스에서 무시하고 Pass 2.5에서 별도 계산
+                    return;
+                }
+
+                if (row.isFormula) return;
+
+                let subtreeSum = 0;
+                let hasChildren = false;
+
+                for (let j = i + 1; j < rows.length; j++) {
+                    const child = rows[j];
+                    if (child.level === 0 || child.level === 99) continue; // 빈 줄과 합계줄 무시
+
+                    if (child.level <= row.level) break; // End of subtree
+
+                    let childIsLeaf = true;
+                    if (!child.isFormula) {
+                        // 다음 '유효한(빈 줄이 아닌)' 행을 찾아 자식이 있는지 확인
+                        for (let k = j + 1; k < rows.length; k++) {
+                            const nextChild = rows[k];
+                            if (nextChild.level !== 99 && nextChild.level !== 0) {
+                                if (nextChild.level > child.level) {
+                                    childIsLeaf = false; // 더 깊은 레벨이 있으므로 이 항목은 상위 항목(Parent)임
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    if (childIsLeaf) {
+                        const val = child.isFormula ? child.formulaValue : child.manualAmount;
+                        subtreeSum += val;
+                        hasChildren = true;
+                    }
+                }
+
+                if (hasChildren) {
+                    row.calculatedValue = subtreeSum;
+                    row.isLeaf = false;
+                } else {
+                    row.calculatedValue = row.manualAmount;
+                    row.isLeaf = true;
+                }
+            });
+
+            // 2.5 Pass: Calculate Subtotals and Grand Totals (Top-Down)
+            let currentSubtotal = 0;
+            let currentGrandTotal = 0;
+            rows.forEach(row => {
+                // 1레벨 항목을 누적 (중복 합산 방지)
+                if (row.level === 1) {
+                    currentSubtotal += row.calculatedValue;
+                    currentGrandTotal += row.calculatedValue;
+                }
+
+                if (row.isSubtotal) {
+                    row.calculatedValue = currentSubtotal;
+                    currentSubtotal = 0; // 소계를 만나면 다음 소계를 위해 누적값 초기화
+                }
+
+                if (row.isGrandTotal) {
+                    row.calculatedValue = currentGrandTotal; // 총합계는 초기화 없이 누적된 전체값 할당
+                }
+            });
+
+            // 3. Pass: UI Update & Root Total
+            rows.forEach(row => {
+                const rawBasis = row.dom.basisInput.value.trim();
+                const rawAmount = row.dom.amountInput.value.replace(/,/g, '');
+                let displayCalc = '-';
+                let status = 'none';
+                let statusHtml = '-';
+
+                // Style Reset
+                row.dom.calcCell.style.color = '';
+                row.dom.calcCell.style.fontWeight = '';
+                row.dom.statusCell.className = 'cell read-only';
+                row.dom.amountInput.style.color = '';
+
+                // Row Cells Array
+                const rowCells = [
+                    row.dom.rowNum,
+                    row.dom.basisCell,
+                    row.dom.amountInput.parentElement,
+                    row.dom.calcCell,
+                    row.dom.lvlCell,
+                    row.dom.catCell,
+                    row.dom.statusCell
+                ];
+
+                // Remove existing background classes
+                rowCells.forEach(cell => {
+                    cell.classList.remove('bg-lvl-1', 'bg-subtotal', 'bg-grandtotal');
+                });
+
+                // Apply correct background class
+                if (row.isGrandTotal) {
+                    rowCells.forEach(cell => cell.classList.add('bg-grandtotal'));
+                } else if (row.isSubtotal) {
+                    rowCells.forEach(cell => cell.classList.add('bg-subtotal'));
+                } else if (row.level === 1) {
+                    rowCells.forEach(cell => cell.classList.add('bg-lvl-1'));
+                }
+
+                // Text Formatting
+                row.dom.basisInput.className = 'basis-input'; // reset classes
+                if (row.level >= 1 && row.level <= 7) {
+                    row.dom.basisInput.classList.add('text-lvl-' + row.level);
+                }
+
+                if (row.isFormula || (!row.isLeaf && row.calculatedValue > 0) || row.level === 0) {
+                    displayCalc = row.calculatedValue.toLocaleString('ko-KR');
+                }
+
+                row.dom.calcCell.innerText = displayCalc;
+
+                // Level & Category UI Update
+                row.dom.lvlCell.innerText = (row.level >= 1 && row.level <= 7) ? row.level : '-';
+
+                let catHtml = '-';
+                if (row.isGrandTotal) {
+                    catHtml = `<span class="badge shadow-sm" style="background-color: #4f46e5; color: white;">총합계</span>`;
+                } else if (row.isSubtotal) {
+                    catHtml = `<span class="badge shadow-sm" style="background-color: #8b5cf6; color: white;">소계</span>`;
+                } else if (row.isFormula) {
+                    catHtml = `<span class="badge bg-cat-calc shadow-sm">계산</span>`;
+                } else if (row.level >= 1 && row.level <= 7 && !row.isLeaf) {
+                    catHtml = `<span class="badge bg-cat-sub shadow-sm">그룹</span>`;
+                }
+                row.dom.catCell.innerHTML = catHtml;
+
+                // Verification
+                if (rawAmount.trim() === '') {
+                    if (displayCalc !== '-' && displayCalc !== '0') {
+                        status = 'calc';
+                        if (row.isGrandTotal) statusHtml = '<span class="text-xs text-indigo-600 font-bold">합계</span>';
+                        else if (row.isSubtotal) statusHtml = '<span class="text-xs text-purple-600 font-bold">소계</span>';
+                        else if (row.isFormula) statusHtml = '<span class="text-xs text-blue-600 font-bold">자동</span>';
+                        else statusHtml = '<span class="text-xs text-blue-600 font-bold">대기</span>';
+
+                        row.dom.calcCell.style.color = '#1e40af';
+                        if (!row.isFormula) row.dom.calcCell.style.fontWeight = '700';
+                    }
+                } else {
+                    const userAmt = parseFloat(rawAmount);
+                    const diff = Math.abs(userAmt - row.calculatedValue);
+
+                    if (diff < 1) {
+                        status = 'pass';
+                        statusHtml = '<i class="fas fa-check-circle text-green-600 text-lg"></i> <span class="text-xs ml-1 font-bold text-green-700">일치</span>';
+                    } else {
+                        // 금액이 틀리면 1~7레벨, 소계, 합계 모두 엑스표시 (단, 계산값이 0인 빈 껍데기 그룹 제외)
+                        if (row.calculatedValue > 0 || row.level === 0) {
+                            status = 'fail';
+                            statusHtml = '<i class="fas fa-times-circle text-red-500 text-lg"></i> <span class="text-xs ml-1 font-bold text-red-700">불일치</span>';
+                            errorCount++;
+                        }
+                    }
+                }
+
+                // Apply UI
+                if (status === 'pass') {
+                    row.dom.statusCell.classList.add('status-pass');
+                    row.dom.amountInput.style.color = '#166534';
+                } else if (status === 'fail') {
+                    row.dom.statusCell.classList.add('status-fail');
+                    row.dom.amountInput.style.color = '#991b1b';
+                } else if (status === 'calc') {
+                    row.dom.statusCell.classList.add('status-calc');
+                    if (row.level < 7 && !row.isFormula) row.dom.statusCell.classList.add('status-header');
+                } else if (status === 'total') {
+                    row.dom.statusCell.classList.add('status-total');
+                }
+
+                row.dom.statusCell.innerHTML = `<div class="flex items-center justify-center w-full">${statusHtml}</div>`;
+
+                // Grand Total Accumulation
+                if (row.level === 1) {
+                    rootTotal += row.calculatedValue;
+                }
+            });
+
+            grandTotalEl.innerText = rootTotal.toLocaleString('ko-KR');
+
+            // Error Count UI
+            errorCountEl.innerText = errorCount + '건';
+            if (errorCount > 0) {
+                errorCountEl.classList.remove('text-red-100');
+                errorCountEl.classList.add('text-red-300');
+            } else {
+                errorCountEl.classList.add('text-red-100');
+                errorCountEl.classList.remove('text-red-300');
+            }
+        }
+
+        function getCleanFormula(rawInput) {
+            if (!rawInput) return null;
+            let clean = rawInput;
+
+            // Clean prefixes sequentially to avoid matching conflicts
+            // 1. "1.", "가.", "1)", "가)" 형태 제거
+            clean = clean.replace(/^\s*([0-9가-힣a-zA-Z]+)[).]\s+/, '');
+            // 2. "(1)", "(가)" 형태 제거 (수식의 괄호로 인식되는 것 방지)
+            clean = clean.replace(/^\s*\([0-9가-힣a-zA-Z]+\)\s+/, '');
+            // 3. "-", "ㅇ", "□" 등 기호 제거
+            clean = clean.replace(/^\s*[-ㅇ□]\s+/, '');
+
+            // Clean trailing "0=" or "=" often found in headers
+            clean = clean.replace(/\s*0\s*=\s*$/, '');
+            clean = clean.replace(/\s*=\s*$/, '');
+
+            clean = clean.replace(/,/g, '');
+            clean = clean.replace(/[xX×]/g, '*');
+            clean = clean.replace(/[÷]/g, '/');
+            clean = clean.replace(/([0-9.]+)%/g, '($1/100)');
+            // Remove everything except math chars
+            clean = clean.replace(/[^0-9+\-*/().\s]/g, '');
+            clean = clean.replace(/\(\s*\)/g, ''); // empty parens
+            return clean.trim();
+        }
+
+        function handlePaste(e, targetRow) {
+            e.preventDefault();
+            const clipboardData = (e.clipboardData || window.clipboardData).getData('text');
+            if (!clipboardData) return;
+
+            const lines = clipboardData.split(/\r\n|\n|\r/).filter(line => line.trim() !== '');
+            if (lines.length === 0) return;
+
+            let currentIndex = rows.indexOf(targetRow);
+
+            lines.forEach((line, i) => {
+                const columns = line.split('\t');
+                const basisVal = columns[0] || '';
+                const amountVal = columns[1] || '';
+
+                if (currentIndex + i >= rows.length) createRow();
+                const currentRow = rows[currentIndex + i];
+
+                currentRow.dom.basisInput.value = basisVal;
+
+                if (columns.length > 1) {
+                    currentRow.dom.amountInput.value = amountVal;
+                }
+            });
+
+            calculateAll();
+        }
+    </script>
+</body>
+</html>

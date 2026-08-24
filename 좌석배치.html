@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>좌석 배치</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+            }
+
+        /* 2열 스크롤바 숨김 */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* 좌석 애니메이션 */
+        .seat {
+            transition: all 0.2s ease;
+        }
+
+            .seat.drag-over {
+                background-color: #e0f2fe;
+                border-color: #3b82f6;
+                transform: scale(1.05);
+                z-index: 10;
+            }
+
+            /* 결번 좌석 패턴 */
+            .seat.disabled {
+                background: repeating-linear-gradient( 45deg, #f1f5f9, #f1f5f9 10px, #e2e8f0 10px, #e2e8f0 20px );
+                border-color: #cbd5e1;
+                opacity: 0.8;
+            }
+
+        /* 명단 표 입력칸 스타일 */
+        .grid-input {
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            outline: none;
+            background: transparent;
+            padding: 0.25rem 0;
+            font-size: 0.875rem;
+        }
+
+            .grid-input:focus {
+                background-color: #f8fafc;
+            }
+
+        /* 성별 아이콘 색상 */
+        .gender-m {
+            color: #3b82f6;
+            font-weight: 900;
+        }
+
+        .gender-f {
+            color: #ec4899;
+            font-weight: 900;
+        }
+
+        @media print {
+            body {
+                background: white !important;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            #col-3 {
+                border: none !important;
+                box-shadow: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            #captureArea {
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+            }
+
+            #seatGrid {
+                gap: 4px !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans h-screen flex flex-col overflow-hidden">
+
+    <header class="no-print bg-white shadow-sm border-b px-6 py-3 z-20 shrink-0 flex items-center justify-between relative">
+        <h1 class="text-xl font-extrabold text-slate-800 flex items-center gap-2 tracking-tight">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-600"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            좌석 배치
+        </h1>
+        <button onclick="openHelpModal()" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-600 hover:text-indigo-700 rounded-full text-sm font-bold transition shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            도움말
+        </button>
+    </header>
+
+    <main class="flex-1 overflow-hidden flex flex-col lg:flex-row p-4 gap-4 w-full h-full mx-auto">
+
+        <aside class="no-print w-full lg:w-[400px] bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full shrink-0 overflow-hidden relative">
+
+            <div class="p-4 border-b border-slate-200 bg-white flex justify-between items-center shrink-0 z-10">
+                <h2 class="font-extrabold text-slate-800 text-base">1. 학생 명단 관리</h2>
+                <div class="flex gap-2">
+                    <button onclick="loadSampleData()" class="px-3 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1 shadow-sm transition">
+                        <span class="text-slate-400">+</span> 샘플
+                    </button>
+                    <label class="cursor-pointer px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs font-bold text-emerald-700 hover:bg-emerald-100 flex items-center gap-1 shadow-sm transition">
+                        <span>📁</span> 엑셀업로드
+                        <input type="file" id="excelUpload" accept=".xlsx, .xls" class="hidden" onchange="importExcel(event)">
+                    </label>
+                </div>
+            </div>
+
+            <div class="px-3 py-2 text-xs text-indigo-600 bg-indigo-50 border-b border-slate-100 text-center font-bold">
+                💡 이름을 입력하면 마우스로 드래그하여 배치할 수 있습니다.
+            </div>
+
+            <div class="flex-1 overflow-y-auto bg-white" ondragover="allowDrop(event)" ondrop="dropToUnassigned(event)">
+                <table class="w-full text-sm text-center border-collapse">
+                    <thead class="bg-slate-50 sticky top-0 z-10 shadow-sm border-b border-slate-200">
+                        <tr>
+                            <th class="py-2.5 w-10 text-slate-400 font-bold border-r border-slate-200"></th>
+                            <th class="py-2.5 w-12 text-slate-600 font-bold border-r border-slate-200">학년</th>
+                            <th class="py-2.5 w-12 text-slate-600 font-bold border-r border-slate-200">반</th>
+                            <th class="py-2.5 w-12 text-slate-600 font-bold border-r border-slate-200">번호</th>
+                            <th class="py-2.5 text-slate-600 font-bold border-r border-slate-200">이름</th>
+                            <th class="py-2.5 w-12 text-slate-600 font-bold">성별</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </aside>
+
+        <section class="no-print w-full lg:w-[260px] flex flex-col h-full overflow-y-auto scrollbar-hide gap-4 shrink-0 pb-4">
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-extrabold text-slate-800 mb-3 flex items-center gap-1">📐 교실 형태</h3>
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-slate-500">열(분단)</span>
+                        <input type="number" id="colsInput" value="4" min="1" max="15" class="w-12 text-center border border-slate-300 rounded-md font-bold text-sm py-1 outline-none focus:ring-2 focus:ring-indigo-100 bg-slate-50">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-slate-500">행(줄)</span>
+                        <input type="number" id="rowsInput" value="5" min="1" max="15" class="w-12 text-center border border-slate-300 rounded-md font-bold text-sm py-1 outline-none focus:ring-2 focus:ring-indigo-100 bg-slate-50">
+                    </div>
+                </div>
+                <button onclick="applyGridSize()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm px-3 py-1.5 rounded-lg transition border border-slate-200">
+                    크기 적용
+                </button>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-extrabold text-slate-800 mb-3 flex items-center gap-1">⚙️ 배치 조건</h3>
+                <div class="space-y-3">
+                    <div>
+                        <select id="genderOption" class="w-full border border-slate-300 rounded-lg text-sm font-bold text-slate-700 py-1.5 px-2 outline-none focus:ring-2 focus:ring-indigo-100 bg-slate-50 cursor-pointer">
+                            <option value="random">성별 완전 무작위</option>
+                            <option value="pair">남녀 짝꿍 (교차)</option>
+                            <option value="same-sex">동성 짝꿍 (남남/여여)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <button onclick="openRelationModal()" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-sm px-3 py-1.5 rounded-lg transition flex justify-center items-center gap-1 border border-indigo-200">
+                            🤝 특수관계 설정
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-indigo-500">
+                <h3 class="text-sm font-extrabold text-slate-800 mb-3 flex items-center gap-1">
+                    <span class="text-indigo-500">▶</span> 배치 실행
+                </h3>
+                <div class="flex flex-col gap-2">
+                    <button onclick="randomizeSeats()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2.5 rounded-lg transition shadow-sm">
+                        무작위 배치
+                    </button>
+                    <button onclick="clearSeats()" class="w-full bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-bold py-2 rounded-lg transition shadow-sm">
+                        초기화
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+        <section id="col-3" class="flex-1 overflow-hidden bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full relative">
+
+            <div class="no-print p-3 border-b border-slate-200 bg-slate-50 flex flex-wrap justify-between items-center shrink-0 z-10 gap-3">
+
+                <div class="flex items-center gap-3">
+                    <button id="btnTeacherView" onclick="toggleTeacherView()" class="bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-sm px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1">
+                        👀 교사 시점
+                    </button>
+                    <div class="mt-4 mb-4">
+                        <select id="themeSelect" onchange="changeTheme()" class="w-full border border-slate-300 rounded-lg text-sm font-bold text-slate-700 py-2 px-3 outline-none focus:ring-2 focus:ring-indigo-100 bg-slate-50 cursor-pointer">
+                            <option value="modern">모던 화이트</option>
+                            <option value="wood">클래식 우드</option>
+                            <option value="minimal">심플 흑백</option>
+                            <option value="cute">파스텔 둥근형</option>
+                        </select>
+                    </div>
+                    <div class="h-5 w-px bg-slate-300"></div>
+                    <div class="no-capture flex items-center gap-3 text-sm font-bold text-slate-600">
+                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="chkNo" checked onchange="renderAllSeats()" class="w-4 h-4 accent-indigo-500 rounded">번호</label>
+                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="chkGender" checked onchange="renderAllSeats()" class="w-4 h-4 accent-indigo-500 rounded">성별</label>
+                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="chkRel" checked onchange="renderAllSeats()" class="w-4 h-4 accent-indigo-500 rounded">관계</label>
+                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="chkLock" checked onchange="renderAllSeats()" class="w-4 h-4 accent-indigo-500 rounded">고정석</label>
+                    </div>
+                </div>
+
+
+                <div class="flex items-center gap-2 ml-auto">
+                    <button onclick="saveArrangement()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-sm px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1">
+                        💾 저장
+                    </button>
+                    <button onclick="loadArrangement()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-sm px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1">
+                        📂 불러오기
+                    </button>
+                    <input type="file" id="fallbackLoadInput" accept=".json, .ptseat" class="hidden" onchange="handleFallbackLoad(event)">
+
+                    <div class="h-5 w-px bg-slate-300 mx-1"></div>
+
+                    <button onclick="copyAsImage()" class="bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1" id="btnCopyImage">
+                        그림 복사
+                    </button>
+                    <button onclick="exportToExcel()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1" id="btnExportExcel">
+                        엑셀 띄우기
+                    </button>
+                </div>
+            </div>
+
+            <div class="w-full flex-1 overflow-auto flex justify-center items-start pt-6 pb-12 bg-white inner-shadow">
+                <div id="captureArea" class="w-max flex flex-col items-center bg-white p-8 rounded-2xl border border-transparent transition-all">
+                    <div id="teacherDesk" class="teacher-desk w-72 h-12 bg-slate-100 rounded-lg border-2 border-slate-300 flex items-center justify-center mb-12 shadow-sm transition-all relative overflow-hidden">
+                        <span class="font-extrabold text-slate-600 text-lg tracking-widest">교 탁</span>
+                    </div>
+                    <div id="seatGrid" class="grid gap-4 lg:gap-5 mx-auto justify-center"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="toastMessage" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-800/95 backdrop-blur text-white px-5 py-3 rounded-full shadow-2xl z-[200] flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none translate-y-4">
+        <span id="toastIcon" class="text-base">✅</span>
+        <span id="toastText" class="text-sm font-bold tracking-wide"></span>
+    </div>
+
+    <div id="customModal" class="fixed inset-0 bg-slate-900 bg-opacity-50 z-[100] hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform transition-all">
+            <h3 id="modalTitle" class="text-lg font-extrabold text-slate-800 mb-2">알림</h3>
+            <p id="modalMessage" class="text-sm text-slate-600 mb-6 leading-relaxed"></p>
+            <div class="flex justify-end gap-2">
+                <button id="modalBtnCancel" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition hidden">취소</button>
+                <button id="modalBtnConfirm" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold transition">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="emptySeatModal" class="fixed inset-0 bg-slate-900 bg-opacity-50 z-[60] hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center mb-4 shrink-0">
+                <h3 class="text-lg font-extrabold text-slate-800 flex items-center gap-2">🪑 빈자리 설정</h3>
+                <button onclick="closeEmptySeatModal()" class="text-slate-400 hover:text-rose-500 transition text-xl font-bold">&times;</button>
+            </div>
+            <p id="emptySeatMessage" class="text-sm text-slate-600 mb-5 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100"></p>
+            <div class="flex gap-2 mb-4 shrink-0">
+                <button id="btnRandomEmpty" onclick="setEmptyMode('random')" class="flex-1 py-2 bg-indigo-50 border-2 border-indigo-600 text-indigo-700 rounded-lg text-sm font-bold transition shadow-sm">무작위로 비우기</button>
+                <button id="btnManualEmpty" onclick="setEmptyMode('manual')" class="flex-1 py-2 bg-white border-2 border-slate-200 text-slate-600 hover:border-slate-300 rounded-lg text-sm font-bold transition shadow-sm">직접 선택하기</button>
+            </div>
+            <div id="miniGridContainer" class="hidden flex-1 overflow-y-auto bg-slate-100 p-6 rounded-xl border border-slate-200 inner-shadow mb-4 flex flex-col items-center">
+                <div class="text-center text-sm mb-4 w-full font-bold text-slate-500" id="miniGridHelp"></div>
+                <div id="miniTeacherDesk" class="w-32 h-7 bg-slate-300 rounded border border-slate-400 flex items-center justify-center text-[11px] font-extrabold text-slate-600 shadow-sm transition-all">교 탁</div>
+                <div id="miniSeatGrid" class="grid gap-2 justify-center"></div>
+            </div>
+            <div class="flex justify-end gap-2 shrink-0">
+                <button onclick="closeEmptySeatModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition">취소</button>
+                <button id="btnStartArrangement" onclick="startArrangementWithEmptySeats()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-sm transition">이대로 배치</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="relationModal" class="fixed inset-0 bg-slate-900 bg-opacity-50 z-[70] hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md flex flex-col">
+            <h3 class="text-lg font-extrabold text-slate-800 mb-4 flex items-center gap-2">🤝 특수 관계 설정</h3>
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <select id="relStudentA" class="flex-1 border border-slate-300 p-2 rounded-lg text-sm font-bold text-slate-700 outline-none"></select>
+                    <span class="text-slate-400 font-extrabold">와(과)</span>
+                    <select id="relStudentB" class="flex-1 border border-slate-300 p-2 rounded-lg text-sm font-bold text-slate-700 outline-none"></select>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="addRelation('together')" class="flex-1 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg font-bold text-sm transition shadow-sm border border-indigo-200">🤝 짝꿍 묶기</button>
+                    <button onclick="addRelation('separate')" class="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg font-bold text-sm transition shadow-sm border border-rose-200">⚡ 절대 분리</button>
+                </div>
+            </div>
+            <div class="text-xs font-bold text-slate-500 mb-2">설정된 관계 목록</div>
+            <div id="relationList" class="flex-1 overflow-y-auto max-h-48 space-y-2 bg-white border border-slate-200 rounded-lg p-2 inner-shadow"></div>
+            <div class="mt-4 flex justify-end">
+                <button onclick="closeRelationModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-bold shadow-sm transition">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="helpModal" class="fixed inset-0 bg-slate-900 bg-opacity-50 z-50 hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center mb-4 shrink-0">
+                <h3 class="text-lg font-extrabold text-slate-800 flex items-center gap-2">💡 좌석 배치 프로그램 안내</h3>
+                <button onclick="closeHelpModal()" class="text-slate-400 hover:text-rose-500 transition text-xl font-bold">&times;</button>
+            </div>
+            <div class="flex-1 overflow-y-auto pr-2 space-y-5 text-sm text-slate-700">
+                <section>
+                    <h4 class="font-bold text-indigo-700 mb-1 border-b pb-1">1. 특수 기능 (고정석, 특수관계)</h4>
+                    <ul class="list-disc pl-5 space-y-1.5 marker:text-indigo-400">
+                        <li><b>좌석 고정(🔒):</b> 배치된 학생의 <b>자리 왼쪽 위 모서리</b>에 마우스를 올리면 🔓 버튼이 나타납니다. 이를 클릭해 잠그면 무작위 배치에서 제외됩니다.</li>
+                        <li><b>특수관계(🤝):</b> 특정 학생을 무조건 붙여 앉히거나(짝꿍 묶기), 무조건 떨어뜨려 놓을 수 있습니다. 고정석 학생과 묶으면 고정석 바로 옆자리로 따라갑니다.</li>
+                        <li><b>비밀 유지(위장):</b> 오른쪽 툴바의 '고정석' 체크를 해제하면 아이콘과 색상이 일반 자리와 똑같이 변하여 아이들이 눈치채지 못합니다.</li>
+                    </ul>
+                </section>
+            </div>
+            <div class="mt-4 pt-4 border-t border-slate-100 flex justify-end shrink-0">
+                <button onclick="closeHelpModal()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-sm transition">확인했습니다</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 전역 변수 ---
+        let masterList = [];
+        let gridRows = 5;
+        let gridCols = 4;
+        let seats = [];
+        let isTeacherView = false;
+        let emptySeatState = { needed: 0, selected: [], mode: 'random', activeStudents: [], availableSeats: [] };
+        let globalRelations = [];
+        
+        let currentTheme = 'modern'; // [추가] 현재 테마 상태
+
+        // [추가] 테마 변경 함수
+        function changeTheme() {
+            currentTheme = document.getElementById('themeSelect').value;
+            renderGridDOM();
+        }
+        window.onload = () => {
+            initMasterList();
+            initGrid(gridRows, gridCols);
+            renderTable();
+        };
+
+        function initMasterList() {
+            masterList = Array.from({ length: 50 }, (_, i) => ({
+                id: `std_${i}`, grade: '', classNo: '', no: '', name: '', gender: '',
+                assignedSeat: null, locked: false
+            }));
+            globalRelations = [];
+        }
+
+        // --- 토스트 알림 함수 ---
+        let toastTimeout;
+        function showToast(message, icon = '✅') {
+            const toast = document.getElementById('toastMessage');
+            document.getElementById('toastText').innerHTML = message;
+            document.getElementById('toastIcon').innerHTML = icon;
+
+            toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+            }, 3000);
+        }
+
+        // --- 공통 에러 팝업 함수 (에러 등 크리티컬한 상황에서만 사용) ---
+        function showPopup(message, isConfirm = false, onConfirm = null) {
+            const modal = document.getElementById('customModal');
+            document.getElementById('modalTitle').innerText = isConfirm ? '확인 필요' : '알림';
+            document.getElementById('modalMessage').innerHTML = message;
+
+            const btnCancel = document.getElementById('modalBtnCancel');
+            const btnConfirm = document.getElementById('modalBtnConfirm');
+
+            if (isConfirm) {
+                btnCancel.classList.remove('hidden');
+                btnConfirm.onclick = () => { closePopup(); if (onConfirm) onConfirm(); };
+            } else {
+                btnCancel.classList.add('hidden');
+                btnConfirm.onclick = closePopup;
+            }
+            btnCancel.onclick = closePopup;
+            modal.classList.remove('hidden');
+        }
+        function closePopup() { document.getElementById('customModal').classList.add('hidden'); }
+
+        function openHelpModal() { document.getElementById('helpModal').classList.remove('hidden'); }
+        function closeHelpModal() { document.getElementById('helpModal').classList.add('hidden'); }
+
+        // --- 특수 관계 설정 ---
+        function openRelationModal() {
+            const activeStudents = masterList.filter(s => s.name.trim() !== '');
+            if (activeStudents.length < 2) return showPopup("명단에 2명 이상의 학생을 입력해주세요.");
+
+            const selA = document.getElementById('relStudentA');
+            const selB = document.getElementById('relStudentB');
+            selA.innerHTML = ''; selB.innerHTML = '';
+
+            activeStudents.forEach(s => {
+                selA.add(new Option(s.name, s.id));
+                selB.add(new Option(s.name, s.id));
+            });
+            if (activeStudents.length > 1) selB.selectedIndex = 1;
+
+            renderRelationList();
+            document.getElementById('relationModal').classList.remove('hidden');
+        }
+        function closeRelationModal() { document.getElementById('relationModal').classList.add('hidden'); renderAllSeats(); }
+
+        function addRelation(type) {
+            const selA = document.getElementById('relStudentA');
+            const selB = document.getElementById('relStudentB');
+            const idA = selA.value; const idB = selB.value;
+
+            if (idA === idB) return showPopup("서로 다른 학생을 선택하세요.");
+            if (globalRelations.some(r => (r.a === idA && r.b === idB) || (r.a === idB && r.b === idA))) {
+                return showPopup("이미 두 학생 간의 관계가 설정되어 있습니다.");
+            }
+
+            globalRelations.push({
+                id: Date.now().toString(),
+                a: idA, b: idB, type: type,
+                nameA: selA.options[selA.selectedIndex].text,
+                nameB: selB.options[selB.selectedIndex].text
+            });
+            renderRelationList();
+        }
+
+        function removeRelation(relId) {
+            globalRelations = globalRelations.filter(r => r.id !== relId);
+            renderRelationList();
+        }
+
+        function renderRelationList() {
+            const listDiv = document.getElementById('relationList');
+            listDiv.innerHTML = '';
+            if (globalRelations.length === 0) listDiv.innerHTML = '<div class="text-center text-xs text-slate-400 py-2">설정된 관계가 없습니다.</div>';
+
+            globalRelations.forEach(rel => {
+                const isTog = rel.type === 'together';
+                const div = document.createElement('div');
+                div.className = `flex justify-between items-center p-2 rounded text-sm font-bold border ${isTog ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`;
+                div.innerHTML = `<span>${isTog ? '🤝' : '⚡'} ${rel.nameA} - ${rel.nameB}</span><button onclick="removeRelation('${rel.id}')" class="text-slate-400 hover:text-slate-700 font-bold">&times;</button>`;
+                listDiv.appendChild(div);
+            });
+        }
+
+        // --- 명단 표 렌더링 로직 ---
+        function updateData(id, field, value) {
+            const std = masterList.find(s => s.id === id);
+            if (std) std[field] = value;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('studentTableBody');
+            tbody.innerHTML = '';
+
+            masterList.forEach((std, i) => {
+                const isAssigned = std.assignedSeat !== null;
+                const tr = document.createElement('tr');
+                tr.className = `border-b border-slate-200 transition ${isAssigned ? 'bg-slate-100 opacity-60' : 'hover:bg-slate-50 bg-white'}`;
+
+                let nameContent = '';
+                if (isAssigned) {
+                    nameContent = `<div class="w-full h-8 flex items-center justify-center text-slate-500 select-none">${std.name}</div>`;
+                } else {
+                    const safeName = std.name.replace(/"/g, '&quot;');
+                    nameContent = `
+                            <div class="relative w-full h-8 flex items-center">
+                                <input type="text" id="input_${std.id}" class="grid-input px-1" value="${safeName}"
+                                       oninput="updateData('${std.id}', 'name', this.value); const d = document.getElementById('drag_${std.id}'); if(d) d.innerText = this.value;"
+                                       onkeydown="if(event.key==='Enter') this.blur();"
+                                       onblur="const d = document.getElementById('drag_${std.id}'); if(d) d.style.display = this.value.trim() ? 'flex' : 'none';">
+                                <div id="drag_${std.id}" draggable="true"
+                                     ondragstart="dragStart(event, '${std.id}', null)"
+                                     onclick="this.style.display='none'; document.getElementById('input_${std.id}').focus();"
+                                     class="absolute inset-0 cursor-grab active:cursor-grabbing justify-center items-center bg-white hover:bg-indigo-50 text-slate-800 font-bold transition select-none shadow-sm rounded-sm"
+                                     style="display: ${std.name.trim() ? 'flex' : 'none'};" title="드래그하여 우측 좌석에 놓으세요.">
+                                    ${std.name}
+                                </div>
+                            </div>`;
+                }
+
+                tr.innerHTML = `
+                        <td class="border-r border-slate-200 text-slate-400 bg-slate-50 w-10 h-8">${i + 1}</td>
+                        <td class="border-r border-slate-200 p-0 w-12"><input type="text" class="grid-input" value="${std.grade}" oninput="updateData('${std.id}', 'grade', this.value)" ${isAssigned ? 'disabled' : ''}></td>
+                        <td class="border-r border-slate-200 p-0 w-12"><input type="text" class="grid-input" value="${std.classNo}" oninput="updateData('${std.id}', 'classNo', this.value)" ${isAssigned ? 'disabled' : ''}></td>
+                        <td class="border-r border-slate-200 p-0 w-12"><input type="text" class="grid-input" value="${std.no}" oninput="updateData('${std.id}', 'no', this.value)" ${isAssigned ? 'disabled' : ''}></td>
+                        <td class="border-r border-slate-200 p-0">${nameContent}</td>
+                        <td class="p-0 w-14"><input type="text" class="grid-input" value="${std.gender}" oninput="updateData('${std.id}', 'gender', this.value)" ${isAssigned ? 'disabled' : ''}></td>
+                    `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- 엑셀 및 샘플 데이터 ---
+        function loadSampleData() {
+            const names = ['김지민', '이서준', '박서연', '최도윤', '정하은', '강시우', '조지유', '윤서진', '임채원', '한수아', '오건우', '서하준', '황지아', '안유진', '송민준', '전연우', '고우주', '문수빈', '유다은', '홍길동'];
+            const genders = ['여', '남', '여', '남', '여', '남', '여', '남', '여', '여', '남', '남', '여', '여', '남', '남', '남', '여', '여', '남'];
+
+            masterList.forEach(std => { std.name = ''; std.gender = ''; std.no = ''; std.grade = ''; std.classNo = ''; });
+            names.forEach((name, i) => {
+                if (masterList[i]) { masterList[i].name = name; masterList[i].gender = genders[i]; masterList[i].no = i + 1; }
+            });
+            clearSeats();
+        }
+
+        function importExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
+                    if (json.length === 0) return showPopup('엑셀 파일에 데이터가 없습니다.');
+                    if (json.length > masterList.length) {
+                        for (let i = 0; i < json.length - masterList.length; i++) {
+                            masterList.push({ id: `std_${masterList.length}`, grade: '', classNo: '', no: '', name: '', gender: '', assignedSeat: null, locked: false });
+                        }
+                    }
+
+                    masterList.forEach(std => { std.name = ''; std.gender = ''; std.no = ''; std.grade = ''; std.classNo = ''; });
+
+                    json.forEach((row, index) => {
+                        const keys = Object.keys(row);
+                        const gradeKey = keys.find(k => k.includes('학년'));
+                        const classKey = keys.find(k => k.includes('반'));
+                        const numKey = keys.find(k => k.includes('번호') || k.includes('no'));
+                        const nameKey = keys.find(k => k.includes('이름') || k.includes('성명') || k.includes('name'));
+                        const genderKey = keys.find(k => k.includes('성별') || k.includes('남여') || k.includes('gender'));
+
+                        masterList[index].grade = gradeKey ? row[gradeKey] : '';
+                        masterList[index].classNo = classKey ? row[classKey] : '';
+                        masterList[index].no = numKey ? row[numKey] : (index + 1);
+                        masterList[index].name = nameKey ? String(row[nameKey]) : `학생${index + 1}`;
+
+                        if (genderKey && row[genderKey]) {
+                            const g = String(row[genderKey]).trim();
+                            if (g === '남' || g.toUpperCase() === 'M') masterList[index].gender = '남';
+                            else if (g === '여' || g.toUpperCase() === 'F') masterList[index].gender = '여';
+                            else masterList[index].gender = g;
+                        }
+                    });
+
+                    clearSeats();
+                    showToast(`${json.length}명의 명단을 성공적으로 불러왔습니다.`);
+                } catch (error) {
+                    showPopup('엑셀 파일을 읽는 중 오류가 발생했습니다.');
+                }
+                event.target.value = '';
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // --- 교사 시점 변환 ---
+        function toggleTeacherView() {
+            isTeacherView = !isTeacherView;
+            const btn = document.getElementById('btnTeacherView');
+            if (isTeacherView) {
+                btn.classList.add('bg-indigo-100', 'text-indigo-700', 'border-indigo-300');
+                btn.classList.remove('bg-white', 'text-slate-700', 'border-slate-300');
+            } else {
+                btn.classList.remove('bg-indigo-100', 'text-indigo-700', 'border-indigo-300');
+                btn.classList.add('bg-white', 'text-slate-700', 'border-slate-300');
+            }
+            renderGridDOM();
+        }
+
+        function applyGridSize() {
+            const r = parseInt(document.getElementById('rowsInput').value);
+            const c = parseInt(document.getElementById('colsInput').value);
+            if (r < 1 || c < 1) return showPopup('행과 열은 1 이상이어야 합니다.');
+
+            if (seats.flat().some(seat => seat && seat.student)) {
+                showPopup('격자 크기를 변경하면 현재 배치가 초기화됩니다. 계속하시겠습니까?', true, () => {
+                    clearSeats(); initGrid(r, c);
+                });
+            } else {
+                initGrid(r, c);
+            }
+        }
+
+        function initGrid(r, c) {
+            gridRows = r; gridCols = c;
+            seats = Array.from({ length: r }, () => Array.from({ length: c }, () => ({ student: null, disabled: false })));
+            renderGridDOM();
+        }
+
+        function renderGridDOM() {
+            const gridEl = document.getElementById('seatGrid');
+            gridEl.style.gridTemplateColumns = `repeat(${gridCols}, minmax(0, 1fr))`;
+            gridEl.innerHTML = '';
+
+            const captureArea = document.getElementById('captureArea');
+            const desk = document.getElementById('teacherDesk');
+
+            // [추가] 교탁 테마 스타일 정의 및 너비 w-60으로 축소
+            let deskThemeClass = '';
+            if (currentTheme === 'wood') {
+                deskThemeClass = 'bg-[#d97706] border-[#92400e] text-white shadow-md rounded-lg';
+            } else if (currentTheme === 'minimal') {
+                deskThemeClass = 'bg-white border-slate-800 text-slate-800 border-2 rounded-none';
+            } else if (currentTheme === 'cute') {
+                deskThemeClass = 'bg-pink-200 border-pink-400 text-pink-700 rounded-full shadow-sm';
+            } else { // modern (기본)
+                deskThemeClass = 'bg-slate-100 border-slate-300 text-slate-600 rounded-lg border-2';
+            }
+
+            // 교탁 클래스 적용 (기존 클래스 덮어쓰기)
+            desk.className = `teacher-desk w-60 h-12 flex items-center justify-center shadow-sm transition-all relative overflow-hidden ${deskThemeClass}`;
+
+            if (isTeacherView) {
+                captureArea.classList.remove('flex-col'); captureArea.classList.add('flex-col-reverse');
+                desk.classList.remove('mb-12'); desk.classList.add('mt-12');
+            } else {
+                captureArea.classList.add('flex-col'); captureArea.classList.remove('flex-col-reverse');
+                desk.classList.add('mb-12'); desk.classList.remove('mt-12');
+            }
+
+            const rowStart = isTeacherView ? gridRows - 1 : 0;
+            const rowEnd = isTeacherView ? -1 : gridRows;
+            const rowStep = isTeacherView ? -1 : 1;
+            const colStart = isTeacherView ? gridCols - 1 : 0;
+            const colEnd = isTeacherView ? -1 : gridCols;
+            const colStep = isTeacherView ? -1 : 1;
+
+            for (let i = rowStart; i !== rowEnd; i += rowStep) {
+                for (let j = colStart; j !== colEnd; j += colStep) {
+                    const seatDiv = document.createElement('div');
+                    seatDiv.className = `seat group h-16 w-24 lg:h-20 lg:w-32 border-2 border-slate-200 rounded-xl flex items-center justify-center bg-white shadow-sm relative`;
+                    seatDiv.id = `seat-${i}-${j}`;
+                    seatDiv.dataset.row = i; seatDiv.dataset.col = j;
+                    seatDiv.ondragover = allowDrop; seatDiv.ondragleave = dragLeave; seatDiv.ondrop = dropToSeat;
+
+                    const toggleBtn = document.createElement('button');
+                    toggleBtn.onclick = (e) => { e.stopPropagation(); toggleSeatDisabled(i, j); };
+
+                    updateToggleBtn(toggleBtn, seats[i][j].disabled);
+                    if (seats[i][j].disabled) seatDiv.classList.add('disabled');
+
+                    seatDiv.appendChild(toggleBtn);
+                    gridEl.appendChild(seatDiv);
+                }
+            }
+            renderAllSeats();
+        }
+
+        function updateToggleBtn(btn, isDisabled) {
+            if (isDisabled) {
+                btn.innerHTML = '➕';
+                btn.className = 'no-capture absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center shadow-md text-[10px] z-20 bg-emerald-100 text-emerald-600 hover:bg-emerald-200 border border-emerald-300 transition-opacity opacity-0 group-hover:opacity-100';
+            } else {
+                btn.innerHTML = '🚫';
+                btn.className = 'no-capture absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center shadow-md text-[10px] z-20 bg-rose-100 text-rose-600 hover:bg-rose-200 border border-rose-300 transition-opacity opacity-0 group-hover:opacity-100';
+            }
+        }
+
+        function toggleSeatDisabled(r, c) {
+            if (seats[r][c].student) return showPopup('학생이 배치된 자리는 제외할 수 없습니다.');
+            seats[r][c].disabled = !seats[r][c].disabled;
+            const seatDiv = document.getElementById(`seat-${r}-${c}`);
+            const btn = seatDiv.querySelector('button.no-capture');
+
+            if (seats[r][c].disabled) seatDiv.classList.add('disabled');
+            else seatDiv.classList.remove('disabled');
+
+            updateToggleBtn(btn, seats[r][c].disabled);
+        }
+
+        // --- 좌석 렌더링 ---
+        function getGenderHTML(gender) {
+            if (gender === '남') return `<span class="gender-m">♂</span>`;
+            if (gender === '여') return `<span class="gender-f">♀</span>`;
+            return '';
+        }
+
+        function renderAllSeats() {
+            for (let i = 0; i < gridRows; i++) for (let j = 0; j < gridCols; j++) renderSeat(i, j);
+        }
+
+        function renderSeat(r, c) {
+            const seatDiv = document.getElementById(`seat-${r}-${c}`);
+            const state = seats[r][c];
+            const btn = seatDiv.querySelector('button.no-capture');
+
+            const existingStudent = seatDiv.querySelector('.student-card-in-seat');
+            if (existingStudent) existingStudent.remove();
+
+            if (state.student) {
+                // [이중 테두리 버그 수정] 학생이 앉으면 부모 격자의 회색 테두리와 배경을 투명하게 만듦
+                seatDiv.classList.replace('border-slate-200', 'border-transparent');
+                seatDiv.classList.replace('bg-white', 'bg-transparent');
+                seatDiv.classList.remove('shadow-sm');
+
+                const chkNo = document.getElementById('chkNo');
+                const chkGender = document.getElementById('chkGender');
+                const chkRel = document.getElementById('chkRel');
+                const chkLock = document.getElementById('chkLock');
+
+                const showNo = chkNo ? chkNo.checked : true;
+                const showGender = chkGender ? chkGender.checked : true;
+                const showRel = chkRel ? chkRel.checked : true;
+                const showLock = chkLock ? chkLock.checked : true;
+
+                const isVisiblyLocked = state.student.locked && showLock;
+
+                // 테마별 디자인 적용 (테두리 두께를 border-2 로 통일하여 선명하게)
+                let themeClass = '';
+                if (currentTheme === 'wood') {
+                    themeClass = isVisiblyLocked ? 'bg-orange-100 border-orange-500 shadow-inner rounded-lg' : 'bg-[#fef3c7] border-[#d97706] text-[#92400e] shadow-sm rounded-lg';
+                } else if (currentTheme === 'minimal') {
+                    themeClass = isVisiblyLocked ? 'bg-gray-100 border-gray-500 border-dashed rounded-none' : 'bg-white border-slate-800 rounded-none shadow-sm';
+                } else if (currentTheme === 'cute') {
+                    themeClass = isVisiblyLocked ? 'bg-pink-100 border-pink-300 shadow-sm rounded-3xl' : 'bg-blue-50 border-blue-200 shadow-sm rounded-3xl';
+                } else { // modern (기본)
+                    themeClass = isVisiblyLocked ? 'bg-amber-100 border-amber-400 shadow-inner rounded-xl' : 'bg-white border-indigo-200 shadow-sm rounded-xl';
+                }
+
+                const stdDiv = document.createElement('div');
+                stdDiv.className = `student-card-in-seat absolute inset-0 flex flex-col items-center justify-center border-2 select-none transition-all ${themeClass}`;
+                stdDiv.draggable = true;
+                stdDiv.id = `seat_std_${state.student.id}`;
+
+                const noText = (showNo && state.student.no) ? `<span class="text-slate-500 opacity-75">(${state.student.no}번)</span>` : '';
+                const genderHTML = showGender ? `<span class="text-sm opacity-80">${getGenderHTML(state.student.gender)}</span>` : '';
+
+                let relIcons = '';
+                if (showRel && globalRelations) {
+                    if (globalRelations.some(rel => rel.type === 'together' && (rel.a === state.student.id || rel.b === state.student.id))) relIcons += '🤝';
+                    if (globalRelations.some(rel => rel.type === 'separate' && (rel.a === state.student.id || rel.b === state.student.id))) relIcons += '⚡';
+                }
+                const relHTML = relIcons ? `<span class="text-sm ml-0.5">${relIcons}</span>` : '';
+
+                const nameColor = currentTheme === 'wood' ? 'text-[#78350f]' : 'text-slate-800';
+
+                stdDiv.innerHTML = `
+                    <div class="text-sm lg:text-base font-extrabold ${nameColor}">${state.student.name}</div>
+                    <div class="text-xs font-bold mt-0.5 flex gap-1 items-center justify-center">
+                        ${noText}${genderHTML}${relHTML}
+                    </div>
+                `;
+
+                if (showLock) {
+                    const lockBtn = document.createElement('button');
+                    lockBtn.className = `no-capture absolute top-1 left-1 w-5 h-5 rounded flex items-center justify-center text-[11px] transition-all duration-200 ${state.student.locked ? 'opacity-100 text-amber-700 bg-amber-200' : 'opacity-0 group-hover:opacity-100 text-slate-400 hover:bg-slate-200'}`;
+                    lockBtn.innerHTML = state.student.locked ? '🔒' : '🔓';
+                    lockBtn.title = "클릭하여 좌석 고정/해제";
+                    lockBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        state.student.locked = !state.student.locked;
+                        renderSeat(r, c);
+                    };
+                    stdDiv.appendChild(lockBtn);
+                }
+
+                seatDiv.classList.add('group');
+                stdDiv.ondragstart = (e) => dragStart(e, state.student.id, { r, c });
+
+                seatDiv.appendChild(stdDiv);
+                if (btn) btn.style.display = 'none';
+            } else {
+                // 빈자리일 경우 부모 격자의 기본 테두리와 배경을 다시 복구
+                seatDiv.classList.replace('border-transparent', 'border-slate-200');
+                seatDiv.classList.replace('bg-transparent', 'bg-white');
+                seatDiv.classList.add('shadow-sm');
+
+                seatDiv.classList.remove('group');
+                if (btn) btn.style.display = 'flex';
+            }
+        }
+
+        function clearSeats() {
+            seats.forEach((row, r) => row.forEach((s, c) => {
+                if (s.student && !s.student.locked) {
+                    s.student.assignedSeat = null;
+                    s.student = null;
+                }
+            }));
+            masterList.forEach(std => {
+                if (!std.locked) std.assignedSeat = null;
+            });
+            renderAllSeats();
+            renderTable();
+        }
+
+        function shuffle(array) {
+            let arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        // --- 무작위 배치 ---
+        function randomizeSeats() {
+            const activeStudents = masterList.filter(s => s.name.trim() !== '');
+            if (activeStudents.length === 0) return showPopup('먼저 명단에 이름을 입력해주세요.');
+
+            const availableSeats = [];
+            for (let i = 0; i < gridRows; i++) {
+                for (let j = 0; j < gridCols; j++) {
+                    if (!seats[i][j].disabled) availableSeats.push({ r: i, c: j });
+                }
+            }
+
+            if (availableSeats.length < activeStudents.length) {
+                return showPopup(`자리가 부족합니다. (학생수: ${activeStudents.length}명 / 좌석수: ${availableSeats.length}석)`);
+            }
+
+            const diff = availableSeats.length - activeStudents.length;
+
+            if (diff > 0) {
+                emptySeatState.needed = diff;
+                emptySeatState.selected = [];
+                emptySeatState.mode = 'random';
+                emptySeatState.activeStudents = activeStudents;
+                emptySeatState.availableSeats = availableSeats;
+
+                document.getElementById('emptySeatMessage').innerHTML = `명단(<b>${activeStudents.length}명</b>)보다 좌석(<b>${availableSeats.length}석</b>)이 많아 <b class="text-rose-600">${diff}자리</b>가 남습니다.<br>남는 자리를 어떻게 비울지 선택해주세요.`;
+                setEmptyMode('random');
+                document.getElementById('emptySeatModal').classList.remove('hidden');
+            } else {
+                executeRandomize(activeStudents, availableSeats);
+            }
+        }
+
+        function closeEmptySeatModal() { document.getElementById('emptySeatModal').classList.add('hidden'); }
+
+        function setEmptyMode(mode) {
+            emptySeatState.mode = mode;
+            emptySeatState.selected = [];
+
+            const btnRand = document.getElementById('btnRandomEmpty');
+            const btnMan = document.getElementById('btnManualEmpty');
+            const miniGrid = document.getElementById('miniGridContainer');
+            const btnStart = document.getElementById('btnStartArrangement');
+
+            if (mode === 'random') {
+                btnRand.className = 'flex-1 py-2 bg-indigo-50 border-2 border-indigo-600 text-indigo-700 rounded-lg text-sm font-bold transition shadow-sm';
+                btnMan.className = 'flex-1 py-2 bg-white border-2 border-slate-200 text-slate-600 hover:border-slate-300 rounded-lg text-sm font-bold transition shadow-sm';
+                miniGrid.classList.add('hidden');
+                btnStart.disabled = false;
+                btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                btnRand.className = 'flex-1 py-2 bg-white border-2 border-slate-200 text-slate-600 hover:border-slate-300 rounded-lg text-sm font-bold transition shadow-sm';
+                btnMan.className = 'flex-1 py-2 bg-indigo-50 border-2 border-indigo-600 text-indigo-700 rounded-lg text-sm font-bold transition shadow-sm';
+                miniGrid.classList.remove('hidden');
+                btnStart.disabled = true;
+                btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+                renderMiniGrid();
+            }
+        }
+
+        function renderMiniGrid() {
+            const gridEl = document.getElementById('miniSeatGrid');
+            gridEl.style.gridTemplateColumns = `repeat(${gridCols}, minmax(0, 1fr))`;
+            gridEl.innerHTML = '';
+
+            const miniDesk = document.getElementById('miniTeacherDesk');
+            const miniContainer = document.getElementById('miniGridContainer');
+
+            if (isTeacherView) {
+                miniContainer.style.flexDirection = 'column-reverse';
+                miniDesk.style.marginBottom = '0px'; miniDesk.style.marginTop = '24px';
+            } else {
+                miniContainer.style.flexDirection = 'column';
+                miniDesk.style.marginTop = '0px'; miniDesk.style.marginBottom = '24px';
+            }
+
+            const rowStart = isTeacherView ? gridRows - 1 : 0;
+            const rowEnd = isTeacherView ? -1 : gridRows;
+            const rowStep = isTeacherView ? -1 : 1;
+            const colStart = isTeacherView ? gridCols - 1 : 0;
+            const colEnd = isTeacherView ? -1 : gridCols;
+            const colStep = isTeacherView ? -1 : 1;
+
+            for (let i = rowStart; i !== rowEnd; i += rowStep) {
+                for (let j = colStart; j !== colEnd; j += colStep) {
+                    const seatDiv = document.createElement('div');
+                    seatDiv.className = `w-10 h-10 lg:w-12 lg:h-12 border rounded-lg flex items-center justify-center text-[10px] font-bold cursor-pointer transition-all select-none shadow-sm`;
+
+                    if (seats[i][j].disabled) {
+                        seatDiv.classList.add('bg-slate-200', 'border-slate-300', 'opacity-30', 'cursor-not-allowed');
+                        seatDiv.style.background = 'repeating-linear-gradient(45deg, #cbd5e1, #cbd5e1 2px, #e2e8f0 2px, #e2e8f0 4px)';
+                    } else {
+                        const isSelected = emptySeatState.selected.some(s => s.r === i && s.c === j);
+                        if (isSelected) {
+                            seatDiv.className += ' bg-rose-500 border-rose-600 text-white ring-2 ring-rose-200 scale-95';
+                            seatDiv.innerText = '비움';
+                        } else {
+                            seatDiv.className += ' bg-white border-slate-300 text-slate-400 hover:border-indigo-400 hover:text-indigo-500 hover:bg-indigo-50';
+                            seatDiv.innerText = '';
+                        }
+                        seatDiv.onclick = () => toggleMiniSeat(i, j);
+                    }
+                    gridEl.appendChild(seatDiv);
+                }
+            }
+            updateMiniGridHelp();
+        }
+
+        function toggleMiniSeat(r, c) {
+            const idx = emptySeatState.selected.findIndex(s => s.r === r && s.c === c);
+            if (idx >= 0) emptySeatState.selected.splice(idx, 1);
+            else {
+                if (emptySeatState.selected.length >= emptySeatState.needed) emptySeatState.selected.shift();
+                emptySeatState.selected.push({ r, c });
+            }
+            renderMiniGrid();
+        }
+
+        function updateMiniGridHelp() {
+            const remain = emptySeatState.needed - emptySeatState.selected.length;
+            const help = document.getElementById('miniGridHelp');
+            const btnStart = document.getElementById('btnStartArrangement');
+
+            if (remain > 0) {
+                help.innerHTML = `남은 <span class="text-rose-600 font-extrabold text-base">${remain}</span> 자리를 클릭해서 비워주세요.`;
+                help.classList.add('text-slate-600'); help.classList.remove('text-emerald-600');
+                btnStart.disabled = true; btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                help.innerHTML = `✅ 설정 완료! [이대로 배치]를 누르세요.`;
+                help.classList.remove('text-slate-600'); help.classList.add('text-emerald-600');
+                btnStart.disabled = false; btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function startArrangementWithEmptySeats() {
+            let finalAvailable = [...emptySeatState.availableSeats];
+            if (emptySeatState.mode === 'manual') {
+                finalAvailable = finalAvailable.filter(seat => {
+                    return !emptySeatState.selected.some(sel => sel.r === seat.r && sel.c === seat.c);
+                });
+            }
+            closeEmptySeatModal();
+            executeRandomize(emptySeatState.activeStudents, finalAvailable);
+        }
+
+        // --- 핵심: 고정석과 짝꿍을 완벽히 호환하는 스마트 알고리즘 ---
+        function executeRandomize(activeStudents, availableSeats) {
+            const mode = document.getElementById('genderOption').value;
+            const isMaleFirst = Math.random() < 0.5;
+
+            const lockedStudents = activeStudents.filter(s => s.locked && s.assignedSeat);
+            const lockedCoords = lockedStudents.map(s => `${s.assignedSeat.r},${s.assignedSeat.c}`);
+
+            let pool = activeStudents.filter(s => !s.locked);
+            let targetSeats = availableSeats.filter(seat => !lockedCoords.includes(`${seat.r},${seat.c}`));
+
+            let success = false;
+            let bestSeats = null;
+
+            for (let attempt = 0; attempt < 500; attempt++) {
+                let tempGrid = Array.from({ length: gridRows }, () => Array(gridCols).fill(null));
+                lockedStudents.forEach(s => tempGrid[s.assignedSeat.r][s.assignedSeat.c] = s);
+
+                let currentPool = [...pool];
+                let currentSeats = [...targetSeats];
+                let attemptFailed = false;
+
+                // 1. 🤝 짝꿍 묶기(Together) 우선 배치 (고정석 고려)
+                const togetherRels = globalRelations.filter(r => r.type === 'together');
+                for (let rel of togetherRels) {
+                    const fullA = activeStudents.find(s => s.id === rel.a);
+                    const fullB = activeStudents.find(s => s.id === rel.b);
+                    if (!fullA || !fullB) continue;
+
+                    const isALocked = fullA.locked && fullA.assignedSeat;
+                    const isBLocked = fullB.locked && fullB.assignedSeat;
+
+                    if (isALocked && isBLocked) {
+                        continue; // 둘 다 고정되어 있으면 스킵
+                    } else if (isALocked || isBLocked) {
+                        // 한 명이 고정석일 경우, 그 학생의 바로 옆자리(짝꿍 책상)를 찾아 다른 학생을 넣음
+                        const lockedStd = isALocked ? fullA : fullB;
+                        const freeStd = isALocked ? fullB : fullA;
+
+                        const freeInPool = currentPool.find(s => s.id === freeStd.id);
+                        if (!freeInPool) continue;
+
+                        const lr = lockedStd.assignedSeat.r;
+                        const lc = lockedStd.assignedSeat.c;
+                        // 짝꿍 책상 찾기 (짝수열은 오른쪽, 홀수열은 왼쪽)
+                        const adjC = (lc % 2 === 0) ? lc + 1 : lc - 1;
+
+                        if (adjC >= 0 && adjC < gridCols && !seats[lr][adjC].disabled && !tempGrid[lr][adjC]) {
+                            const seatIdx = currentSeats.findIndex(s => s.r === lr && s.c === adjC);
+                            if (seatIdx !== -1) {
+                                tempGrid[lr][adjC] = freeStd;
+                                currentPool = currentPool.filter(s => s.id !== freeStd.id);
+                                currentSeats.splice(seatIdx, 1);
+                                continue;
+                            }
+                        }
+                        attemptFailed = true; break; // 옆자리가 없거나 막혀있으면 이 시도는 실패
+                    } else {
+                        // 둘 다 자유로우면 비어있는 두 자리를 찾아서 배치
+                        const stdA = currentPool.find(s => s.id === rel.a);
+                        const stdB = currentPool.find(s => s.id === rel.b);
+                        if (!stdA || !stdB) continue;
+
+                        let adjSpots = [];
+                        for (let r = 0; r < gridRows; r++) {
+                            for (let c = 0; c < gridCols - 1; c += 2) {
+                                if (!tempGrid[r][c] && !tempGrid[r][c + 1] && !seats[r][c].disabled && !seats[r][c + 1].disabled) {
+                                    if (currentSeats.some(s => s.r === r && s.c === c) && currentSeats.some(s => s.r === r && s.c === c + 1)) {
+                                        adjSpots.push([{ r, c }, { r, c: c + 1 }]);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (adjSpots.length > 0) {
+                            let spot = adjSpots[Math.floor(Math.random() * adjSpots.length)];
+                            if (Math.random() > 0.5) spot.reverse();
+                            tempGrid[spot[0].r][spot[0].c] = stdA;
+                            tempGrid[spot[1].r][spot[1].c] = stdB;
+
+                            currentPool = currentPool.filter(s => s.id !== stdA.id && s.id !== stdB.id);
+                            currentSeats = currentSeats.filter(seat =>
+                                !(seat.r === spot[0].r && seat.c === spot[0].c) &&
+                                !(seat.r === spot[1].r && seat.c === spot[1].c)
+                            );
+                        } else {
+                            attemptFailed = true; break;
+                        }
+                    }
+                }
+                if (attemptFailed) continue;
+
+                // 2. 남은 자유 학생들을 옵션에 맞게 배치
+                let males = shuffle(currentPool.filter(s => s.gender === '남'));
+                let females = shuffle(currentPool.filter(s => s.gender === '여'));
+                let others = shuffle(currentPool.filter(s => s.gender !== '남' && s.gender !== '여'));
+                let shuffledSeats = shuffle(currentSeats);
+
+                shuffledSeats.forEach(seat => {
+                    let student = null;
+                    if (mode === 'pair') {
+                        const isFirst = (seat.c % 2 === 0);
+                        if (isFirst === isMaleFirst) student = males.length > 0 ? males.pop() : (females.length > 0 ? females.pop() : others.pop());
+                        else student = females.length > 0 ? females.pop() : (males.length > 0 ? males.pop() : others.pop());
+                    } else if (mode === 'same-sex') {
+                        const pairIndex = Math.floor(seat.c / 2);
+                        const isMalePair = (pairIndex % 2 === 0) === isMaleFirst;
+                        if (isMalePair) student = males.length > 0 ? males.pop() : (females.length > 0 ? females.pop() : others.pop());
+                        else student = females.length > 0 ? females.pop() : (males.length > 0 ? males.pop() : others.pop());
+                    } else {
+                        let combined = shuffle([...males, ...females, ...others]);
+                        student = combined.pop();
+                        males = combined.filter(s => s.gender === '남'); females = combined.filter(s => s.gender === '여'); others = combined.filter(s => s.gender !== '남' && s.gender !== '여');
+                    }
+                    if (student) tempGrid[seat.r][seat.c] = student;
+                });
+
+                // 3. ⚡ 절대 분리(Separate) 조건 검증
+                let sepViolation = false;
+                for (let r = 0; r < gridRows; r++) {
+                    for (let c = 0; c < gridCols; c++) {
+                        const s1 = tempGrid[r][c];
+                        if (!s1) continue;
+
+                        const neighbors = [];
+                        if (c + 1 < gridCols && tempGrid[r][c + 1]) neighbors.push(tempGrid[r][c + 1]);
+                        if (r + 1 < gridRows && tempGrid[r + 1][c]) neighbors.push(tempGrid[r + 1][c]);
+
+                        for (let n of neighbors) {
+                            if (globalRelations.some(rel => rel.type === 'separate' &&
+                                ((rel.a === s1.id && rel.b === n.id) || (rel.a === n.id && rel.b === s1.id)))) {
+                                sepViolation = true; break;
+                            }
+                        }
+                        if (sepViolation) break;
+                    }
+                    if (sepViolation) break;
+                }
+
+                if (!sepViolation) {
+                    bestSeats = tempGrid;
+                    success = true;
+                    break;
+                }
+            }
+
+            if (success) {
+                clearSeats();
+                for (let r = 0; r < gridRows; r++) {
+                    for (let c = 0; c < gridCols; c++) {
+                        const std = bestSeats[r][c];
+                        if (std) {
+                            seats[r][c].student = std;
+                            std.assignedSeat = { r, c };
+                        }
+                    }
+                }
+                renderAllSeats();
+                renderTable();
+            } else {
+                showPopup("⚠️ 설정하신 '특수 관계' 조건이 너무 까다로워 교실 크기에 맞게 배치할 수 없습니다. 조건을 완화해 주세요.");
+            }
+        }
+
+        // --- 드래그 앤 드롭 로직 ---
+        function dragStart(e, studentId, fromSeat) {
+            const dragData = { id: studentId, from: fromSeat };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+        }
+
+        function allowDrop(e) {
+            const targetSeat = e.currentTarget;
+            if (targetSeat.classList && targetSeat.classList.contains('disabled')) return;
+            e.preventDefault();
+            if (targetSeat.classList && targetSeat.classList.contains('seat')) targetSeat.classList.add('drag-over');
+        }
+
+        function dragLeave(e) {
+            const targetSeat = e.currentTarget;
+            if (targetSeat.classList && targetSeat.classList.contains('seat')) targetSeat.classList.remove('drag-over');
+        }
+
+        function dropToSeat(e) {
+            e.preventDefault();
+            const targetSeat = e.currentTarget;
+            targetSeat.classList.remove('drag-over');
+
+            const r = parseInt(targetSeat.dataset.row);
+            const c = parseInt(targetSeat.dataset.col);
+
+            if (seats[r][c].disabled) return;
+
+            let dragData;
+            try {
+                const jsonData = e.dataTransfer.getData('application/json');
+                if (!jsonData) return;
+                dragData = JSON.parse(jsonData);
+            } catch (err) {
+                return;
+            }
+
+            if (!dragData || !dragData.id) return;
+
+            const studentToMove = masterList.find(s => s.id === dragData.id);
+            if (!studentToMove) return;
+
+            const targetExistingStudent = seats[r][c].student;
+            const draggedFromSeatId = dragData.from;
+
+            if (draggedFromSeatId) {
+                const fromR = draggedFromSeatId.r;
+                const fromC = draggedFromSeatId.c;
+                if (fromR === r && fromC === c) return;
+
+                seats[fromR][fromC].student = targetExistingStudent;
+                if (targetExistingStudent) targetExistingStudent.assignedSeat = { r: fromR, c: fromC };
+
+                seats[r][c].student = studentToMove;
+                studentToMove.assignedSeat = { r, c };
+
+                renderSeat(fromR, fromC);
+                renderSeat(r, c);
+            } else {
+                if (targetExistingStudent) targetExistingStudent.assignedSeat = null;
+                seats[r][c].student = studentToMove;
+                studentToMove.assignedSeat = { r, c };
+
+                renderSeat(r, c);
+                renderTable();
+            }
+        }
+
+        function dropToUnassigned(e) {
+            e.preventDefault();
+            let dragData;
+            try {
+                const jsonData = e.dataTransfer.getData('application/json');
+                if (!jsonData) return;
+                dragData = JSON.parse(jsonData);
+            } catch (err) {
+                return;
+            }
+
+            if (dragData && dragData.from) {
+                const r = dragData.from.r;
+                const c = dragData.from.c;
+                const student = seats[r][c].student;
+
+                if (student) student.assignedSeat = null;
+                seats[r][c].student = null;
+
+                renderSeat(r, c);
+                renderTable();
+            }
+        }
+
+        // --- 저장 및 불러오기 ---
+        async function saveArrangement() {
+            const pywebviewObj = window.pywebview || (window.parent && window.parent.pywebview) || (window.top && window.top.pywebview);
+
+            const gridState = seats.map(row => row.map(s => ({
+                disabled: s.disabled,
+                studentId: s.student ? s.student.id : null
+            })));
+
+            const saveData = {
+                rows: gridRows,
+                cols: gridCols,
+                masterList: masterList,
+                gridState: gridState,
+                relations: globalRelations,
+                theme: currentTheme
+            };
+            const jsonString = JSON.stringify(saveData);
+
+            if (pywebviewObj && pywebviewObj.api && pywebviewObj.api.save_seat_data) {
+                try {
+                    const res = await pywebviewObj.api.save_seat_data(jsonString);
+                    if (res.success) showToast(res.message);
+                    else if (res.message !== '취소됨') showPopup('⚠️ 저장 실패: ' + res.message);
+                } catch (err) {
+                    console.error("Pywebview Save Error:", err);
+                }
+            } else {
+                const blob = new Blob([jsonString], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "좌석배치.ptseat";
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('다운로드 폴더에 저장되었습니다.');
+            }
+        }
+
+        async function loadArrangement() {
+            const pywebviewObj = window.pywebview || (window.parent && window.parent.pywebview) || (window.top && window.top.pywebview);
+
+            if (pywebviewObj && pywebviewObj.api && pywebviewObj.api.load_seat_data) {
+                try {
+                    const res = await pywebviewObj.api.load_seat_data();
+                    if (res.success && res.data) {
+                        restoreState(JSON.parse(res.data));
+                    } else if (!res.success && res.message !== '취소됨') {
+                        showPopup('⚠️ 불러오기 실패: ' + res.message);
+                    }
+                } catch (err) {
+                    console.error("Pywebview Load Error:", err);
+                    showPopup('파일을 읽는 중 오류가 발생했습니다.');
+                }
+            } else {
+                document.getElementById('fallbackLoadInput').click();
+            }
+        }
+
+        function handleFallbackLoad(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    restoreState(JSON.parse(e.target.result));
+                } catch (err) {
+                    showPopup('올바른 좌석배치 파일이 아닙니다.');
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        }
+
+        function restoreState(data) {
+            if (!data || !data.rows || !data.cols || !data.masterList || !data.gridState) {
+                return showPopup('지원하지 않는 좌석배치 파일 형식입니다.');
+            }
+            currentTheme = data.theme || 'modern';
+            document.getElementById('themeSelect').value = currentTheme;
+
+            gridRows = data.rows;
+            gridCols = data.cols;
+            document.getElementById('rowsInput').value = gridRows;
+            document.getElementById('colsInput').value = gridCols;
+
+            masterList = data.masterList;
+            globalRelations = data.relations || [];
+            initGrid(gridRows, gridCols);
+
+            data.gridState.forEach((rowData, r) => {
+                rowData.forEach((cellData, c) => {
+                    seats[r][c].disabled = cellData.disabled;
+
+                    if (cellData.disabled) {
+                        const seatDiv = document.getElementById(`seat-${r}-${c}`);
+                        seatDiv.classList.add('disabled');
+                        const btn = seatDiv.querySelector('.toggle-btn');
+                        if (btn) updateToggleBtn(btn, true);
+                    }
+
+                    if (cellData.studentId) {
+                        const student = masterList.find(s => s.id === cellData.studentId);
+                        if (student) {
+                            seats[r][c].student = student;
+                            student.assignedSeat = { r, c };
+                        }
+                    }
+                });
+            });
+
+            renderGridDOM();
+            renderTable();
+            showToast('배치 정보를 성공적으로 불러왔습니다.');
+        }
+
+        // --- 클립보드 복사 및 엑셀 띄우기 ---
+        function copyAsImage() {
+            const captureArea = document.getElementById('captureArea');
+            const btn = document.getElementById('btnCopyImage');
+            const originalText = btn.innerHTML;
+
+            const hideElems = document.querySelectorAll('.no-capture');
+            hideElems.forEach(el => el.style.display = 'none');
+
+            btn.innerHTML = '캡처 중...';
+            btn.disabled = true;
+
+            html2canvas(captureArea, {
+                scale: 2,
+                backgroundColor: '#ffffff'
+            }).then(canvas => {
+                canvas.toBlob(blob => {
+                    try {
+                        navigator.clipboard.write([
+                            new ClipboardItem({ 'image/png': blob })
+                        ]).then(() => {
+                            showToast('배치도가 클립보드에 복사되었습니다.');
+                        });
+                    } catch (err) {
+                        showPopup('이 브라우저에서는 이미지 복사를 지원하지 않습니다.');
+                    } finally {
+                        restoreBtn();
+                    }
+                });
+            }).catch(err => {
+                showPopup('이미지 생성 중 오류가 발생했습니다.');
+                restoreBtn();
+            });
+
+            function restoreBtn() {
+                hideElems.forEach(el => el.style.display = '');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function exportToExcel() {
+            const activeStudents = masterList.filter(s => s.name.trim() !== '');
+            if (activeStudents.length === 0) return showPopup('내보낼 데이터가 없습니다.');
+
+            const exportData = [];
+            const header = [''];
+            for (let c = 0; c < gridCols; c++) header.push(`${c + 1}분단`);
+            exportData.push(header);
+
+            for (let r = 0; r < gridRows; r++) {
+                const rowData = [`${r + 1}줄`];
+                for (let c = 0; c < gridCols; c++) {
+                    const state = seats[r][c];
+                    if (state.disabled) rowData.push('[사용안함]');
+                    else if (state.student) {
+                        const noTxt = state.student.no ? `(${state.student.no}번)` : '';
+                        rowData.push(`${state.student.name}${noTxt}`);
+                    }
+                    else rowData.push('');
+                }
+                exportData.push(rowData);
+            }
+
+            const pywebviewObj = window.pywebview || (window.parent && window.parent.pywebview) || (window.top && window.top.pywebview);
+
+            if (pywebviewObj && pywebviewObj.api) {
+                if (pywebviewObj.api.open_in_excel) {
+                    try {
+                        const res = await pywebviewObj.api.open_in_excel(exportData);
+                        if (!res.success) showPopup('엑셀 실행 중 오류 발생: ' + res.message);
+                        return;
+                    } catch (err) {
+                        console.error("Pywebview API Error:", err);
+                    }
+                } else {
+                    return showPopup('⚠️ <b>엑셀 연동 실패</b><br><br><code>PenTong.py</code> 안에 연결 함수가 누락되어 있습니다.');
+                }
+            }
+
+            let tableText = "";
+            exportData.forEach(row => { tableText += row.join('\t') + '\n'; });
+
+            const textarea = document.createElement('textarea');
+            textarea.value = tableText;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            showToast('배치 결과가 클립보드에 복사되었습니다.');
+        }
+    </script>
+</body>
+</html>

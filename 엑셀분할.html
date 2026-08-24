@@ -1,0 +1,1026 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>엑셀 데이터 분할</title>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: #f5f6f7;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 1400px; 
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            width: 100%;
+            overflow-y: auto;
+        }
+
+        h2 {
+            color: #217346;
+            margin-top: 0;
+            font-size: 22px;
+            border-bottom: 2px solid #217346;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .description {
+            background-color: #eef5f1;
+            padding: 12px 15px;
+            border-radius: 5px;
+            border-left: 4px solid #217346;
+            margin-bottom: 20px;
+            font-size: 13px;
+            line-height: 1.5;
+            color: #2c4a38;
+            flex-shrink: 0;
+        }
+
+        /* 💡 뱃지 모양이 찌그러지지 않게 강제(Flex-shrink 금지, 가로/세로 최소값 부여) */
+        .step-title, .grid-header > div {
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+            display: flex;
+            align-items: center;
+        }
+        .badge {
+            background: #005a9e;
+            color: white;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            min-width: 22px;   /* 찌그러짐 방지 */
+            min-height: 22px;  /* 찌그러짐 방지 */
+            flex-shrink: 0;    /* 찌그러짐 방지 */
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin-right: 8px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .help-btn {
+            background: #e2e3e5;
+            color: #495057;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-left: 8px; 
+            border: 1px solid #ced4da;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .help-btn:hover {
+            background: #005a9e;
+            color: white;
+            border-color: #005a9e;
+        }
+
+        .hidden-step {
+            display: none !important;
+            opacity: 0;
+        }
+        .visible-step {
+            animation: fadeIn 0.4s ease forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        input[type="text"], input[type="number"], select {
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #217346;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+        button:hover { background-color: #1a5c38; }
+        .flex-row { display: flex; gap: 15px; align-items: center; width: 100%; }
+
+        .form-section {
+            border: 1px solid #e0e0e0;
+            background-color: #fafafa;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .grids-container {
+            display: flex;
+            gap: 20px;
+            flex: 1;
+            min-height: 360px; 
+            max-height: 360px; 
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }
+        .grid-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 2px solid #ccc;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #fff;
+            transition: all 0.3s ease;
+        }
+        
+        .grid-panel.start-panel { border-color: #28a745; }
+        .grid-panel.end-panel { border-color: #dc3545; }
+
+        .grid-header {
+            padding: 6px 12px;
+            color: white;
+            font-weight: bold;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .start-panel .grid-header { background-color: #28a745; }
+        .end-panel .grid-header { background-color: #dc3545; }
+
+        .grid-header input {
+            width: 60px; padding: 3px; text-align: center; color: #333; font-weight: bold; border:none; font-size: 13px;
+        }
+
+        .grid-scroll {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        table.excel-grid {
+            border-collapse: collapse;
+            min-width: 100%;
+            table-layout: fixed;
+        }
+        .excel-grid th, .excel-grid td {
+            border: 1px solid #d0d0d0;
+            padding: 4px 6px;
+            font-size: 11px;
+            white-space: nowrap;
+            height: 20px;
+            text-align: center;
+        }
+        .excel-grid th {
+            background: #e9ecef;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        .excel-grid td.row-num {
+            background: #e9ecef;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            font-weight: bold;
+            text-align: center;
+            width: 35px;
+            color: #555;
+        }
+        .excel-grid tr { cursor: pointer; }
+        .excel-grid tr:hover td { background-color: #f1f8ff; }
+        
+        .row-header td:not(.row-num) { background-color: #fff3cd !important; }
+        .row-selected-start td:not(.row-num) { background-color: #d4edda !important; font-weight: bold; border-top: 2px solid #28a745; border-bottom: 2px solid #28a745; }
+        .row-selected-end td:not(.row-num) { background-color: #f8d7da !important; font-weight: bold; border-top: 2px solid #dc3545; border-bottom: 2px solid #dc3545; }
+
+        .bottom-options {
+            display: flex;
+            gap: 20px;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            flex-shrink: 0;
+        }
+        .option-group { flex: 1; display: flex; flex-direction: column; }
+        
+        .var-tags-container {
+            margin-top: 8px; padding: 8px; background: #fff; border: 1px solid #ddd; border-radius: 4px;
+        }
+        .var-tag {
+            display: inline-block; background: #e1dfdd; color: #333; padding: 4px 8px; border-radius: 4px; font-size: 11px; margin: 2px 4px 2px 0; cursor: pointer; border: 1px solid #ccc;
+        }
+        .var-tag:hover { background: #c8c6c4; }
+
+        .btn-run {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            margin-top: 20px;
+            background-color: #005a9e;
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+        .btn-run:hover { background-color: #004578; }
+
+        /* 💡 프로그레스 바가 멋지게 보이도록 모달 창 스타일을 개선했습니다 */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 9999; }
+        .modal-box { background: white; padding: 25px; border-radius: 8px; width: 420px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .modal-box.loading { width: 350px; background: rgba(0,0,0,0.85); box-shadow: 0 4px 20px rgba(0,0,0,0.5); color: white; font-weight: normal; }
+        .spinner { border: 4px solid rgba(255,255,255,0.2); border-radius: 50%; border-top: 4px solid white; width: 45px; height: 45px; animation: spin 1s linear infinite; margin: 0 auto 15px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .modal-message { margin-bottom: 20px; line-height: 1.5; font-size: 14px; white-space: pre-wrap; word-break: keep-all; text-align: left; }
+
+        /* ========================================== */
+        /* [추가] 드래그 앤 드롭 오버레이 (엑셀 테마) */
+        /* ========================================== */
+        #dragOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10000;
+            background-color: rgba(33, 115, 70, 0.1);
+            backdrop-filter: blur(2px);
+            border: 4px dashed #217346;
+            margin: 15px;
+            border-radius: 15px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+            #dragOverlay.active {
+                display: flex;
+            }
+
+        .drag-box {
+            background: white;
+            padding: 30px 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            text-align: center;
+        }
+
+        .drag-icon {
+            width: 70px;
+            height: 70px;
+            background: #e8f5e9;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px auto;
+            color: #217346;
+        }
+
+        .drag-title {
+            font-size: 22px;
+            font-weight: bold;
+            color: #333;
+            margin: 0 0 10px 0;
+        }
+
+        .drag-desc {
+            color: #666;
+            font-size: 14px;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <h2>엑셀 데이터 분할</h2>
+    <div class="description">
+        지정한 기준 열의 값에 따라 하나의 엑셀 표를 <strong>여러 개의 독립된 엑셀 파일로 나누어 저장</strong>합니다. 안내에 따라 <strong>1번부터 순서대로 지정</strong>해 주세요.
+    </div>
+
+    <!-- [Row 1] 1. 파일 선택 & 2. 시트 선택 -->
+    <div class="flex-row" style="align-items: stretch; margin-bottom: 15px;">
+        <div id="step1" class="form-section visible-step" style="flex: 1;">
+            <div class="step-title">
+                <span class="badge">1</span> 원본 파일 선택
+                <span class="help-btn" onclick="showHelp(1)" title="도움말">?</span>
+            </div>
+            <div class="flex-row">
+                <input type="text" id="filePath" readonly placeholder="엑셀 파일을 선택하세요" style="flex:1;">
+                <button onclick="handleFileSelect()">파일 찾기</button>
+            </div>
+        </div>
+
+        <div id="step2" class="form-section hidden-step" style="flex: 1;">
+            <div class="step-title">
+                <span class="badge">2</span> 시트 선택
+                <span class="help-btn" onclick="showHelp(2)" title="도움말">?</span>
+            </div>
+            <select id="sheetSelect" onchange="analyzeSheet()" style="width:100%;">
+                <option value="">파일을 먼저 선택하세요</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="detailsPanel" style="display:none; flex-direction:column; flex:1;">
+        <input type="hidden" id="headerRow">
+
+        <!-- [Row 2] 3. 표 상단(시작행) & 4. 표 하단(종료행) -->
+        <div id="rowGrids" class="grids-container hidden-step">
+            <!-- 3. 시작행 지정 그리드 -->
+            <div id="step3" class="grid-panel start-panel visible-step">
+                <div class="grid-header">
+                    <div>
+                        <span class="badge" style="background:#fff; color:#28a745;">3</span> 데이터 시작행 클릭
+                        <span class="help-btn" onclick="showHelp(3)" title="도움말">?</span>
+                    </div>
+                    <div>선택: <input type="number" id="dataStart" onchange="manualInputRow('start')"> 행</div>
+                </div>
+                <div class="grid-scroll">
+                    <table class="excel-grid">
+                        <thead id="startGridHead"></thead>
+                        <tbody id="startGridBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 4. 종료행 지정 그리드 -->
+            <div id="step4" class="grid-panel end-panel visible-step">
+                <div class="grid-header">
+                    <div>
+                        <span class="badge" style="background:#fff; color:#dc3545;">4</span> 데이터 종료행 클릭
+                        <span class="help-btn" onclick="showHelp(4)" title="도움말">?</span>
+                    </div>
+                    <div>선택: <input type="number" id="dataEnd" onchange="manualInputRow('end')"> 행</div>
+                </div>
+                <div class="grid-scroll">
+                    <table class="excel-grid">
+                        <thead id="endGridHead"></thead>
+                        <tbody id="endGridBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div id="dragOverlay">
+            <div class="drag-box">
+                <div class="drag-icon">
+                    <svg width="36" height="36" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </div>
+                <h2 class="drag-title">여기에 엑셀 파일을 놓으세요</h2>
+                <p class="drag-desc">분할할 원본 엑셀(.xlsx, .xls) 파일 1개를 놓아주세요.</p>
+            </div>
+        </div>
+        <!-- [Row 3] 5. 분할 기준 & 6. 파일명 패턴 & 7. 저장 폴더 -->
+        <div id="rowOptions" class="bottom-options hidden-step">
+            <div id="step5" class="option-group" style="flex: 1.2;">
+                <div class="step-title">
+                    <span class="badge">5</span> 분할 기준 열 지정
+                    <span class="help-btn" onclick="showHelp(5)" title="도움말">?</span>
+                </div>
+                <select id="targetCol" style="width: 100%;" onchange="unlockStep6And7()">
+                    <option value="">시작행을 먼저 선택하세요</option>
+                </select>
+                <div id="headerInfoText" style="font-size:11px; color:#005a9e; margin-top:8px; font-weight:bold;"></div>
+            </div>
+
+            <div id="step6" class="option-group hidden-step" style="flex: 1.5;">
+                <div class="step-title">
+                    <span class="badge">6</span> 저장 파일명 패턴
+                    <span class="help-btn" onclick="showHelp(6)" title="도움말">?</span>
+                </div>
+                <input type="text" id="namingPattern" value="{순번}_{원본파일명}_{기준값}" style="width:100%;">
+                <div class="var-tags-container" id="variableTags"></div>
+            </div>
+
+            <div id="step7" class="option-group hidden-step" style="flex: 1.3;">
+                <div class="step-title">
+                    <span class="badge">7</span> 저장 폴더 지정
+                    <span class="help-btn" onclick="showHelp(7)" title="도움말">?</span>
+                </div>
+                <div class="flex-row">
+                    <input type="text" id="saveDir" readonly placeholder="저장될 폴더" style="flex:1;">
+                    <button onclick="handleFolderSelect()">폴더 변경</button>
+                </div>
+            </div>
+        </div>
+
+        <button id="runBtn" class="btn-run hidden-step" onclick="runSplit()">데이터 분할 실행</button>
+    </div>
+</div>
+
+<!-- 모달 창 -->
+<div class="modal-overlay" id="loadingModal">
+    <div class="modal-box loading">
+        <div class="spinner" id="loadingSpinner"></div>
+        <div id="loadingText" style="font-size:15px; font-weight:bold;">처리 중입니다...</div>
+    </div>
+</div>
+<div class="modal-overlay" id="alertModal">
+    <div class="modal-box">
+        <h3 style="margin-top:0; color:#333; font-size:18px; border-bottom:1px solid #ccc; padding-bottom:10px; text-align:center;">안내</h3>
+        <div class="modal-message" id="alertMessage" style="margin-top:15px;">메시지</div>
+        <div style="text-align:center; margin-top:20px;">
+            <button onclick="closeAlert()" style="padding:8px 30px; font-size:14px;">확인</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 도움말 텍스트
+    const HELP_TEXTS = {
+        1: "<b><span style='color:#005a9e;'>①</span> 원본 파일 선택</b><br><br>표를 여러 개로 쪼갤 원본 엑셀 파일을 불러옵니다. 파일 찾기 버튼을 눌러주세요.",
+        2: "<b><span style='color:#005a9e;'>②</span> 시트 선택</b><br><br>해당 엑셀 파일 내에 여러 개의 시트가 있다면, 어느 시트를 분할할 것인지 선택해 주세요.",
+        3: "<b><span style='color:#28a745;'>③</span> 데이터 시작행 클릭</b><br><br>표 제목은 무시하고, <b>분할할 대상이 되는 첫 번째 실제 데이터 행</b>을 클릭하세요.<br><br><span style='color:#217346'>💡 스마트 감지 기능:</span><br>이곳을 클릭하면 프로그램이 <b>위쪽으로 최대 3행까지 거슬러 올라가며 병합된 다중 표 제목을 자동으로 감지</b>합니다. 복잡하게 제목 범위를 직접 입력하실 필요가 없습니다!",
+        4: "<b><span style='color:#dc3545;'>④</span> 데이터 종료행 클릭</b><br><br>표에서 분할할 데이터가 끝나는 <b>마지막 줄</b>을 클릭하세요.<br><br>표 하단에 있는 '주의사항', '작성자', '결재란' 등이 엑셀 파일에 딸려 들어가지 않도록 여기서 끊어주는 역할을 합니다. (시작행 지정 여부와 무관하게 언제든 클릭할 수 있습니다)",
+        5: "<b><span style='color:#005a9e;'>⑤</span> 분할 기준 열 지정</b><br><br>어떤 열의 값을 기준으로 파일을 쪼갤지 결정합니다.<br><br>예를 들어 '부서명' 열을 선택하면 부서별로 엑셀 파일이 각각 나뉘어 생성됩니다.<br><br><span style='color:#217346'>💡 스마트 병합 기능:</span><br>해당 분할 열의 셀이 세로로 길게 병합되어 있어도, 프로그램이 <b>병합된 행 전부를 알아서 인식하고 온전하게 묶어줍니다!</b>",
+        6: "<b><span style='color:#005a9e;'>⑥</span> 저장 파일명 패턴</b><br><br>새로 만들어질 분할 파일들의 이름 규칙을 정합니다.<br><br>아래에 나타난 회색 태그(변수) 버튼들을 클릭해 보세요. 클릭한 변수가 파일명에 쏙 들어갑니다.",
+        7: "<b><span style='color:#005a9e;'>⑦</span> 저장 폴더 지정</b><br><br>여러 개로 쪼개진 엑셀 파일들이 어느 위치에 저장될지 고릅니다. 바탕화면이나 새 폴더를 지정하시는 것이 좋습니다."
+    };
+
+    let reqIdCounter = 0;
+    let currentColumns = []; 
+    let cachedPreviewTop = [];
+    let cachedPreviewBottom = [];
+    let cachedExcelCols = [];
+    let lastMtime = null;
+
+    function callPython(methodName, payload = null) {
+        return new Promise((resolve, reject) => {
+            const currentId = ++reqIdCounter;
+            const handler = function(event) {
+                const data = event.data;
+                if (data && data.id === currentId) {
+                    window.removeEventListener('message', handler);
+                    if (data.status === 'success') resolve(data.response);
+                    else reject(data.error);
+                }
+            };
+            window.addEventListener('message', handler);
+            window.parent.postMessage({ type: 'pywebview-call', method: methodName, payload: payload, id: currentId }, '*');
+        });
+    }
+
+    function showAlert(msg) {
+        document.getElementById('alertMessage').innerHTML = msg.replace(/\n/g, '<br>');
+        document.getElementById('alertModal').style.display = 'flex';
+    }
+    function closeAlert() { document.getElementById('alertModal').style.display = 'none'; }
+    
+    function showLoading(show, text="처리 중입니다...") {
+        document.getElementById('loadingText').innerHTML = text;
+        document.getElementById('loadingSpinner').style.display = 'block';
+        document.getElementById('loadingModal').style.display = show ? 'flex' : 'none';
+    }
+    
+    // 💡 파이썬에서 보내주는 진행 상황을 시각적으로 그려주는 콜백 함수입니다.
+    window.updateSplitProgress = function(msg, current, total) {
+        const loadingText = document.getElementById('loadingText');
+        const spinner = document.getElementById('loadingSpinner');
+        
+        if (total > 0) {
+            spinner.style.display = 'none'; // 진행 바가 보일 때는 스피너 숨김
+            let percent = Math.round((current / total) * 100);
+            loadingText.innerHTML = `
+                <div style="margin-bottom: 12px; font-size:15px; font-weight:bold; color:#fff;">${msg}</div>
+                <div style="background:rgba(255,255,255,0.2); border-radius:6px; width:100%; height:16px; overflow:hidden; margin: 0 auto;">
+                    <div style="background:#4CAF50; width:${percent}%; height:100%; transition: width 0.3s ease;"></div>
+                </div>
+                <div style="margin-top: 10px; font-size:13px; color:#ddd;">
+                    총 ${total}개 중 <b>${current}</b>개 완료 (${percent}%)
+                </div>
+            `;
+        } else {
+            spinner.style.display = 'block';
+            loadingText.innerHTML = msg;
+        }
+    };
+    
+    // [추가] 파이썬이 부모 창(index.html)에서 이 함수를 바로 찾을 수 있도록 연결해 주는 보험(Fail-safe) 로직
+    // 예외 처리(try-catch)를 추가하여 브라우저 동일 출처 정책(CORS) 오류 시 스크립트 실행 중단을 방지합니다.
+    try {
+        if (window.parent && window.parent !== window) {
+            window.parent.updateSplitProgress = window.updateSplitProgress;
+        }
+    } catch (e) {
+        console.warn("보안 정책으로 인해 부모 창 객체에 직접 접근할 수 없습니다.", e);
+    }
+
+    function showHelp(step) {
+        showAlert(HELP_TEXTS[step]);
+    }
+
+    function truncateText(text) {
+        if (text === null || text === undefined || text === "") return "";
+        let str = String(text).trim();
+        if (str.length > 5) {
+            return str.substring(0, 5) + "...";
+        }
+        return str;
+    }
+
+    function parseRange(str) {
+        if (!str) return [];
+        if (str.includes('-')) {
+            const parts = str.split('-');
+            const s = parseInt(parts[0]);
+            const e = parseInt(parts[1]);
+            let arr = [];
+            for (let i = s; i <= e; i++) arr.push(i);
+            return arr;
+        }
+        return [parseInt(str)];
+    }
+
+    function hideElement(id) {
+        const el = document.getElementById(id);
+        if(el) {
+            el.classList.add('hidden-step');
+            el.classList.remove('visible-step');
+            if(el.classList.contains('flex-row') || el.classList.contains('grids-container') || el.classList.contains('bottom-options')) {
+                el.style.display = 'none';
+            } else if(el.tagName === 'BUTTON') {
+                el.style.display = 'none';
+            }
+        }
+    }
+    
+    function showElement(id, displayType = 'block') {
+        const el = document.getElementById(id);
+        if(el) {
+            el.classList.remove('hidden-step');
+            el.classList.add('visible-step');
+            el.style.display = displayType;
+        }
+    }
+
+    function resetFromStep(step) {
+        if(step <= 2) {
+            document.getElementById('sheetSelect').innerHTML = '<option value="">파일을 먼저 선택하세요</option>';
+            hideElement('step2');
+        }
+        if(step <= 3) {
+            document.getElementById('dataStart').value = '';
+            document.getElementById('headerRow').value = '';
+            hideElement('rowGrids');
+            document.getElementById('startGridBody').innerHTML = '';
+            document.getElementById('endGridBody').innerHTML = '';
+        }
+        if(step <= 4) {
+            document.getElementById('dataEnd').value = '';
+        }
+        if(step <= 5) {
+            hideElement('rowOptions');
+            document.getElementById('targetCol').innerHTML = '<option value="">시작행을 먼저 선택하세요</option>';
+            document.getElementById('headerInfoText').innerHTML = '';
+        }
+        if(step <= 6) {
+            hideElement('step6');
+            hideElement('step7');
+            hideElement('runBtn');
+        }
+    }
+
+    async function handleFileSelect() {
+        try {
+            const result = await callPython('select_excel_files');
+            if (result && result.length > 0) {
+                document.getElementById('filePath').value = result[0];
+                resetFromStep(2); 
+                
+                showLoading(true, "시트 목록을 가져오는 중입니다...");
+                const sheetData = await callPython('get_excel_sheets', result[0]);
+                showLoading(false);
+
+                if (sheetData && sheetData.success) {
+                    const selectEl = document.getElementById('sheetSelect');
+                    selectEl.innerHTML = '<option value="">시트를 선택하세요</option>';
+                    const sheets = sheetData.sheets || [];
+                    sheets.forEach(sheet => {
+                        const opt = document.createElement('option');
+                        opt.value = sheet;
+                        opt.innerText = sheet;
+                        selectEl.appendChild(opt);
+                    });
+                    showElement('step2', 'block');
+                } else {
+                    showAlert(sheetData ? sheetData.message : "시트 목록을 불러올 수 없습니다.");
+                }
+            }
+        } catch (err) { showAlert("오류 발생: " + err); }
+    }
+
+    async function analyzeSheet() {
+        const filePath = document.getElementById('filePath').value;
+        const sheetName = document.getElementById('sheetSelect').value;
+        if (!filePath || !sheetName) return;
+
+        resetFromStep(3); 
+
+        showLoading(true, "엑셀 표 구조를 불러오는 중입니다...");
+        try {
+            const data = await callPython('analyze_excel_sheet', { file_path: filePath, sheet_name: sheetName });
+            showLoading(false);
+            
+            if (data.success) {
+                document.getElementById('dataStart').value = '';
+                document.getElementById('dataEnd').value = '';
+                lastMtime = data.mtime; 
+                
+                cachedPreviewTop = data.preview_top || [];
+                cachedPreviewBottom = data.preview_bottom || [];
+                cachedExcelCols = data.excel_cols || [];
+                
+                if (cachedExcelCols.length === 0) {
+                    showAlert("⚠️ 데이터를 파싱할 수 없습니다. 빈 시트이거나 형식이 잘못되었습니다.");
+                    return;
+                }
+
+                document.getElementById('detailsPanel').style.display = 'flex';
+                showElement('rowGrids', 'flex');
+                
+                renderGrids();
+            } else {
+                showAlert("데이터 분석 실패: " + data.message);
+            }
+        } catch(err) {
+            showLoading(false);
+            showAlert("오류 발생: " + err);
+        }
+    }
+
+    function renderGrids() {
+        const startHead = document.getElementById('startGridHead');
+        const startBody = document.getElementById('startGridBody');
+        startHead.innerHTML = ''; startBody.innerHTML = '';
+
+        let trHeadStart = document.createElement('tr');
+        let thCornerStart = document.createElement('th');
+        thCornerStart.style.width = '35px';
+        trHeadStart.appendChild(thCornerStart);
+        
+        cachedExcelCols.forEach(col => {
+            let th = document.createElement('th'); th.innerText = col; trHeadStart.appendChild(th);
+        });
+        startHead.appendChild(trHeadStart);
+
+        let hRows = parseRange(document.getElementById('headerRow').value || "");
+        let dStart = parseInt(document.getElementById('dataStart').value);
+        
+        if(cachedPreviewTop.length === 0) {
+            startBody.innerHTML = '<tr><td colspan="100%" style="text-align:center; padding:20px;">표 데이터를 불러오지 못했습니다.</td></tr>';
+        } else {
+            cachedPreviewTop.forEach(rowData => {
+                let tr = document.createElement('tr');
+                let rNum = rowData.row;
+                tr.onclick = () => handleRowClick('start', rNum);
+                
+                let classes = [];
+                if (hRows.includes(rNum)) classes.push('row-header');
+                if (rNum === dStart) classes.push('row-selected-start');
+                tr.className = classes.join(' ');
+
+                let tdNum = document.createElement('td');
+                tdNum.className = 'row-num'; tdNum.innerText = rNum; tr.appendChild(tdNum);
+
+                (rowData.cells || []).forEach(cell => {
+                    if (cell.hidden) return; 
+                    
+                    let td = document.createElement('td');
+                    td.innerText = truncateText(cell.val);
+                    if (String(cell.val).length > 5) td.title = cell.val; 
+                    if (cell.rowspan > 1) td.rowSpan = cell.rowspan;
+                    if (cell.colspan > 1) td.colSpan = cell.colspan;
+                    tr.appendChild(td);
+                });
+                startBody.appendChild(tr);
+            });
+        }
+
+        const endHead = document.getElementById('endGridHead');
+        const endBody = document.getElementById('endGridBody');
+        endHead.innerHTML = ''; endBody.innerHTML = '';
+
+        let trHeadEnd = document.createElement('tr');
+        let thCornerEnd = document.createElement('th');
+        thCornerEnd.style.width = '35px';
+        trHeadEnd.appendChild(thCornerEnd);
+        
+        cachedExcelCols.forEach(col => {
+            let th = document.createElement('th'); th.innerText = col; trHeadEnd.appendChild(th);
+        });
+        endHead.appendChild(trHeadEnd);
+
+        let dEnd = parseInt(document.getElementById('dataEnd').value);
+        if(cachedPreviewBottom.length === 0) {
+            endBody.innerHTML = '<tr><td colspan="100%" style="text-align:center; padding:20px;">표 데이터를 불러오지 못했습니다.</td></tr>';
+        } else {
+            cachedPreviewBottom.forEach(rowData => {
+                let tr = document.createElement('tr');
+                let rNum = rowData.row;
+                tr.onclick = () => handleRowClick('end', rNum);
+                
+                if (rNum === dEnd) tr.className = 'row-selected-end';
+
+                let tdNum = document.createElement('td');
+                tdNum.className = 'row-num'; tdNum.innerText = rNum; tr.appendChild(tdNum);
+
+                (rowData.cells || []).forEach(cell => {
+                    if (cell.hidden) return; 
+                    
+                    let td = document.createElement('td');
+                    td.innerText = truncateText(cell.val);
+                    if (String(cell.val).length > 5) td.title = cell.val;
+                    if (cell.rowspan > 1) td.rowSpan = cell.rowspan;
+                    if (cell.colspan > 1) td.colSpan = cell.colspan;
+                    tr.appendChild(td);
+                });
+                endBody.appendChild(tr);
+            });
+        }
+    }
+
+    function checkEnableBottomOptions() {
+        let startVal = document.getElementById('dataStart').value;
+        let endVal = document.getElementById('dataEnd').value;
+        if(startVal && endVal) {
+            showElement('rowOptions', 'flex');
+        }
+    }
+
+    async function handleRowClick(type, rowNum) {
+        if (type === 'start') {
+            document.getElementById('dataStart').value = rowNum;
+            let endVal = parseInt(document.getElementById('dataEnd').value);
+            if (endVal && endVal < rowNum) document.getElementById('dataEnd').value = '';
+            
+            document.getElementById('targetCol').innerHTML = '<option value="">표 제목 감지 중...</option>';
+            document.getElementById('headerInfoText').innerHTML = '데이터 위쪽을 분석하여 헤더를 추적 중입니다... ⏳';
+            renderGrids();
+            
+            await updateHeaderAndColumnsFromStart(rowNum);
+            checkEnableBottomOptions();
+
+        } else if (type === 'end') {
+            let startVal = parseInt(document.getElementById('dataStart').value);
+            if (startVal && rowNum < startVal) {
+                showAlert("데이터 종료행은 시작행보다 위에 있을 수 없습니다.");
+                return;
+            }
+            document.getElementById('dataEnd').value = rowNum;
+            renderGrids();
+            checkEnableBottomOptions();
+        }
+    }
+
+    function manualInputRow(type) {
+        const val = parseInt(document.getElementById(type === 'start' ? 'dataStart' : 'dataEnd').value);
+        if(val) handleRowClick(type, val);
+    }
+
+    async function updateHeaderAndColumnsFromStart(dataStartRow) {
+        const filePath = document.getElementById('filePath').value;
+        const sheetName = document.getElementById('sheetSelect').value;
+        
+        try {
+            const data = await callPython('analyze_excel_sheet', { 
+                action: 'infer_header', file_path: filePath, sheet_name: sheetName, data_start: dataStartRow
+            });
+            if (data.success) {
+                document.getElementById('headerRow').value = data.header_row || '';
+                refreshDropdownAndTags(data.columns || [], data.header_row || '');
+                renderGrids(); 
+            } else {
+                document.getElementById('targetCol').innerHTML = '<option value="">(오류) 감지 실패</option>';
+                document.getElementById('headerInfoText').innerHTML = `<span style="color:red;">❌ ${data.message}</span>`;
+            }
+        } catch(e) { 
+            console.error("헤더 자동 감지 실패", e); 
+            document.getElementById('targetCol').innerHTML = '<option value="">(오류) 통신 실패</option>';
+            document.getElementById('headerInfoText').innerHTML = `<span style="color:red;">❌ 내부 통신 오류가 발생했습니다.</span>`;
+        }
+    }
+
+    function refreshDropdownAndTags(columns, headerRowStr) {
+        currentColumns = columns || [];
+        
+        document.getElementById('headerInfoText').innerHTML = `✅ <b>${headerRowStr}행</b>이 다중 표 제목으로 묶였습니다.`;
+
+        const targetColSelect = document.getElementById('targetCol');
+        const previousSelection = targetColSelect.value;
+        
+        targetColSelect.innerHTML = '<option value="">선택 (필수)</option>'; 
+        currentColumns.forEach(col => {
+            const opt = document.createElement('option');
+            opt.value = col.index;
+            opt.innerText = col.name;
+            targetColSelect.appendChild(opt);
+        });
+        
+        if (previousSelection && targetColSelect.querySelector(`option[value="${previousSelection}"]`)) {
+            targetColSelect.value = previousSelection;
+        }
+
+        const container = document.getElementById('variableTags');
+        container.innerHTML = '';
+        ['원본파일명', '기준값', '순번'].forEach(v => {
+            const span = document.createElement('span');
+            span.className = 'var-tag'; span.innerText = `{${v}}`; span.onclick = () => insertVariable(`{${v}}`);
+            container.appendChild(span);
+        });
+        currentColumns.forEach(col => {
+            if (col.name) {
+                const span = document.createElement('span');
+                span.className = 'var-tag'; span.innerText = `{${col.name}}`; span.onclick = () => insertVariable(`{${col.name}}`);
+                container.appendChild(span);
+            }
+        });
+    }
+
+    function unlockStep6And7() {
+        const colVal = document.getElementById('targetCol').value;
+        if(colVal) {
+            showElement('step6', 'block');
+            showElement('step7', 'flex'); 
+            showElement('runBtn', 'block');
+            
+            document.getElementById('runBtn').scrollIntoView({ behavior: 'smooth', block: 'end' });
+        } else {
+            resetFromStep(6);
+        }
+    }
+
+    function insertVariable(val) {
+        const input = document.getElementById('namingPattern');
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const text = input.value;
+        input.value = text.substring(0, start) + val + text.substring(end);
+        input.focus();
+        input.selectionStart = input.selectionEnd = start + val.length;
+    }
+
+    async function handleFolderSelect() {
+        try {
+            const result = await callPython('select_folder');
+            if (result && result.length > 0) document.getElementById('saveDir').value = result[0];
+        } catch (err) { }
+    }
+
+    async function runSplit() {
+        const filePath = document.getElementById('filePath').value;
+        const sheetName = document.getElementById('sheetSelect').value;
+        const dataStart = document.getElementById('dataStart').value;
+        const dataEnd = document.getElementById('dataEnd').value;
+        const targetColIdx = document.getElementById('targetCol').value;
+        const namingPattern = document.getElementById('namingPattern').value;
+        const saveDir = document.getElementById('saveDir').value;
+
+        if (!filePath) return showAlert("1. 원본 엑셀 파일을 선택해주세요.");
+        if (!sheetName) return showAlert("2. 작업할 시트를 선택해주세요.");
+        if (!dataStart) return showAlert("3. 데이터 시작행을 지정해주세요.");
+        if (!dataEnd) return showAlert("4. 데이터 종료행을 지정해주세요.");
+        if (!targetColIdx || targetColIdx === "") return showAlert("5. 분할 기준 열을 선택해주세요.\n(반드시 선택해야 진행됩니다)");
+        if (!namingPattern) return showAlert("6. 저장될 파일명 패턴을 입력해주세요.");
+        if (!saveDir) return showAlert("7. 저장할 폴더를 지정해주세요.");
+
+        const params = {
+            file_path: filePath, sheet_name: sheetName, data_start: dataStart, data_end: dataEnd,
+            target_col_idx: parseInt(targetColIdx), naming_pattern: namingPattern, save_dir: saveDir,
+            columns: currentColumns, mtime: lastMtime
+        };
+
+        // 💡 작업 시작 시 모달 오픈
+        showLoading(true, "분할 전 데이터를 꼼꼼히 검증하고 있습니다...<br><br><span style='font-size:13px; font-weight:normal; color:#ccc;'>(잠시만 기다려 주세요)</span>");
+        
+        try {
+            const result = await callPython('split_excel_by_column', params);
+            showLoading(false);
+            if (result.success) {
+                showAlert("✅ " + result.message);
+            } else {
+                if (result.action === 're_analyze') {
+                    showAlert(result.message);
+                    analyzeSheet(); 
+                } else {
+                    showAlert(result.message);
+                }
+            }
+        } catch (err) {
+            showLoading(false);
+            showAlert("치명적 오류 발생:\n" + err);
+        }
+    }
+
+    // ==========================================
+    // [추가] 드래그 앤 드롭 프론트엔드 제어
+    // ==========================================
+    const dragOverlay = document.getElementById('dragOverlay');
+
+    document.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        // 부모 창(index.html)의 투명 방패 강제 활성화
+        if (window.parent && window.parent.document) {
+            const shield = window.parent.document.getElementById('global-drop-zone');
+            if (shield) shield.classList.add('active');
+        }
+        if (dragOverlay) dragOverlay.classList.add('active');
+    });
+
+    document.addEventListener('dragover', (e) => e.preventDefault());
+
+    document.addEventListener('dragleave', (e) => {
+        if (dragOverlay) dragOverlay.classList.remove('active');
+    });
+
+    document.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (dragOverlay) dragOverlay.classList.remove('active');
+    });
+
+    // 파이썬 전역 D&D 이벤트가 감지한 경로들을 이 함수로 찔러줍니다.
+    window.addDroppedFiles = async function (paths) {
+        // 엑셀 파일만 필터링
+        const validPaths = paths.filter(p => {
+            const lowerP = p.toLowerCase();
+            return lowerP.endsWith('.xlsx') || lowerP.endsWith('.xls');
+        });
+
+        if (validPaths.length === 0) {
+            showAlert("분할할 엑셀(.xlsx, .xls) 파일만 추가할 수 있습니다.");
+            return;
+        }
+
+        // 엑셀 분할은 1개의 원본 파일만 처리하므로 첫 번째 파일만 사용합니다.
+        const filePath = validPaths[0];
+
+        // 경로 텍스트박스에 입력 후 시트 초기화
+        document.getElementById('filePath').value = filePath;
+        resetFromStep(2);
+
+        // 파이썬을 호출해 엑셀 파일 내부의 시트 목록을 가져옵니다.
+        showLoading(true, "시트 목록을 가져오는 중입니다...");
+        try {
+            const sheetData = await callPython('get_excel_sheets', filePath);
+            showLoading(false);
+
+            if (sheetData && sheetData.success) {
+                const selectEl = document.getElementById('sheetSelect');
+                selectEl.innerHTML = '<option value="">시트를 선택하세요</option>';
+                const sheets = sheetData.sheets || [];
+                sheets.forEach(sheet => {
+                    const opt = document.createElement('option');
+                    opt.value = sheet;
+                    opt.innerText = sheet;
+                    selectEl.appendChild(opt);
+                });
+                showElement('step2', 'block');
+            } else {
+                showAlert(sheetData ? sheetData.message : "시트 목록을 불러올 수 없습니다.");
+            }
+        } catch (err) {
+            showLoading(false);
+            showAlert("오류 발생: " + err);
+        }
+    };
+</script>
+</body>
+</html>

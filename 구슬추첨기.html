@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>구슬 추첨 프로그램</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Matter.js 물리 엔진 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Noto Sans KR', 'sans-serif'],
+                    },
+                    colors: {
+                        glass: 'rgba(255, 255, 255, 0.1)',
+                        glassBorder: 'rgba(255, 255, 255, 0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+            color: white;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+            transition: all 0.2s;
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+            filter: brightness(1.1);
+        }
+        .btn-primary:active:not(:disabled) { transform: translateY(1px); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(100%); }
+
+        .btn-action {
+            background: linear-gradient(to bottom, #f59e0b, #d97706);
+            border: 1px solid #fbbf24;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            box-shadow: 0 4px 0 #b45309, 0 8px 15px rgba(0,0,0,0.4);
+            transition: all 0.1s;
+        }
+        .btn-action:active:not(:disabled) {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #b45309, 0 2px 5px rgba(0,0,0,0.4);
+        }
+        .btn-action:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: 0 4px 0 #78350f; border-color: #92400e; background: #b45309; }
+
+        .btn-draw {
+            background: linear-gradient(to bottom, #ef4444, #b91c1c);
+            border: 1px solid #fca5a5;
+            box-shadow: 0 4px 0 #7f1d1d, 0 8px 15px rgba(0,0,0,0.4);
+        }
+        .btn-draw:active:not(:disabled) {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #7f1d1d, 0 2px 5px rgba(0,0,0,0.4);
+        }
+
+        /* 팝업 애니메이션 */
+        @keyframes popIn { 0% { opacity: 0; transform: scale(0.9) translateY(-20px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+        .popup-animate { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+        /* 결과 구슬 등장 효과 */
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .result-ball-anim { animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+        /* 구슬 결과 빛망울 효과 (그라데이션은 JS에서 인라인으로 처리) */
+        .ball-highlight {
+            box-shadow: 0 10px 20px rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        /* 기계 섞기 진동 효과 */
+        @keyframes containerShake {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            15% { transform: translate(-10px, 8px) rotate(-1deg); }
+            30% { transform: translate(12px, -10px) rotate(1deg); }
+            45% { transform: translate(-8px, -12px) rotate(-0.5deg); }
+            60% { transform: translate(10px, 12px) rotate(0.5deg); }
+            75% { transform: translate(-12px, 6px) rotate(-1deg); }
+            90% { transform: translate(8px, -8px) rotate(1deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+        .shaking-active { animation: containerShake 0.1s infinite linear; }
+
+        /* 비행 애니메이션용 돔 구슬 */
+        .flying-ball {
+            position: fixed;
+            z-index: 100;
+            pointer-events: none;
+            /* 트랜지션은 자바스크립트에서 단계별로 동적 부여합니다 */
+        }
+    </style>
+</head>
+<body class="h-screen w-full flex flex-col font-sans">
+
+    <!-- 상단 헤더 -->
+    <header class="glass-panel p-4 flex justify-between items-center z-10 border-b border-white/5 shadow-lg">
+        <h1 id="app-title" contenteditable="true" spellcheck="false" class="text-3xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 drop-shadow-md outline-none border-b-2 border-transparent focus:border-cyan-400 transition-colors cursor-text hover:bg-white/5 px-2 py-1 rounded">
+            구슬 추첨기
+        </h1>
+        <div class="px-5 py-2 rounded-full bg-slate-900 border border-slate-700 text-sm font-bold text-cyan-300 shadow-inner" id="status-text">
+            대기 중...
+        </div>
+    </header>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="flex-1 flex overflow-hidden p-4 gap-4">
+        
+        <!-- 왼쪽: 설정 패널 -->
+        <aside class="w-80 glass-panel rounded-2xl flex flex-col z-10 shrink-0 border border-white/5">
+            <div class="flex border-b border-gray-700/50 bg-slate-800/30 rounded-t-2xl">
+                <button id="tab-number" class="flex-1 py-4 font-bold text-cyan-400 border-b-2 border-cyan-400 transition-colors bg-cyan-900/10">번호 모드</button>
+                <button id="tab-color" class="flex-1 py-4 font-bold text-gray-400 border-b-2 border-transparent hover:text-cyan-300 transition-colors">색상 모드</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6">
+                <!-- 번호 모드 설정 -->
+                <div id="mode-number" class="space-y-5 block">
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-white/5">
+                        <label class="block text-sm font-bold text-gray-300 mb-2">시작 번호</label>
+                        <input type="number" id="num-start" value="1" min="1" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white text-lg font-bold focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-center">
+                    </div>
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-white/5">
+                        <label class="block text-sm font-bold text-gray-300 mb-2">끝 번호</label>
+                        <input type="number" id="num-end" value="30" min="2" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white text-lg font-bold focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-center">
+                    </div>
+                </div>
+
+                <!-- 색상 모드 설정 -->
+                <div id="mode-color" class="space-y-4 hidden">
+                    <div id="color-list" class="space-y-3">
+                        <!-- 색상 항목 동적 추가됨 -->
+                    </div>
+                    <button id="btn-add-color" class="w-full py-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 border-dashed rounded-xl text-sm text-gray-300 font-bold transition-all flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        구슬 종류 추가
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-gray-700/50 bg-slate-800/30 rounded-b-2xl">
+                <button id="btn-generate" class="w-full py-4 rounded-xl btn-primary font-black text-white text-lg flex items-center justify-center gap-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    추첨기에 구슬 넣기
+                </button>
+            </div>
+        </aside>
+
+        <!-- 중앙: 추첨기 캔버스 영역 -->
+        <section class="flex-1 relative flex flex-col justify-center items-center h-full overflow-hidden" id="machine-section">
+            
+            <!-- 조작/상태 UI (가림막 버튼) -->
+            <div class="absolute top-4 right-4 z-40 flex gap-2">
+                <button id="btn-blind" class="bg-slate-800 border border-slate-600 px-4 py-2 rounded-xl text-sm font-bold text-gray-300 hover:bg-slate-700 transition shadow-lg flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
+                    가림막 켜기
+                </button>
+            </div>
+
+            <!-- 기계 래퍼 -->
+            <div id="machine-wrapper" class="relative bg-black/60 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.7)] overflow-hidden border border-slate-600/50 transition-transform duration-100 origin-center" style="width: 800px; height: 500px; transform: scale(1);">
+                
+                <!-- 1. 배경 디자인 (SVG) -->
+                <svg class="absolute top-0 left-0 w-full h-full z-0" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <!-- 은은한 격자 패턴 -->
+                        <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                            <path d="M 50 0 L 0 0 0 50" fill="none" stroke="rgba(255,255,255,0.02)" stroke-width="1"/>
+                        </pattern>
+                        <!-- 깊이감 있는 경사 바닥 질감 -->
+                        <linearGradient id="floorGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#1e3a8a" />
+                            <stop offset="50%" stop-color="#0f766e" />
+                            <stop offset="100%" stop-color="#064e3b" />
+                        </linearGradient>
+                        <linearGradient id="wallGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="rgba(15, 23, 42, 0.4)" />
+                            <stop offset="100%" stop-color="rgba(2, 6, 23, 0.9)" />
+                        </linearGradient>
+                        <!-- 사이버틱한 네온 광원 효과 -->
+                        <linearGradient id="neonCyan" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.8"/>
+                            <stop offset="100%" stop-color="#818cf8" stop-opacity="0.8"/>
+                        </linearGradient>
+                        <linearGradient id="metal" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#334155" />
+                            <stop offset="50%" stop-color="#1e293b" />
+                            <stop offset="100%" stop-color="#0f172a" />
+                        </linearGradient>
+                    </defs>
+
+                    <!-- 뒷벽 -->
+                    <rect width="100%" height="100%" fill="url(#wallGrad)" />
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+
+                    <!-- 바닥 다각형 (정밀하게 계산된 경사: 0,250 -> 700,420 -> 터널 800,433) -->
+                    <polygon points="0,500 0,250 700,420 800,433 800,500" fill="url(#floorGrad)" />
+                    <!-- 바닥 LED 네온 라인 (얇고 세련되게) -->
+                    <polyline points="0,250 700,420 800,433" fill="none" stroke="url(#neonCyan)" stroke-width="2" filter="drop-shadow(0 -1px 4px #38bdf8)"/>
+                    
+                    <!-- 우측 벽면 (수직 구조, 터널 제외) -->
+                    <polygon points="700,0 800,0 800,365 700,365" fill="rgba(15, 23, 42, 0.7)" />
+                    <!-- 우측 벽 LED 라인 -->
+                    <line x1="700" y1="0" x2="700" y2="365" stroke="url(#neonCyan)" stroke-width="2" filter="drop-shadow(0 0 4px #38bdf8)"/>
+                </svg>
+
+                <!-- 2. Matter.js 캔버스 영역 (물리 엔진) -->
+                <div id="canvas-container" class="absolute top-0 left-0 w-full h-full z-10 pointer-events-none"></div>
+
+                <!-- 가림막 (추첨기 내부 전체 숨김) -->
+                <div id="machine-blind" class="absolute top-0 left-0 w-[700px] h-[500px] bg-slate-900/60 backdrop-blur-xl backdrop-grayscale border-r border-slate-700 z-[15] flex flex-col items-center justify-center transition-opacity duration-300 pointer-events-none opacity-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)]">
+                    <div class="text-6xl font-black text-slate-400 opacity-30 mb-4 drop-shadow-lg">?</div>
+                    <div class="text-xl font-bold text-cyan-400/30 tracking-widest uppercase">Secret Mode</div>
+                </div>
+
+                <!-- 3. 전면 오버레이 (SVG: 투명 유리 반사, 대기열 가림막) -->
+                <svg class="absolute top-0 left-0 w-full h-full z-20 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <!-- 은은한 유리 반사 질감 -->
+                        <linearGradient id="glassReflection" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="rgba(255,255,255,0.15)" />
+                            <stop offset="30%" stop-color="rgba(255,255,255,0.02)" />
+                            <stop offset="50%" stop-color="rgba(255,255,255,0.0)" />
+                            <stop offset="70%" stop-color="rgba(255,255,255,0.0)" />
+                            <stop offset="100%" stop-color="rgba(100,200,255,0.05)" />
+                        </linearGradient>
+                    </defs>
+
+                    <!-- 전면 유리 (왼쪽 투명 영역) -->
+                    <polygon points="0,0 700,0 700,500 0,500" fill="url(#glassReflection)" />
+                    
+                    <!-- 배출 메커니즘 하우징 (투박한 막대 제거, 모던한 다크 메탈 커버) -->
+                    <g id="exit-cover" class="transition-opacity duration-300 opacity-0">
+                        <!-- 세련된 다크 메탈 덮개 -->
+                        <polygon points="698,365 800,365 800,500 698,500" fill="url(#metal)" />
+                        <!-- 덮개 테두리 하이라이트 -->
+                        <polygon points="698,365 800,365 800,500 698,500" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+                        
+                        <!-- 우측 끝 배출구 구멍 (어둠) -->
+                        <rect x="785" y="380" width="15" height="55" fill="#000000" rx="2"/>
+                    </g>
+
+                    <!-- 테두리 프레임 (얇고 모던하게) -->
+                    <rect x="1" y="1" width="798" height="498" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2" rx="24"/>
+                </svg>
+            </div>
+
+            <!-- 하단 조작 버튼 -->
+            <div class="mt-8 flex space-x-6 z-30">
+                <button id="btn-shake" class="btn-action px-8 py-4 rounded-2xl text-xl font-black text-white w-48 flex items-center justify-center gap-3 shadow-xl" disabled>
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    섞기
+                </button>
+                <button id="btn-draw" class="btn-draw px-8 py-4 rounded-2xl text-xl font-black text-white w-56 flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(239,68,68,0.5)]" disabled>
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                    1개 뽑기
+                </button>
+            </div>
+        </section>
+
+        <!-- 오른쪽: 결과 패널 -->
+        <aside class="w-80 glass-panel rounded-2xl flex flex-col z-10 shrink-0 relative border border-white/5" id="result-panel">
+            <div class="p-5 border-b border-gray-700/50 bg-slate-800/30 rounded-t-2xl flex justify-between items-center">
+                <h2 class="font-black text-xl text-white drop-shadow">뽑힌 구슬</h2>
+                <div class="bg-cyan-600/80 border border-cyan-400 text-white font-bold text-sm px-3 py-1.5 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.5)]" id="result-count">
+                    총 0개
+                </div>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-5 relative bg-gradient-to-b from-black/20 to-transparent">
+                <div id="result-list" class="flex flex-wrap gap-4 content-start relative z-10">
+                    <!-- 결과 구슬들이 여기에 추가됨 -->
+                </div>
+                
+                <div id="empty-result-msg" class="absolute inset-0 flex flex-col items-center justify-center text-gray-500/80 text-sm font-medium z-0">
+                    <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                    아직 뽑힌 구슬이 없습니다
+                </div>
+            </div>
+
+            <div class="p-5 border-t border-gray-700/50 bg-slate-800/30 rounded-b-2xl">
+                <button id="btn-reset-results" class="w-full py-3 bg-red-950/60 hover:bg-red-900 border border-red-900/50 hover:border-red-500 rounded-xl text-red-200 font-bold transition-all shadow-inner">
+                    결과 모두 초기화
+                </button>
+            </div>
+        </aside>
+    </main>
+
+    <!-- 커스텀 팝업 -->
+    <div id="custom-popup" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex justify-center items-center hidden">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-8 max-w-sm w-full shadow-[0_20px_50px_rgba(0,0,0,0.8)] popup-animate">
+            <div class="flex items-center gap-3 mb-4 text-cyan-400">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <h3 class="text-2xl font-black text-white" id="popup-title">알림</h3>
+            </div>
+            <p class="text-gray-300 mb-8 text-lg font-medium leading-relaxed" id="popup-message">메시지 내용</p>
+            <div class="flex justify-end">
+                <button id="popup-btn-ok" class="px-8 py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-white font-bold text-lg shadow-lg transition-all focus:outline-none focus:ring-4 focus:ring-cyan-500/50">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 1. 전역 상태 및 유틸리티
+         */
+        let currentMode = 'number';
+        let drawnBalls = [];
+        let isShaking = false;
+        let isDrawing = false;
+        let totalBallsInMachine = 0;
+
+        const defaultColors = [
+            { hex: '#ef4444', name: '빨강' }, { hex: '#3b82f6', name: '파랑' },
+            { hex: '#22c55e', name: '초록' }, { hex: '#eab308', name: '노랑' },
+            { hex: '#a855f7', name: '보라' }, { hex: '#f97316', name: '주황' },
+            { hex: '#ec4899', name: '분홍' }, { hex: '#ffffff', name: '하양' }
+        ];
+
+        function showPopup(message, title = '알림') {
+            document.getElementById('popup-title').innerText = title;
+            document.getElementById('popup-message').innerText = message;
+            const popup = document.getElementById('custom-popup');
+            popup.classList.remove('hidden');
+        }
+
+        document.getElementById('popup-btn-ok').addEventListener('click', () => {
+            document.getElementById('custom-popup').classList.add('hidden');
+        });
+
+        function getContrastYIQ(hexcolor){
+            if (!hexcolor) return 'white';
+            hexcolor = hexcolor.replace("#", "");
+            if (hexcolor.length === 3) hexcolor = hexcolor.split('').map(c => c+c).join('');
+            var r = parseInt(hexcolor.substr(0,2),16);
+            var g = parseInt(hexcolor.substr(2,2),16);
+            var b = parseInt(hexcolor.substr(4,2),16);
+            var yiq = ((r*299)+(g*587)+(b*114))/1000;
+            return (yiq >= 128) ? '#020617' : '#ffffff';
+        }
+
+        function updateStatus(text) {
+            document.getElementById('status-text').innerText = text;
+        }
+
+        /**
+         * 2. UI 조작
+         */
+        const tabNumber = document.getElementById('tab-number');
+        const tabColor = document.getElementById('tab-color');
+        const modeNumber = document.getElementById('mode-number');
+        const modeColor = document.getElementById('mode-color');
+
+        function switchTab(mode) {
+            currentMode = mode;
+            if (mode === 'number') {
+                tabNumber.className = "flex-1 py-4 font-bold text-cyan-400 border-b-2 border-cyan-400 transition-colors bg-cyan-900/10";
+                tabColor.className = "flex-1 py-4 font-bold text-gray-400 border-b-2 border-transparent hover:text-cyan-300 transition-colors";
+                modeNumber.classList.remove('hidden'); modeColor.classList.add('hidden');
+            } else {
+                tabColor.className = "flex-1 py-4 font-bold text-cyan-400 border-b-2 border-cyan-400 transition-colors bg-cyan-900/10";
+                tabNumber.className = "flex-1 py-4 font-bold text-gray-400 border-b-2 border-transparent hover:text-cyan-300 transition-colors";
+                modeColor.classList.remove('hidden'); modeNumber.classList.add('hidden');
+            }
+        }
+        tabNumber.addEventListener('click', () => switchTab('number'));
+        tabColor.addEventListener('click', () => switchTab('color'));
+
+        const colorList = document.getElementById('color-list');
+        let colorItemId = 0;
+
+        function getUnusedColor() {
+            const usedColors = Array.from(document.querySelectorAll('.color-picker')).map(input => input.value.toLowerCase());
+            const available = defaultColors.find(c => !usedColors.includes(c.hex.toLowerCase()));
+            if (available) return available.hex;
+            return '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
+        }
+
+        function handleColorChange(e) {
+            const input = e.target;
+            const newColor = input.value.toLowerCase();
+            const allPickers = Array.from(document.querySelectorAll('.color-picker'));
+            
+            const duplicates = allPickers.filter(p => p !== input && p.value.toLowerCase() === newColor);
+            if (duplicates.length > 0) {
+                showPopup('이미 추가된 색상입니다. 다른 색상을 선택해주세요.');
+                input.value = input.dataset.prevColor; 
+            } else {
+                input.dataset.prevColor = newColor; 
+            }
+        }
+
+        function addColorRow(colorHex = null, count = 10) {
+            if (!colorHex) {
+                colorHex = getUnusedColor();
+            }
+
+            const id = `color-item-${colorItemId++}`;
+            const row = document.createElement('div');
+            row.className = "flex items-center gap-3 bg-slate-900/50 p-3 rounded-xl border border-white/5 shadow-inner";
+            row.id = id;
+            row.innerHTML = `
+                <div class="relative w-12 h-12 rounded-full overflow-hidden border-2 border-slate-600 shadow-md flex-shrink-0">
+                    <input type="color" value="${colorHex}" data-prev-color="${colorHex.toLowerCase()}" class="absolute top-[-10px] left-[-10px] w-20 h-20 cursor-pointer border-0 p-0 color-picker">
+                </div>
+                <input type="number" value="${count}" min="1" max="50" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg p-2 text-white text-lg font-bold text-center focus:outline-none focus:border-cyan-400 color-count">
+                <span class="text-sm font-medium text-gray-400">개</span>
+                <button type="button" class="text-gray-500 hover:text-red-400 p-2 transition-colors bg-slate-800 rounded-lg hover:bg-slate-700" onclick="document.getElementById('${id}').remove()">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            `;
+            colorList.appendChild(row);
+
+            const picker = row.querySelector('.color-picker');
+            picker.addEventListener('change', handleColorChange);
+        }
+        
+        document.getElementById('btn-add-color').addEventListener('click', () => addColorRow(null, 5));
+        
+        addColorRow(defaultColors[0].hex, 5); 
+        addColorRow(defaultColors[1].hex, 5); 
+        addColorRow(defaultColors[3].hex, 5); 
+
+        /**
+         * 3. Matter.js 물리 엔진 및 구조
+         */
+        const Engine = Matter.Engine,
+              Render = Matter.Render,
+              Runner = Matter.Runner,
+              Bodies = Matter.Bodies,
+              Composite = Matter.Composite,
+              Events = Matter.Events,
+              Body = Matter.Body;
+
+        let engine, render, runner;
+        let stopGate1; // 유일한 물리적 배출 스토퍼 (시각적으로는 숨김 처리됨)
+        let shakeBlocker; 
+        let mainFloor; // 메인 경사 바닥 (탄성 조절용)
+        const BALL_RADIUS = 22; 
+
+        function initPhysics() {
+            engine = Engine.create();
+            engine.gravity.y = 1.0; 
+
+            render = Render.create({
+                element: document.getElementById('canvas-container'),
+                engine: engine,
+                options: {
+                    width: 800, height: 500,
+                    wireframes: false, background: 'transparent',
+                    pixelRatio: window.devicePixelRatio || 1
+                }
+            });
+
+            createMachineWalls();
+
+            Render.run(render);
+            runner = Runner.create();
+            Runner.run(runner, engine);
+
+            Events.on(render, 'afterRender', function() {
+                var context = render.context;
+                var bodies = Composite.allBodies(engine.world);
+
+                for (var i = 0; i < bodies.length; i++) {
+                    var body = bodies[i];
+                    if (body.label === 'ball') {
+                        context.beginPath();
+                        context.arc(body.position.x, body.position.y, body.circleRadius, 0, 2*Math.PI);
+                        
+                        // 고품질 3D 구슬 그라데이션
+                        var grad = context.createRadialGradient(
+                            body.position.x - body.circleRadius*0.4, 
+                            body.position.y - body.circleRadius*0.4, 
+                            body.circleRadius*0.1, 
+                            body.position.x, body.position.y, body.circleRadius
+                        );
+                        grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+                        grad.addColorStop(0.2, 'rgba(255,255,255,0.4)');
+                        grad.addColorStop(0.7, 'rgba(0,0,0,0.1)');
+                        grad.addColorStop(1, 'rgba(0,0,0,0.7)');
+                        context.fillStyle = grad;
+                        context.fill();
+
+                        context.lineWidth = 1;
+                        context.strokeStyle = 'rgba(0,0,0,0.5)';
+                        context.stroke();
+
+                        if (body.customText) {
+                            context.font = "900 18px 'Noto Sans KR'";
+                            context.fillStyle = body.textColor;
+                            context.textAlign = "center";
+                            context.textBaseline = "middle";
+                            
+                            context.save();
+                            context.translate(body.position.x, body.position.y);
+                            context.rotate(body.angle);
+                            context.shadowColor = 'rgba(0,0,0,0.6)';
+                            context.shadowBlur = 4;
+                            context.fillText(body.customText, 0, 0);
+                            context.restore();
+                        }
+                    }
+                }
+            });
+
+            Events.on(engine, 'beforeUpdate', function() {
+                var balls = Composite.allBodies(engine.world).filter(b => b.label === 'ball');
+                
+                balls.forEach(b => {
+                    // 화면 밖 강제 이탈 방지
+                    if (b.position.y < -100 || b.position.y > 600 || b.position.x < -100 || (b.position.x > 850 && !isDrawing)) {
+                        Body.setPosition(b, { x: 300 + Math.random() * 100, y: 150 + Math.random() * 100 });
+                        Body.setVelocity(b, { x: 0, y: 0 }); 
+                    }
+
+                    if (isShaking) return;
+
+                    // 출구 앞 정체 해소용 초미세 진동
+                    if (b.position.x > 600 && b.position.x < 700 && b.position.y > 300) {
+                        if (Math.abs(b.velocity.x) < 0.2 && Math.abs(b.velocity.y) < 0.2) {
+                            if (Math.random() < 0.05) {
+                                Body.applyForce(b, b.position, { x: 0.001, y: -0.003 });
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
+        function createMachineWalls() {
+            const walls = [];
+            const opt = { isStatic: true, render: { visible: false }, friction: 0.01, restitution: 0.5 };
+
+            // 1. 외곽 안전벽 (화면 밖)
+            walls.push(Bodies.rectangle(-250, 250, 500, 1000, opt)); 
+            walls.push(Bodies.rectangle(400, -250, 1500, 500, opt)); 
+
+            // 2. 메인 경사 바닥
+            // 0,250 에서 700,420 을 잇는 선에 윗면이 정확히 일치하도록 좌표 계산
+            const floorAngle = Math.atan2(420 - 250, 700 - 0); 
+            const floorWidth = Math.hypot(700, 170) + 100; // 넉넉한 길이
+            // 중심 y좌표: (250+420)/2 = 335. 두께 100의 절반인 50만큼 아래로 내림
+            mainFloor = Bodies.rectangle(362, 384, floorWidth, 100, { ...opt, angle: floorAngle });
+            walls.push(mainFloor);
+
+            // 3. 우측 수직 벽
+            // x=700 선에 좌측면이 일치하도록 (750중심, 폭100). 높이 465, 중심 132.5 (바닥은 y=365)
+            walls.push(Bodies.rectangle(750, 132.5, 100, 465, opt));
+
+            // 4. 출구 터널 (700,420 에서 800,433 으로 약간의 기울기)
+            const exitAngle = Math.atan2(13, 100);
+            walls.push(Bodies.rectangle(750, 476.5, 100, 100, { ...opt, angle: exitAngle })); // 바닥
+            walls.push(Bodies.rectangle(750, 315, 100, 100, { ...opt, angle: exitAngle })); // 천장
+
+            // 5. 스토퍼 (단일 제어. 그래픽상으로는 보이지 않게 숨김 처리)
+            stopGate1 = Bodies.rectangle(750, 400, 20, 100, { isStatic: true, render: { visible: false } });
+            walls.push(stopGate1);
+
+            // 6. 하단 안전망
+            walls.push(Bodies.rectangle(400, 800, 2000, 200, opt));
+
+            Composite.add(engine.world, walls);
+        }
+
+        /**
+         * 4. 액션 로직
+         */
+        function generateBalls() {
+            if (isDrawing || isShaking) return;
+
+            const existingBalls = Composite.allBodies(engine.world).filter(b => b.label === 'ball');
+            Composite.remove(engine.world, existingBalls);
+            
+            totalBallsInMachine = 0;
+            updateButtonsState();
+            
+            // 배출구 잠금 상태 초기화
+            Body.setPosition(stopGate1, { x: 750, y: 400 }); 
+
+            let ballsData = [];
+
+            if (currentMode === 'number') {
+                const start = parseInt(document.getElementById('num-start').value);
+                const end = parseInt(document.getElementById('num-end').value);
+
+                if (isNaN(start) || isNaN(end) || start > end) { showPopup('올바른 번호 범위를 입력해주세요.'); return; }
+                const total = end - start + 1;
+                if (total > 150) { showPopup('구슬이 너무 많습니다. 100개 이하를 권장합니다.'); return; }
+
+                for (let i = start; i <= end; i++) {
+                    const rColor = defaultColors[Math.floor(Math.random() * defaultColors.length)].hex;
+                    ballsData.push({ text: String(i), color: rColor });
+                }
+            } else {
+                const rows = document.querySelectorAll('#color-list > div');
+                let totalCount = 0;
+                rows.forEach(row => {
+                    const color = row.querySelector('.color-picker').value;
+                    const count = parseInt(row.querySelector('.color-count').value) || 0;
+                    if (count > 0) {
+                        for(let i=0; i<count; i++) {
+                            ballsData.push({ text: '', color: color });
+                            totalCount++;
+                        }
+                    }
+                });
+                if (totalCount === 0) { showPopup('추가할 구슬이 없습니다.'); return; }
+                if (totalCount > 150) { showPopup('구슬이 너무 많습니다. 100개 이하를 권장합니다.'); return; }
+            }
+
+            for (let i = ballsData.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [ballsData[i], ballsData[j]] = [ballsData[j], ballsData[i]];
+            }
+
+            ballsData.forEach((data, index) => {
+                setTimeout(() => {
+                    const xPos = 50 + Math.random() * 400;
+                    const yPos = 50 + Math.random() * 100;
+                    
+                    const ball = Bodies.circle(xPos, yPos, BALL_RADIUS, {
+                        label: 'ball',
+                        restitution: 0.7, 
+                        friction: 0.005,
+                        density: 0.05,
+                        render: { fillStyle: data.color }
+                    });
+
+                    ball.customText = data.text;
+                    ball.textColor = getContrastYIQ(data.color);
+                    ball.baseColor = data.color;
+
+                    Composite.add(engine.world, ball);
+                    totalBallsInMachine++;
+                    
+                    if(index === ballsData.length - 1) {
+                        updateButtonsState();
+                        updateStatus(`구슬 ${totalBallsInMachine}개 장전 완료`);
+                    }
+                }, index * 20);
+            });
+        }
+
+        function shakeMachine() {
+            if (isDrawing || isShaking || totalBallsInMachine === 0) return;
+            
+            isShaking = true;
+            updateButtonsState();
+            updateStatus('강력 믹싱 중...');
+
+            document.getElementById('machine-wrapper').classList.add('shaking-active');
+
+            const balls = Composite.allBodies(engine.world).filter(b => b.label === 'ball');
+            
+            shakeBlocker = Bodies.rectangle(800, 390, 200, 400, { isStatic: true, render: {visible: false} });
+            Composite.add(engine.world, shakeBlocker);
+
+            // 바닥의 탄성을 높여 섞이는 동안 구슬이 더 높이 튕겨 오르도록 세팅
+            mainFloor.restitution = 0.9;
+
+            balls.forEach(b => {
+                b.restitution = 1.02; // 탄성을 100% 이상으로 살짝 올려 에너지가 줄어들지 않고 강하게 튕기게 함
+                b.friction = 0;
+                b.frictionAir = 0;
+            });
+
+            const origGravityY = engine.gravity.y;
+            const origGravityX = engine.gravity.x || 0;
+
+            let shakeTicks = 0;
+            const SHAKE_DURATION = 150; 
+
+            engine.gravity.y = 0;
+            engine.gravity.x = 0;
+
+            // 섞기 시작 시 사방으로 시원하게 흩뿌림
+            balls.forEach(ball => {
+                Body.setVelocity(ball, {
+                    x: (Math.random() - 0.5) * 30,
+                    y: -10 - Math.random() * 15
+                });
+            });
+
+            const performShake = () => {
+                shakeTicks++;
+
+                // 매 프레임 속도를 바꾸는 대신, 15프레임마다 기계를 확 꺾는 느낌으로 중력만 강하게 바꿈
+                // 마지막 피날레를 위해 종료 5프레임 전까지만 중력 방향 전환
+                if (shakeTicks < SHAKE_DURATION - 5 && shakeTicks % 15 === 0) {
+                    engine.gravity.x = (Math.random() - 0.5) * 15;
+                    engine.gravity.y = (Math.random() - 0.5) * 15;
+                }
+
+                // 마지막 순간 (종료 5프레임 전)에 모든 공을 위로 강력하게 쳐올림 (파이널 킥)
+                if (shakeTicks === SHAKE_DURATION - 5) {
+                    balls.forEach(ball => {
+                        Body.setVelocity(ball, {
+                            x: (Math.random() - 0.5) * 20,
+                            y: -25 - Math.random() * 15 // 강력한 수직 상승
+                        });
+                    });
+                } else if (shakeTicks < SHAKE_DURATION - 5) {
+                    balls.forEach(ball => {
+                        let vx = ball.velocity.x;
+                        let vy = ball.velocity.y;
+                        const speed = Math.sqrt(vx * vx + vy * vy);
+
+                        // 구슬이 우연히 구석에서 멈추면 강하게 한 번 차줌 (정체 방지)
+                        if (speed < 5) {
+                            Body.applyForce(ball, ball.position, {
+                                x: (Math.random() - 0.5) * 0.06,
+                                y: (Math.random() - 0.5) * 0.06
+                            });
+                        }
+
+                        // 벽을 뚫지 않도록 최고 속도만 제한 (방향은 건드리지 않음)
+                        const maxSpeed = 20; 
+                        if (speed > maxSpeed) {
+                            Body.setVelocity(ball, { 
+                                x: (vx / speed) * maxSpeed, 
+                                y: (vy / speed) * maxSpeed 
+                            });
+                        }
+                    });
+                }
+
+                if (shakeTicks > SHAKE_DURATION) {
+                    Events.off(engine, 'beforeUpdate', performShake);
+                    
+                    document.getElementById('machine-wrapper').classList.remove('shaking-active');
+                    Composite.remove(engine.world, shakeBlocker); 
+                    
+                    engine.gravity.x = origGravityX;
+                    engine.gravity.y = origGravityY;
+                    
+                    // 바닥 탄성 복구
+                    mainFloor.restitution = 0.5;
+
+                    balls.forEach(b => {
+                        b.restitution = 0.6; // 구슬이 부드럽게 통통 튀며 정착하도록 탄성 조절
+                        b.friction = 0.01;
+                        b.frictionAir = 0.005;
+                        // 기존의 강제 속도 정지 로직을 제거하여, 
+                        // 파이널 킥에 의해 하늘로 솟은 공들이 중력에 의해 우수수 자연스럽게 떨어지도록 유도
+                    });
+                    
+                    isShaking = false;
+                    updateButtonsState();
+                    updateStatus('섞기 완료!');
+                }
+            };
+
+            Events.on(engine, 'beforeUpdate', performShake);
+        }
+
+        function drawOneBall() {
+            if (isDrawing || isShaking || totalBallsInMachine === 0) return;
+
+            const balls = Composite.allBodies(engine.world).filter(b => b.label === 'ball');
+            balls.sort((a,b) => b.position.x - a.position.x);
+            const targetBall = balls[0];
+
+            if (!targetBall || targetBall.position.x < 500) {
+                showPopup('구슬이 아직 출구 근처에 오지 않았습니다. 섞어주세요.');
+                return;
+            }
+
+            isDrawing = true;
+            updateButtonsState();
+            updateStatus('배출 중...');
+
+            // 스토퍼 개방
+            Body.setPosition(stopGate1, { x: 750, y: 800 });
+
+            let timeElapsed = 0;
+            const checkExit = setInterval(() => {
+                timeElapsed += 50;
+
+                // 타겟 구슬을 밖으로 자연스럽게 굴려보냄
+                if (targetBall.position.x < 850) {
+                    Body.applyForce(targetBall, targetBall.position, { x: 0.005, y: 0.001 });
+                }
+
+                // 타겟 이외의 구슬이 출구(x=700)를 넘어가려 하면 강제로 뒤로 날려버림 (이중 잠금 논리적 구현)
+                const currentBalls = Composite.allBodies(engine.world).filter(b => b.label === 'ball');
+                currentBalls.forEach(b => {
+                    if (b !== targetBall && b.position.x > 700) { 
+                        Body.setPosition(b, { x: 650, y: 350 }); 
+                        Body.setVelocity(b, { x: -2, y: -2 });   
+                    }
+                });
+
+                if (timeElapsed > 1500 && targetBall.position.x <= 850) {
+                    Body.setPosition(targetBall, { x: 860, y: 440 });
+                }
+
+                if (targetBall.position.x > 820 || targetBall.position.y > 600) {
+                    clearInterval(checkExit);
+                    
+                    Composite.remove(engine.world, targetBall);
+                    totalBallsInMachine--;
+                    
+                    // 배출 완료 후 즉시 스토퍼 닫기
+                    Body.setPosition(stopGate1, { x: 750, y: 400 }); 
+
+                    animateBallToResult(targetBall);
+                }
+            }, 50);
+        }
+
+        /**
+         * 5. 애니메이션 및 UI (Flying Ball)
+         */
+        function animateBallToResult(ballObj) {
+            const wrapper = document.getElementById('machine-wrapper');
+            const rect = wrapper.getBoundingClientRect();
+            
+            // 배출구의 정확한 시각적 좌표
+            const startX = rect.left + 780; 
+            const startY = rect.top + 400;  
+
+            const resultList = document.getElementById('result-list');
+            const resultRect = resultList.getBoundingClientRect();
+            
+            // 결과 목록의 타겟 좌표
+            const endX = resultRect.left + 60;
+            const endY = resultRect.top + 60;
+
+            // 화면 중앙 좌표 (크게 보여줄 위치)
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            const flyer = document.createElement('div');
+            // 크기를 w-16 h-16(64px)으로 고정
+            flyer.className = "flying-ball w-16 h-16 rounded-full flex justify-center items-center text-2xl font-black ball-highlight shadow-2xl";
+            
+            // 캔버스의 3D 구슬과 완벽히 동일한 입체 그라데이션을 CSS로 구현
+            flyer.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.4) 20%, rgba(0,0,0,0.1) 70%, rgba(0,0,0,0.7) 100%), ${ballObj.baseColor}`;
+            flyer.style.color = ballObj.textColor;
+            flyer.innerText = ballObj.customText || '';
+            
+            // 초기 위치 (배출구에서 작게 시작)
+            flyer.style.left = (startX - 32) + 'px';
+            flyer.style.top = (startY - 32) + 'px';
+            flyer.style.transform = "scale(0.5)";
+            flyer.style.transition = "all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)"; // 통통 튀는 탄성 효과
+            
+            document.body.appendChild(flyer);
+
+            flyer.getBoundingClientRect(); // 강제 리플로우 (애니메이션 적용을 위해 필수)
+
+            // 1단계: 화면 중앙으로 날아오면서 엄청나게 확대
+            flyer.style.left = (centerX - 32) + 'px';
+            flyer.style.top = (centerY - 32) + 'px';
+            flyer.style.transform = "scale(4.5)"; // 4.5배 확대
+
+            // 2단계: 중앙에서 잠시 멈춰서 보여준 뒤, 결과창으로 이동
+            setTimeout(() => {
+                flyer.style.transition = "all 0.6s ease-in-out"; // 부드러운 이동 효과로 변경
+                flyer.style.left = (endX - 32) + 'px';
+                flyer.style.top = (endY - 32) + 'px';
+                flyer.style.transform = "scale(1)";
+
+                // 3단계: 도착 후 임시 구슬 삭제 및 실제 UI 추가
+                setTimeout(() => {
+                    document.body.removeChild(flyer); 
+                    addResultToUI(ballObj);           
+                    
+                    isDrawing = false;
+                    updateButtonsState();
+                    updateStatus(`추첨 완료 (남은 구슬: ${totalBallsInMachine}개)`);
+                }, 600); // 날아가는 시간 대기
+            }, 1200); // 중앙으로 오는 시간(0.5초) + 머무르며 보여주는 시간(0.7초) 대기
+        }
+
+        // 결과 UI 업데이트
+        function addResultToUI(ball) {
+            const list = document.getElementById('result-list');
+            const emptyMsg = document.getElementById('empty-result-msg');
+            const countBadge = document.getElementById('result-count');
+
+            if (emptyMsg) emptyMsg.style.display = 'none';
+
+            drawnBalls.push({ text: ball.customText, color: ball.baseColor, textColor: ball.textColor });
+            
+            const itemContainer = document.createElement('div');
+            itemContainer.className = "result-ball-anim";
+
+            const item = document.createElement('div');
+            item.className = "w-16 h-16 rounded-full flex justify-center items-center text-2xl font-black ball-highlight relative group cursor-default shadow-lg";
+            
+            // 결과 창의 구슬도 3D 입체 그라데이션 적용
+            item.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.4) 20%, rgba(0,0,0,0.1) 70%, rgba(0,0,0,0.7) 100%), ${ball.baseColor}`;
+            item.style.color = ball.textColor;
+            item.innerText = ball.customText || '';
+
+            const badge = document.createElement('div');
+            badge.className = "absolute -top-1 -right-1 bg-slate-900 text-white text-[11px] font-bold w-6 h-6 rounded-full flex items-center justify-center border border-white/20 shadow";
+            badge.innerText = drawnBalls.length;
+            
+            item.appendChild(badge);
+            itemContainer.appendChild(item);
+            list.appendChild(itemContainer);
+            
+            list.parentElement.scrollTo({
+                top: list.parentElement.scrollHeight,
+                behavior: 'smooth'
+            });
+
+            countBadge.innerText = `총 ${drawnBalls.length}개`;
+        }
+
+        function resetResults() {
+            if(drawnBalls.length === 0) return;
+            drawnBalls = [];
+            const list = document.getElementById('result-list');
+            list.innerHTML = '';
+            document.getElementById('empty-result-msg').style.display = 'flex';
+            document.getElementById('result-count').innerText = '총 0개';
+            updateStatus('결과가 모두 초기화되었습니다.');
+        }
+
+        function updateButtonsState() {
+            const btnShake = document.getElementById('btn-shake');
+            const btnDraw = document.getElementById('btn-draw');
+            const btnGen = document.getElementById('btn-generate');
+
+            const canAction = !isDrawing && !isShaking && totalBallsInMachine > 0;
+            
+            btnShake.disabled = !canAction;
+            btnDraw.disabled = !canAction;
+            btnGen.disabled = isDrawing || isShaking;
+        }
+
+        window.addEventListener('load', () => {
+            initPhysics();
+
+            document.getElementById('btn-generate').addEventListener('click', generateBalls);
+            document.getElementById('btn-shake').addEventListener('click', shakeMachine);
+            document.getElementById('btn-draw').addEventListener('click', drawOneBall);
+            document.getElementById('btn-reset-results').addEventListener('click', resetResults);
+
+            // 가림막 토글 이벤트
+            let isBlindOn = false;
+            document.getElementById('btn-blind').addEventListener('click', (e) => {
+                isBlindOn = !isBlindOn;
+                const blind = document.getElementById('machine-blind');
+                const exitCover = document.getElementById('exit-cover');
+                const btn = e.currentTarget;
+                if (isBlindOn) {
+                    blind.classList.replace('opacity-0', 'opacity-100');
+                    exitCover.classList.replace('opacity-0', 'opacity-100');
+                    btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg> 가림막 끄기`;
+                    btn.classList.replace('text-gray-300', 'text-amber-400');
+                } else {
+                    blind.classList.replace('opacity-100', 'opacity-0');
+                    exitCover.classList.replace('opacity-100', 'opacity-0');
+                    btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg> 가림막 켜기`;
+                    btn.classList.replace('text-amber-400', 'text-gray-300');
+                }
+            });
+
+            // 마우스 휠 확대/축소 이벤트
+            const machineSection = document.getElementById('machine-section');
+            const machineWrapper = document.getElementById('machine-wrapper');
+            let currentZoom = 1.0;
+
+            machineSection.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (e.deltaY < 0) {
+                    currentZoom += 0.05;
+                } else {
+                    currentZoom -= 0.05;
+                }
+                currentZoom = Math.min(Math.max(currentZoom, 0.5), 1.8);
+                machineWrapper.style.transform = `scale(${currentZoom})`;
+            }, { passive: false });
+        });
+
+    </script>
+</body>
+</html>

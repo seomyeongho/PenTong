@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>공간도형 에디터</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Phosphor Icons for UI icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; }
+        #canvas-container { width: 100%; height: 100%; outline: none; }
+        
+        /* Custom Scrollbar for sidebar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    </style>
+
+    <!-- Three.js Import Map -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body class="bg-white text-gray-800 h-screen flex flex-col">
+
+    <!-- Top Header -->
+    <header class="bg-slate-800 text-white h-12 flex items-center px-4 shadow-md z-10 shrink-0">
+        <div class="flex items-center gap-2">
+            <i class="ph ph-cube text-xl"></i>
+            <h1 class="text-base font-semibold tracking-wide">공간도형 에디터</h1>
+        </div>
+        <div class="ml-auto flex items-center gap-3 text-sm">
+            <button id="btn-reset-cam" class="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded transition-colors">
+                <i class="ph ph-arrows-out-line-horizontal"></i>
+                화면 초기화
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="flex flex-1 overflow-hidden">
+        
+        <!-- Left Sidebar (Tools) -->
+        <aside class="w-64 bg-gray-50 border-r border-gray-200 flex flex-col shadow-[2px_0_5px_rgba(0,0,0,0.05)] z-10">
+            <div class="p-4 border-b border-gray-200">
+                <h2 class="text-sm font-bold text-gray-500 mb-3">동작 모드</h2>
+                <div class="grid grid-cols-3 gap-2 mb-4">
+                    <button id="btn-mode-view" class="flex flex-col items-center justify-center p-2 bg-blue-50 border border-blue-400 rounded transition-colors text-blue-600">
+                        <i class="ph ph-cursor text-xl mb-1"></i>
+                        <span class="text-[10px] font-medium">선택/이동</span>
+                    </button>
+                    <button id="btn-mode-point" class="flex flex-col items-center justify-center p-2 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors text-gray-600">
+                        <i class="ph ph-circle text-xl mb-1"></i>
+                        <span class="text-[10px] font-medium">점 찍기</span>
+                    </button>
+                    <button id="btn-mode-line" class="flex flex-col items-center justify-center p-2 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors text-gray-600">
+                        <i class="ph ph-line-segment text-xl mb-1"></i>
+                        <span class="text-[10px] font-medium">선분 연결</span>
+                    </button>
+                </div>
+                <h2 class="text-sm font-bold text-gray-500 mb-3">도형 추가</h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-add-plane" class="flex flex-col items-center justify-center p-3 bg-white border border-gray-300 rounded hover:bg-blue-50 hover:border-blue-300 transition-colors text-gray-700">
+                        <i class="ph ph-square text-2xl text-blue-500 mb-1"></i>
+                        <span class="text-xs">평면(&alpha;)</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-4 border-b border-gray-200">
+                <h2 class="text-sm font-bold text-gray-500 mb-3">보기 설정</h2>
+                <label class="flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="checkbox" id="chk-grid" checked class="rounded text-blue-500 focus:ring-blue-500">
+                    그리드(모눈) 표시
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer text-sm mt-2">
+                    <input type="checkbox" id="chk-axes" checked class="rounded text-blue-500 focus:ring-blue-500">
+                    좌표축 표시
+                </label>
+            </div>
+            
+            <div class="mt-auto p-4 text-xs text-gray-400 bg-gray-100 border-t border-gray-200">
+                <p><i class="ph ph-mouse-left"></i> 좌클릭+드래그 : 회전</p>
+                <p><i class="ph ph-mouse-right"></i> 우클릭+드래그 : 이동</p>
+                <p><i class="ph ph-scroll"></i> 휠 : 줌 인/아웃</p>
+            </div>
+        </aside>
+
+        <!-- 3D Canvas Area -->
+        <main class="flex-1 relative bg-[#f8f9fa]" id="canvas-wrapper">
+            <div id="canvas-container"></div>
+        </main>
+
+        <!-- Right Sidebar (Properties) -->
+        <aside class="w-64 bg-gray-50 border-l border-gray-200 flex flex-col shadow-[-2px_0_5px_rgba(0,0,0,0.05)] z-10 hidden" id="properties-panel">
+            <div class="p-4 border-b border-gray-200 bg-white">
+                <h2 class="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <i class="ph ph-sliders"></i> 객체 속성
+                </h2>
+            </div>
+            <div class="p-4 flex flex-col gap-4" id="properties-content">
+                <!-- 동적으로 속성창 UI가 여기에 생성됨 -->
+            </div>
+            <div class="p-4 mt-auto">
+                <button id="btn-delete-obj" class="w-full bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 py-2 rounded text-sm font-semibold transition-colors flex items-center justify-center gap-1">
+                    <i class="ph ph-trash"></i> 선택 삭제
+                </button>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- Custom Popup Modal (Replaces alert/confirm) -->
+    <div id="custom-popup" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white rounded-lg shadow-xl w-80 max-w-[90%] transform scale-95 transition-transform duration-200" id="custom-popup-content">
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 id="popup-title" class="text-lg font-bold text-gray-800">알림</h3>
+                <button onclick="closePopup()" class="text-gray-400 hover:text-gray-600">
+                    <i class="ph ph-x text-lg"></i>
+                </button>
+            </div>
+            <div class="px-5 py-6">
+                <p id="popup-message" class="text-gray-600 text-sm leading-relaxed"></p>
+            </div>
+            <div class="px-5 py-3 bg-gray-50 rounded-b-lg flex justify-end">
+                <button onclick="closePopup()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors">
+                    확인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TransformControls } from 'three/addons/controls/TransformControls.js'; // 3D 이동 도구 추가
+
+        // --- Custom Popup Logic ---
+        window.showPopup = function(title, message) {
+            document.getElementById('popup-title').innerText = title;
+            document.getElementById('popup-message').innerText = message;
+            const popup = document.getElementById('custom-popup');
+            const content = document.getElementById('custom-popup-content');
+            
+            popup.classList.remove('hidden');
+            void popup.offsetWidth;
+            
+            popup.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+        };
+
+        window.closePopup = function() {
+            const popup = document.getElementById('custom-popup');
+            const content = document.getElementById('custom-popup-content');
+            
+            popup.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            
+            setTimeout(() => {
+                popup.classList.add('hidden');
+            }, 200);
+        };
+
+        // --- Three.js Geometry Engine Setup ---
+        const container = document.getElementById('canvas-container');
+        let scene, camera, renderer, controls, transformControl;
+        let gridHelper, axesHelper;
+        let planes = [];
+
+        // 상태 관리 변수
+        let currentMode = 'view'; 
+        let points = []; 
+        let lines = [];  
+        let selectedPointsForLine = []; 
+        let selectedObject = null; // 현재 선택된 객체
+
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        const pointerDownCoords = new THREE.Vector2();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf8f9fa); 
+
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(10, 8, 10);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // Orbit Controls (화면 회전용)
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Transform Controls (객체 3축 이동용 기즈모)
+            transformControl = new TransformControls(camera, renderer.domElement);
+            transformControl.addEventListener('dragging-changed', function (event) {
+                // 객체를 이동할 때는 화면이 회전하지 않도록 OrbitControl 비활성화
+                controls.enabled = !event.value; 
+            });
+            transformControl.addEventListener('change', updatePropertiesPanel); // 이동 시 우측 패널 수치 동기화
+            scene.add(transformControl);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            scene.add(directionalLight);
+
+            gridHelper = new THREE.GridHelper(20, 20, 0xdddddd, 0xeeeeee);
+            gridHelper.position.y = -0.01; 
+            scene.add(gridHelper);
+
+            axesHelper = new THREE.AxesHelper(5);
+            scene.add(axesHelper);
+
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); 
+            
+            // 점이 이동하면, 연결된 선분의 위치도 매 프레임 업데이트 (다이나믹 라인)
+            lines.forEach(lineObj => {
+                const pos = lineObj.line.geometry.attributes.position;
+                pos.setXYZ(0, lineObj.p1.position.x, lineObj.p1.position.y, lineObj.p1.position.z);
+                pos.setXYZ(1, lineObj.p2.position.x, lineObj.p2.position.y, lineObj.p2.position.z);
+                pos.needsUpdate = true;
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            if (!container) return;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // --- Properties Panel & Selection Logic ---
+        const propertiesPanel = document.getElementById('properties-panel');
+        const propertiesContent = document.getElementById('properties-content');
+
+        function selectObject(object) {
+            if (selectedObject === object) return;
+            selectedObject = object;
+
+            if (object && object.userData.type === 'point' && currentMode === 'view') {
+                transformControl.attach(object); // 이동 기즈모 부착
+                showPointProperties(object);
+            } else {
+                transformControl.detach(); // 아무것도 선택 안하면 기즈모 해제
+                propertiesPanel.classList.add('hidden');
+            }
+        }
+
+        function showPointProperties(point) {
+            propertiesPanel.classList.remove('hidden');
+            
+            // 좌표 및 색상 조절 UI 생성
+            propertiesContent.innerHTML = `
+                <div class="mb-4">
+                    <label class="block text-xs font-semibold text-gray-600 mb-2">공간 좌표 (3D)</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <span class="text-[10px] text-gray-400 font-bold">X (빨강)</span>
+                            <input type="number" id="prop-x" step="0.5" value="${point.position.x.toFixed(2)}" class="w-full border rounded px-2 py-1 text-xs">
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-gray-400 font-bold">Y (초록)</span>
+                            <input type="number" id="prop-y" step="0.5" value="${point.position.y.toFixed(2)}" class="w-full border rounded px-2 py-1 text-xs">
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-gray-400 font-bold">Z (파랑)</span>
+                            <input type="number" id="prop-z" step="0.5" value="${point.position.z.toFixed(2)}" class="w-full border rounded px-2 py-1 text-xs">
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="block text-xs font-semibold text-gray-600 mb-2">도형 색상</label>
+                    <div class="flex items-center gap-2">
+                        <input type="color" id="prop-color" value="#${point.userData.color.toString(16).padStart(6, '0')}" class="w-8 h-8 cursor-pointer border-0 p-0 rounded">
+                        <span class="text-xs text-gray-500">클릭하여 색상 변경</span>
+                    </div>
+                </div>
+            `;
+
+            // 입력 필드와 실제 3D 점 속성 연동
+            document.getElementById('prop-x').addEventListener('change', (e) => { point.position.x = parseFloat(e.target.value); });
+            document.getElementById('prop-y').addEventListener('change', (e) => { point.position.y = parseFloat(e.target.value); });
+            document.getElementById('prop-z').addEventListener('change', (e) => { point.position.z = parseFloat(e.target.value); });
+            
+            document.getElementById('prop-color').addEventListener('input', (e) => { 
+                const hex = parseInt(e.target.value.replace('#', ''), 16);
+                point.userData.color = hex;
+                point.material.color.setHex(hex);
+            });
+        }
+
+        function updatePropertiesPanel() {
+            if (selectedObject && selectedObject.userData.type === 'point') {
+                const px = document.getElementById('prop-x');
+                const py = document.getElementById('prop-y');
+                const pz = document.getElementById('prop-z');
+                if(px && py && pz) {
+                    px.value = selectedObject.position.x.toFixed(2);
+                    py.value = selectedObject.position.y.toFixed(2);
+                    pz.value = selectedObject.position.z.toFixed(2);
+                }
+            }
+        }
+
+        // 선택 삭제 버튼 (추가 기능)
+        document.getElementById('btn-delete-obj').addEventListener('click', () => {
+            if (!selectedObject) return;
+            
+            if (selectedObject.userData.type === 'point') {
+                // 이 점과 연결된 선분들 모두 제거
+                lines = lines.filter(lineObj => {
+                    if (lineObj.p1 === selectedObject || lineObj.p2 === selectedObject) {
+                        scene.remove(lineObj.line);
+                        return false;
+                    }
+                    return true;
+                });
+                
+                scene.remove(selectedObject);
+                points = points.filter(p => p !== selectedObject);
+                selectObject(null);
+            }
+        });
+
+        // --- Features & Event Listeners ---
+
+        document.getElementById('btn-reset-cam').addEventListener('click', () => {
+            camera.position.set(10, 8, 10);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        });
+
+        document.getElementById('chk-grid').addEventListener('change', (e) => { gridHelper.visible = e.target.checked; });
+        document.getElementById('chk-axes').addEventListener('change', (e) => { axesHelper.visible = e.target.checked; });
+
+        document.getElementById('btn-add-plane').addEventListener('click', () => {
+            const geometry = new THREE.PlaneGeometry(8, 8);
+            geometry.rotateX(-Math.PI / 2);
+            const material = new THREE.MeshPhysicalMaterial({ 
+                color: 0x8ab4f8, transparent: true, opacity: 0.4, side: THREE.DoubleSide
+            });
+            const plane = new THREE.Mesh(geometry, material);
+            plane.userData = { type: 'plane' };
+            
+            const edges = new THREE.EdgesGeometry(geometry);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x4285f4, linewidth: 2 }));
+            plane.add(line);
+
+            // 여러 개 생성 시 겹치지 않게 y축 이동
+            plane.position.y = planes.length * 3;
+            scene.add(plane);
+            planes.push(plane);
+        });
+
+        // --- Mode Switching Logic ---
+        const toolBtns = {
+            'view': document.getElementById('btn-mode-view'),
+            'point': document.getElementById('btn-mode-point'),
+            'line': document.getElementById('btn-mode-line')
+        };
+
+        function setMode(mode) {
+            currentMode = mode;
+            Object.values(toolBtns).forEach(btn => {
+                btn.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-600');
+                btn.classList.add('bg-white', 'border-gray-300', 'text-gray-600');
+            });
+            toolBtns[mode].classList.remove('bg-white', 'border-gray-300', 'text-gray-600');
+            toolBtns[mode].classList.add('bg-blue-50', 'border-blue-400', 'text-blue-600');
+
+            container.style.cursor = mode === 'view' ? 'default' : 'crosshair';
+
+            // 선분 선택 초기화
+            if (selectedPointsForLine.length > 0) {
+                selectedPointsForLine.forEach(p => p.material.color.setHex(p.userData.color)); 
+                selectedPointsForLine = [];
+            }
+            
+            // 뷰 모드가 아니면 선택 해제 (기즈모 숨김)
+            if (mode !== 'view') selectObject(null);
+        }
+
+        document.getElementById('btn-mode-view').addEventListener('click', () => setMode('view'));
+        document.getElementById('btn-mode-point').addEventListener('click', () => setMode('point'));
+        document.getElementById('btn-mode-line').addEventListener('click', () => setMode('line'));
+
+        // --- Canvas Interaction (Raycasting) ---
+        container.addEventListener('pointerdown', (e) => {
+            pointerDownCoords.set(e.clientX, e.clientY);
+        });
+
+        container.addEventListener('pointerup', (e) => {
+            if (Math.abs(e.clientX - pointerDownCoords.x) > 5 || Math.abs(e.clientY - pointerDownCoords.y) > 5) return;
+
+            const rect = container.getBoundingClientRect();
+            pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(pointer, camera);
+
+            if (currentMode === 'view') {
+                // 선택 모드: 기즈모 드래그 중이 아닐 때만 점을 클릭하여 선택
+                if (!transformControl.dragging) {
+                    const intersects = raycaster.intersectObjects(points);
+                    if (intersects.length > 0) {
+                        selectObject(intersects[0].object);
+                    } else {
+                        selectObject(null);
+                    }
+                }
+            } 
+            else if (currentMode === 'point') {
+                // 점 찍기 모드
+                let intersectPoint = new THREE.Vector3();
+                const intersects = raycaster.intersectObjects(planes);
+                
+                if (intersects.length > 0) {
+                    intersectPoint.copy(intersects[0].point);
+                } else {
+                    const mathPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                    raycaster.ray.intersectPlane(mathPlane, intersectPoint);
+                }
+
+                if (intersectPoint) {
+                    const geometry = new THREE.SphereGeometry(0.15, 16, 16);
+                    const defaultColor = 0xef4444;
+                    const material = new THREE.MeshBasicMaterial({ color: defaultColor }); 
+                    const pointMesh = new THREE.Mesh(geometry, material);
+                    
+                    pointMesh.position.copy(intersectPoint);
+                    pointMesh.userData = { type: 'point', color: defaultColor };
+                    
+                    scene.add(pointMesh);
+                    points.push(pointMesh);
+                    
+                    // 핵심 편의 기능: 점을 찍자마자 자동으로 선택(이동) 모드로 전환하여 바로 띄울 수 있게 함
+                    setMode('view');
+                    selectObject(pointMesh);
+                }
+            } 
+            else if (currentMode === 'line') {
+                const intersects = raycaster.intersectObjects(points);
+                if (intersects.length > 0) {
+                    const clickedPoint = intersects[0].object;
+                    
+                    if (!selectedPointsForLine.includes(clickedPoint)) {
+                        selectedPointsForLine.push(clickedPoint);
+                        clickedPoint.material.color.setHex(0xf59e0b); // 임시 선택 색상(노란색)
+                        
+                        if (selectedPointsForLine.length === 2) {
+                            const p1 = selectedPointsForLine[0];
+                            const p2 = selectedPointsForLine[1];
+                            
+                            // BufferGeometry를 사용하여 나중에 위치를 동적으로 업데이트할 수 있게 구성
+                            const geometry = new THREE.BufferGeometry().setFromPoints([p1.position, p2.position]);
+                            const material = new THREE.LineBasicMaterial({ color: 0x1f2937, linewidth: 2 }); 
+                            const line = new THREE.Line(geometry, material);
+                            
+                            scene.add(line);
+                            lines.push({ line: line, p1: p1, p2: p2 }); // 점 참조 저장
+                            
+                            // 원래 색상으로 복구
+                            selectedPointsForLine[0].material.color.setHex(selectedPointsForLine[0].userData.color);
+                            selectedPointsForLine[1].material.color.setHex(selectedPointsForLine[1].userData.color);
+                            selectedPointsForLine = [];
+                        }
+                    } else {
+                        // 같은 점 다시 클릭 시 선택 취소
+                        clickedPoint.material.color.setHex(clickedPoint.userData.color);
+                        selectedPointsForLine = selectedPointsForLine.filter(p => p !== clickedPoint);
+                    }
+                }
+            }
+        });
+
+        window.onload = init;
+
+    </script>
+</body>
+</html>

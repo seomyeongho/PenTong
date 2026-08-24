@@ -1,0 +1,1201 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>파일 이름 일괄 변경</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        /* 삐져나감 방지 핵심 */
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: white;
+            margin: 0;
+            padding: 15px 20px;
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #217346;
+            border-bottom: 2px solid #217346;
+            padding-bottom: 10px;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* 왼쪽 규칙 설정 영역 */
+        .controls-panel {
+            width: 540px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .rule-toolbar {
+            padding: 12px;
+            background: #eaf1ed;
+            border-bottom: 1px solid #c8d9ce;
+        }
+
+        .rule-toolbar-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #217346;
+            margin-bottom: 8px;
+        }
+
+        .rule-add-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .btn-rule-add {
+            background: white;
+            border: 1px solid #a5d6a7;
+            color: #1a5c38;
+            padding: 5px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+            .btn-rule-add:hover {
+                background: #c8e6c9;
+            }
+
+        .rule-list-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: #f4f6f5;
+        }
+
+
+        .rule-item {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .rule-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 13px;
+            color: #333;
+            border-bottom: 1px dashed #eee;
+            padding-bottom: 5px;
+        }
+
+        .rule-actions {
+            display: flex;
+            gap: 3px;
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            color: #777;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+            .btn-icon:hover {
+                background: #eee;
+                color: #333;
+            }
+
+        .btn-delete:hover {
+            color: #d32f2f;
+            background: #ffebee;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            width: 100%;
+        }
+
+            .input-group input[type="text"],
+            .input-group input[type="number"],
+            .input-group select {
+                flex: 1;
+                width: 100%;
+                padding: 6px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                font-size: 12px;
+            }
+
+            /* 화살표 및 텍스트 고정폭 */
+            .input-group span {
+                flex-shrink: 0;
+                font-size: 12px;
+                color: #555;
+            }
+
+        /* 오른쪽 리스트 영역 */
+        .list-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+        }
+
+        .toolbar {
+            padding: 10px;
+            background: #f1f1f1;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        button {
+            padding: 7px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        .btn-add {
+            background: #217346;
+            color: white;
+        }
+
+            .btn-add:hover {
+                background: #185a36;
+            }
+
+        .btn-clear {
+            background: #757575;
+            color: white;
+        }
+
+            .btn-clear:hover {
+                background: #555;
+            }
+
+        .btn-run {
+            background: #e53935;
+            color: white;
+            padding: 12px;
+            font-size: 15px;
+            width: 100%;
+            border-radius: 0;
+        }
+
+            .btn-run:hover {
+                background: #c62828;
+            }
+        .btn-sort {
+            background: white;
+            border: 1px solid #ccc;
+            color: #333;
+            padding: 6px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+            .btn-sort:hover {
+                background: #eee;
+            }
+        .table-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th {
+            background: #eaf1ed;
+            color: #217346;
+            position: sticky;
+            top: 0;
+            padding: 10px;
+            text-align: left;
+            border-bottom: 2px solid #217346;
+            z-index: 10;
+        }
+
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #eee;
+            word-break: break-all;
+        }
+
+        /* 규칙 리스트 전용 드래그 위/아래 선 표시 */
+        .drag-over-top-rule {
+            box-shadow: inset 0 3px 0 #217346 !important;
+        }
+
+        .drag-over-bottom-rule {
+            box-shadow: inset 0 -3px 0 #217346 !important;
+        }
+
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .new-name {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+
+        .unchanged {
+            color: #333;
+            font-weight: normal;
+        }
+
+        .remove-btn {
+            background: transparent;
+            color: #ff4c4c;
+            padding: 4px;
+            font-size: 14px;
+        }
+
+            .remove-btn:hover {
+                background: #ffebeb;
+            }
+
+        .empty-msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #999;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        /* 내부 팝업 (Custom Modal) */
+        #customModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            width: 320px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            overflow: hidden;
+            text-align: center;
+        }
+
+        .modal-header {
+            background: #217346;
+            color: white;
+            padding: 12px;
+            font-weight: bold;
+        }
+
+        .modal-body {
+            padding: 20px;
+            font-size: 14px;
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .modal-footer {
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            background: #f9f9f9;
+        }
+
+        .modal-btn {
+            min-width: 80px;
+        }
+        /* 토스트 알림 */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 12px 20px;
+            position: fixed;
+            z-index: 10000;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+            #toast.show {
+                visibility: visible;
+                opacity: 1;
+            }
+
+        / /* 파일 리스트 드래그 앤 드롭 */
+        .draggable-row {
+            cursor: grab;
+            user-select: none; /* 드래그 시 텍스트 선택 방지 */
+        }
+
+        /* 규칙 제목 드래그 영역 */
+        .rule-drag-area {
+            cursor: grab;
+            user-select: none; /* 드래그 시 텍스트 선택 방지 */
+            display: flex;
+            align-items: center;
+        }
+
+            .draggable-row:active {
+                cursor: grabbing;
+            }
+
+        /* 드래그 시 마우스 위치에 따라 위/아래 선 표시 */
+        .drag-over-top td {
+            box-shadow: inset 0 2px 0 #217346;
+        }
+
+        .drag-over-bottom td {
+            box-shadow: inset 0 -2px 0 #217346;
+        }
+
+        .dragging {
+            opacity: 0.5;
+            background-color: #eaf1ed;
+        }
+
+        /* 유효하지 않은 파일명 경고 */
+        .invalid-name {
+            color: #d32f2f;
+            font-weight: bold;
+            background-color: #ffebee;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        /* 유효하지 않은 파일명 경고 */
+        .invalid-name {
+            color: #d32f2f;
+            font-weight: bold;
+            background-color: #ffebee;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>파일 이름 일괄 변경</h2>
+
+    <div class="container">
+        <div class="controls-panel">
+
+            <div class="rule-toolbar">
+                <div class="rule-toolbar-title">➕ 이름 변경 규칙 추가</div>
+                <div class="rule-add-buttons">
+                    <button class="btn-rule-add" onclick="addRule('replace')">찾아 바꾸기</button>
+                    <button class="btn-rule-add" onclick="addRule('add')">문자 추가</button>
+                    <button class="btn-rule-add" onclick="addRule('delete')">문자 삭제</button>
+                    <button class="btn-rule-add" onclick="addRule('case')">대소문자 변환</button>
+                    <button class="btn-rule-add" onclick="addRule('whitespace')">공백 정리</button>
+                    <button class="btn-rule-add" onclick="addRule('numbering')">번호 매기기</button>
+                </div>
+            </div>
+
+            <div class="rule-list-container" id="ruleList">
+                <div style="color:#aaa; font-size:12px; text-align:center; margin-top:20px;" id="emptyRuleMsg">
+                    위 버튼을 눌러 규칙을 추가하세요.<br>위에서 아래 순서대로 적용됩니다.
+                </div>
+            </div>
+
+            <button class="btn-run" onclick="executeRename()">실제 이름 변경 실행</button>
+        </div>
+
+        <div class="list-panel">
+            <div class="toolbar">
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <button class="btn-add" onclick="addFiles()">+ 파일 불러오기</button>
+                    <button class="btn-sort" onclick="sortList('asc')" title="원래 이름 오름차순">이름순 ▲</button>
+                    <button class="btn-sort" onclick="sortList('desc')" title="원래 이름 내림차순">이름순 ▼</button>
+                    <span style="margin-left: 5px; font-size: 12px; color: #666;">(드래그 앤 드롭)</span>
+                </div>
+                <button class="btn-clear" onclick="clearFileList()">목록 초기화</button>
+            </div>
+
+            <div class="table-container">
+                <div class="empty-msg" id="emptyMsg">
+                    📂<br><br>파일을 불러오거나<br>이곳으로 끌어다 놓으세요.
+                </div>
+                <table id="fileTable">
+                    <thead>
+                        <tr>
+                            <th width="40">No</th>
+                            <th>현재 이름</th>
+                            <th>바뀔 이름 (실시간)</th>
+                            <th width="50">삭제</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fileListBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="customModal">
+        <div class="modal-content">
+            <div class="modal-header" id="modalHeader">알림</div>
+            <div class="modal-body" id="modalBody">내용</div>
+            <div class="modal-footer" id="modalFooter">
+                <button class="btn-add modal-btn" onclick="closeModal()">확인</button>
+            </div>
+        </div>
+    </div>
+    <div id="toast">메시지</div>
+    <script>
+        let fileList = [];
+        let rules = []; // 적용할 규칙들을 순서대로 담는 배열
+        let ruleIdCounter = 0;
+        let _modalConfirmCallback = null;
+
+        function showToast(msg) {
+            const toast = document.getElementById("toast");
+            toast.innerHTML = msg;
+            toast.className = "show";
+            setTimeout(function () { toast.className = toast.className.replace("show", ""); }, 3000);
+        }
+
+        let draggedRowIndex = null;
+
+        function rowDragStart(e, index) {
+            draggedRowIndex = index;
+            e.target.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function rowDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const tr = e.target.closest('tr');
+            if (tr && !tr.classList.contains('dragging')) {
+                const rect = tr.getBoundingClientRect();
+                const mid = rect.top + rect.height / 2;
+                if (e.clientY < mid) {
+                    tr.classList.add('drag-over-top');
+                    tr.classList.remove('drag-over-bottom');
+                } else {
+                    tr.classList.add('drag-over-bottom');
+                    tr.classList.remove('drag-over-top');
+                }
+            }
+        }
+
+        function rowDragLeave(e) {
+            const tr = e.target.closest('tr');
+            if (tr) {
+                // 자식 요소(td 등)로 마우스가 지나갈 때 깜빡이는 현상 방지
+                if (e.relatedTarget && tr.contains(e.relatedTarget)) return;
+                tr.classList.remove('drag-over-top', 'drag-over-bottom');
+            }
+        }
+
+        function rowDrop(e, index) {
+            e.preventDefault();
+            const tr = e.target.closest('tr');
+            if (!tr) return;
+
+            const isBottom = tr.classList.contains('drag-over-bottom');
+            tr.classList.remove('drag-over-top', 'drag-over-bottom');
+
+            if (draggedRowIndex !== null && draggedRowIndex !== index) {
+                const draggedItem = fileList[draggedRowIndex];
+                fileList.splice(draggedRowIndex, 1);
+
+                let targetIndex = index;
+                if (draggedRowIndex < index) {
+                    targetIndex = isBottom ? index : index - 1;
+                } else {
+                    targetIndex = isBottom ? index + 1 : index;
+                }
+
+                fileList.splice(targetIndex, 0, draggedItem);
+                updatePreview();
+            }
+        }
+
+        function rowDragEnd(e) {
+            e.target.classList.remove('dragging');
+            document.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
+                el.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+            draggedRowIndex = null;
+        }
+        // --- 내부 모달 함수 ---
+        function showModal(msg, isConfirm = false, callback = null) {
+            document.getElementById('modalBody').innerHTML = msg;
+            const footer = document.getElementById('modalFooter');
+
+            if (isConfirm) {
+                _modalConfirmCallback = callback;
+                footer.innerHTML = `
+                            <button class="btn-run modal-btn" onclick="modalConfirm()">예</button>
+                            <button class="btn-clear modal-btn" onclick="closeModal()">아니오</button>
+                        `;
+            } else {
+                footer.innerHTML = `<button class="btn-add modal-btn" onclick="closeModal()">확인</button>`;
+            }
+
+            document.getElementById('customModal').style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('customModal').style.display = 'none'; }
+        function modalConfirm() { closeModal(); if (_modalConfirmCallback) _modalConfirmCallback(); }
+
+        // --- 파이썬 API 연결 ---
+        function getApi() {
+            if (window.parent && window.parent.pywebview) return window.parent.pywebview.api;
+            if (window.pywebview) return window.pywebview.api;
+            return null;
+        }
+        function addFiles() {
+            const api = getApi();
+            if (api) {
+                api.rename_select_files().then(paths => {
+                    if (paths && paths.length > 0) processAddedFiles(paths);
+                }).catch(err => {
+                    showToast("파일 선택 중 오류가 발생했습니다.");
+                });
+            } else {
+                showToast("파이썬 연결을 찾을 수 없습니다.");
+            }
+        }
+
+        window.addDroppedFiles = function (paths) {
+            processAddedFiles(paths);
+        };
+
+        function processAddedFiles(paths) {
+            paths.forEach(path => {
+                if (!fileList.some(f => f.fullPath === path)) {
+                    const originalName = extractFileName(path);
+                    fileList.push({
+                        fullPath: path,
+                        originalName: originalName,
+                        newName: originalName
+                    });
+                }
+            });
+            updatePreview(); // 파일이 추가되면 즉시 미리보기 계산
+        }
+
+        function extractFileName(path) {
+            return path.split('\\').pop().split('/').pop();
+        }
+
+        function removeFile(index) {
+            fileList.splice(index, 1);
+            updatePreview();
+        }
+
+        function clearFileList() {
+            if (fileList.length === 0) return;
+            showModal("추가된 파일 목록을 모두 초기화하시겠습니까?", true, () => {
+                fileList = [];
+                updatePreview();
+            });
+        }
+        // ==========================================
+        // 파일 리스트 오름/내림차순 정렬 로직
+        // ==========================================
+        function sortList(order) {
+            if (fileList.length === 0) {
+                showToast("정렬할 파일이 없습니다.");
+                return;
+            }
+
+            // 원래 파일명(originalName)을 기준으로 스마트 정렬 (file2가 file10보다 앞에 오도록)
+            fileList.sort((a, b) => {
+                if (order === 'asc') {
+                    return a.originalName.localeCompare(b.originalName, undefined, { numeric: true, sensitivity: 'base' });
+                } else {
+                    return b.originalName.localeCompare(a.originalName, undefined, { numeric: true, sensitivity: 'base' });
+                }
+            });
+
+            updatePreview();
+            showToast(order === 'asc' ? "이름 오름차순으로 정렬되었습니다." : "이름 내림차순으로 정렬되었습니다.");
+        }
+        // ==========================================
+        // 🔄 규칙 관리 및 렌더링 로직
+        // ==========================================
+
+        function addRule(type) {
+            if (fileList.length === 0) {
+                showToast("먼저 파일을 불러오거나 리스트에 드래그 앤 드롭해 주세요.");
+                return;
+            }
+
+            ruleIdCounter++;
+            const newRule = { id: ruleIdCounter, type: type };
+
+            if (type === 'replace') { newRule.find = ''; newRule.replace = ''; newRule.replace_mode = 'all'; newRule.title = '🔍 찾아 바꾸기'; }
+            if (type === 'add') { newRule.text = ''; newRule.pos = 'front'; newRule.title = '➕ 문자 추가'; }
+            if (type === 'delete') { newRule.mode = 'n_front'; newRule.n = 1; newRule.m = 1; newRule.title = '✂️ 문자 삭제'; }
+            if (type === 'case') { newRule.case_mode = 'lower'; newRule.title = '🔠 대소문자 변환'; }
+            if (type === 'whitespace') { newRule.space_mode = 'all'; newRule.title = '🧹 공백 정리'; }
+            if (type === 'numbering') { newRule.start = 1; newRule.format = '{000}_'; newRule.position = 'front'; newRule.title = '🔢 번호 매기기'; }
+
+            rules.push(newRule);
+            renderRules();
+            updatePreview();
+        }
+
+        function removeRule(id) {
+            rules = rules.filter(r => r.id !== id);
+            renderRules();
+            updatePreview();
+        }
+
+        function moveRule(index, direction) {
+            if (direction === -1 && index > 0) {
+                // 위로 이동
+                [rules[index - 1], rules[index]] = [rules[index], rules[index - 1]];
+            } else if (direction === 1 && index < rules.length - 1) {
+                // 아래로 이동
+                [rules[index + 1], rules[index]] = [rules[index], rules[index + 1]];
+            } else {
+                return;
+            }
+            renderRules();
+            updatePreview();
+        }
+
+        function renderRules() {
+            const container = document.getElementById('ruleList');
+            container.innerHTML = '';
+
+            if (rules.length === 0) {
+                container.innerHTML = '<div style="color:#aaa; font-size:12px; text-align:center; margin-top:20px;">위 버튼을 눌러 규칙을 추가하세요.<br>위에서 아래 순서대로 적용됩니다.</div>';
+                return;
+            }
+
+            rules.forEach((rule, index) => {
+                const item = document.createElement('div');
+                item.className = 'rule-item';
+                item.dataset.id = rule.id;
+
+                // 드래그 이벤트 연결
+                item.ondragstart = (e) => ruleDragStart(e, index);
+                item.ondragover = (e) => ruleDragOver(e);
+                item.ondragleave = (e) => ruleDragLeave(e);
+                item.ondrop = (e) => ruleDrop(e, index);
+                item.ondragend = (e) => ruleDragEnd(e);
+
+                let html = `
+                        <div class="rule-header">
+                            <span class="rule-drag-area" title="드래그하여 순서 변경">
+                                <span class="rule-drag-handle" style="color:#ccc; margin-right:5px; font-size:14px;">☰</span>
+                                ${index + 1}. ${rule.title}
+                            </span>
+                            <div class="rule-actions">
+                                <button class="btn-icon btn-delete" onclick="removeRule(${rule.id})" title="삭제">✕</button>
+                            </div>
+                        </div>
+                    `;
+
+                if (rule.type === 'replace') {
+                    html += `
+                            <div class="input-group">
+                                <input type="text" name="find" placeholder="찾을 문자열" value="${rule.find}">
+                                <span>➔</span>
+                                <input type="text" name="replace" placeholder="바꿀 문자열" value="${rule.replace}">
+                                <select name="replace_mode" style="width:100px; flex:none;">
+                                    <option value="all" ${rule.replace_mode === 'all' ? 'selected' : ''}>모두</option>
+                                    <option value="first" ${rule.replace_mode === 'first' ? 'selected' : ''}>처음 1개</option>
+                                    <option value="last" ${rule.replace_mode === 'last' ? 'selected' : ''}>끝에 1개</option>
+                                </select>
+                            </div>
+                        `;
+                } else if (rule.type === 'add') {
+                    html += `
+                            <div class="input-group">
+                                <input type="text" name="text" value="${rule.text}" placeholder="추가할 문자">
+                                <select name="pos" style="width:80px; flex:none;">
+                                    <option value="front" ${rule.pos === 'front' ? 'selected' : ''}>앞에</option>
+                                    <option value="back" ${rule.pos === 'back' ? 'selected' : ''}>뒤에</option>
+                                </select>
+                            </div>
+                        `;
+                } else if (rule.type === 'delete') {
+                    const isRange = rule.mode === 'range';
+                    html += `
+                            <div class="input-group">
+                                <select name="mode" style="width:145px; flex:none;">
+                                    <option value="n_front" ${rule.mode === 'n_front' ? 'selected' : ''}>앞에서 N자 삭제</option>
+                                    <option value="n_back" ${rule.mode === 'n_back' ? 'selected' : ''}>뒤에서 N자 삭제</option>
+                                    <option value="range" ${rule.mode === 'range' ? 'selected' : ''}>N부터 M까지 삭제</option>
+                                </select>
+                                <span>N:</span>
+                                <input type="number" name="n" value="${rule.n}" min="1" style="width:60px; flex:none;">
+                                <span style="display:${isRange ? 'inline' : 'none'}">M:</span>
+                                <input type="number" name="m" value="${rule.m}" min="1" style="width:60px; flex:none; display:${isRange ? 'inline-block' : 'none'}">
+                            </div>
+                        `;
+                } else if (rule.type === 'case') {
+                    html += `
+                            <div class="input-group">
+                                <select name="case_mode">
+                                    <option value="lower" ${rule.case_mode === 'lower' ? 'selected' : ''}>모두 소문자로</option>
+                                    <option value="upper" ${rule.case_mode === 'upper' ? 'selected' : ''}>모두 대문자로</option>
+                                    <option value="capitalize" ${rule.case_mode === 'capitalize' ? 'selected' : ''}>첫 문자만 대문자로 (나머지 소문자)</option>
+                                    <option value="capitalize_keep" ${rule.case_mode === 'capitalize_keep' ? 'selected' : ''}>첫 문자만 대문자로 (나머지 유지)</option>
+                                </select>
+                            </div>
+                        `;
+                } else if (rule.type === 'whitespace') {
+                    html += `
+                            <div class="input-group">
+                                <select name="space_mode">
+                                    <option value="all" ${rule.space_mode === 'all' ? 'selected' : ''}>모든 공백(띄어쓰기) 지우기</option>
+                                    <option value="trim" ${rule.space_mode === 'trim' ? 'selected' : ''}>이름 양끝(맨앞/맨뒤) 공백만 지우기</option>
+                                    <option value="reduce" ${rule.space_mode === 'reduce' ? 'selected' : ''}>연속된 여러 공백을 1개로 압축</option>
+                                    <option value="underscore" ${rule.space_mode === 'underscore' ? 'selected' : ''}>모든 공백을 언더바(_)로 변경</option>
+                                    <option value="dash" ${rule.space_mode === 'dash' ? 'selected' : ''}>모든 공백을 대시(-)로 변경</option>
+                                </select>
+                            </div>
+                        `;
+                } else if (rule.type === 'numbering') {
+                    html += `
+                            <div class="input-group">
+                                <span>시작:</span>
+                                <input type="number" name="start" value="${rule.start}" min="1" style="width:60px; flex:none;">
+                                <span>형식:</span>
+                                <input type="text" name="format" value="${rule.format}" placeholder="예: {000}_">
+                                <span>위치:</span>
+                                <select name="position" style="width:70px; flex:none;">
+                                    <option value="front" ${rule.position === 'front' ? 'selected' : ''}>앞에</option>
+                                    <option value="back" ${rule.position === 'back' ? 'selected' : ''}>뒤에</option>
+                                </select>
+                            </div>
+                            <div style="font-size:11px; color:#666; margin-top:4px;">※ {0}, {000} 부분에 실제 번호가 들어갑니다. 원하는 문자(공백, 기호 등)를 함께 넣으세요.</div>
+                        `;
+                }
+
+                item.innerHTML = html;
+
+                // 텍스트 상자 입력 간섭을 막기 위해 '제목 영역 전체(☰ 기호 포함)'에 올렸을 때만 draggable 활성화
+                const dragArea = item.querySelector('.rule-drag-area');
+                if (dragArea) {
+                    dragArea.onmouseenter = () => item.setAttribute('draggable', 'true');
+                    dragArea.onmouseleave = () => item.removeAttribute('draggable');
+                }
+
+                container.appendChild(item);
+            });
+        }
+
+        function handleRuleInput(e) {
+            const ruleItem = e.target.closest('.rule-item');
+            if (!ruleItem) return;
+
+            const ruleId = parseInt(ruleItem.dataset.id);
+            const rule = rules.find(r => r.id === ruleId);
+            if (!rule) return;
+
+            const val = e.target.value;
+            const name = e.target.name;
+
+            if (['find', 'replace', 'text', 'format', 'position', 'pos', 'mode', 'replace_mode', 'case_mode', 'space_mode'].includes(name)) {
+                rule[name] = val;
+            } else if (['start', 'n', 'm'].includes(name)) {
+                rule[name] = parseInt(val) || 1;
+            }
+
+            if (name === 'mode') {
+                renderRules();
+            }
+
+            updatePreview();
+        }
+
+        const ruleListEl = document.getElementById('ruleList');
+        // 기존 익명 함수 리스너가 있다면 지우고 덮어쓰기 위해 안전하게 처리
+        ruleListEl.replaceWith(ruleListEl.cloneNode(true));
+        document.getElementById('ruleList').addEventListener('input', handleRuleInput);
+        document.getElementById('ruleList').addEventListener('change', handleRuleInput);
+
+
+        // ==========================================
+        // 🚀 실시간 미리보기 적용 로직
+        // ==========================================
+        function updatePreview() {
+            let numCounters = {};
+            rules.forEach(r => {
+                if (r.type === 'numbering') numCounters[r.id] = r.start;
+            });
+
+            fileList.forEach(file => {
+                let nameStr = file.originalName;
+                let dotIdx = nameStr.lastIndexOf('.');
+                let baseName = dotIdx !== -1 ? nameStr.substring(0, dotIdx) : nameStr;
+                let extension = dotIdx !== -1 ? nameStr.substring(dotIdx + 1) : "";
+
+                rules.forEach(rule => {
+                    if (rule.type === 'replace' && rule.find) {
+                        if (rule.replace_mode === 'all') {
+                            baseName = baseName.split(rule.find).join(rule.replace);
+                        } else if (rule.replace_mode === 'first') {
+                            baseName = baseName.replace(rule.find, rule.replace);
+                        } else if (rule.replace_mode === 'last') {
+                            let lastIdx = baseName.lastIndexOf(rule.find);
+                            if (lastIdx !== -1) {
+                                baseName = baseName.substring(0, lastIdx) + rule.replace + baseName.substring(lastIdx + rule.find.length);
+                            }
+                        }
+                    }
+                    else if (rule.type === 'add') {
+                        baseName = (rule.pos === 'front') ? (rule.text + baseName) : (baseName + rule.text);
+                    }
+                    else if (rule.type === 'delete') {
+                        if (rule.mode === 'n_front') {
+                            baseName = baseName.slice(rule.n);
+                        } else if (rule.mode === 'n_back') {
+                            baseName = baseName.slice(0, -rule.n);
+                        } else if (rule.mode === 'range') {
+                            baseName = baseName.slice(0, rule.n - 1) + baseName.slice(rule.m);
+                        }
+                    }
+                    else if (rule.type === 'case') {
+                        if (rule.case_mode === 'lower') {
+                            baseName = baseName.toLowerCase();
+                        } else if (rule.case_mode === 'upper') {
+                            baseName = baseName.toUpperCase();
+                        } else if (rule.case_mode === 'capitalize' && baseName.length > 0) {
+                            baseName = baseName.charAt(0).toUpperCase() + baseName.slice(1).toLowerCase();
+                        } else if (rule.case_mode === 'capitalize_keep' && baseName.length > 0) {
+                            baseName = baseName.charAt(0).toUpperCase() + baseName.slice(1);
+                        }
+                    }
+                    else if (rule.type === 'whitespace') {
+                        if (rule.space_mode === 'all') {
+                            baseName = baseName.replace(/\s+/g, ''); // 모든 공백 제거
+                        } else if (rule.space_mode === 'trim') {
+                            baseName = baseName.trim(); // 양끝 공백 제거
+                        } else if (rule.space_mode === 'reduce') {
+                            baseName = baseName.replace(/\s+/g, ' '); // 2개 이상의 공백을 1개로
+                        } else if (rule.space_mode === 'underscore') {
+                            baseName = baseName.replace(/\s+/g, '_'); // 공백을 언더바로
+                        } else if (rule.space_mode === 'dash') {
+                            baseName = baseName.replace(/\s+/g, '-'); // 공백을 대시로
+                        }
+                    }
+                    else if (rule.type === 'numbering') {
+                        let currentNum = numCounters[rule.id];
+                        let formatStr = rule.format || '';
+
+                        let numStr = formatStr.replace(/\{0+\}/g, (match) => {
+                            let len = match.length - 2;
+                            return currentNum.toString().padStart(len, '0');
+                        });
+
+                        if (numStr === formatStr && !formatStr.includes('{')) {
+                            numStr = currentNum.toString();
+                        }
+
+                        if (rule.position === 'front') {
+                            baseName = numStr + baseName;
+                        } else {
+                            baseName = baseName + numStr;
+                        }
+                        numCounters[rule.id]++;
+                    }
+                });
+
+                file.newName = baseName + (extension ? "." + extension : "");
+
+                // 1. 파일명이 완전히 지워졌는지 검사
+                file.isEmpty = (baseName.trim() === "");
+
+                // 2. 윈도우 파일명 사용 불가 특수문자 검사
+                const invalidRegex = /[\\/:*?"<>|]/;
+                file.isInvalid = invalidRegex.test(file.newName);
+            });
+
+            renderTable();
+        }
+
+        // ==========================================
+        // 렌더링 로직 (테이블 그리기)
+        // ==========================================
+        // ==========================================
+        // 렌더링 로직 (테이블 그리기)
+        // ==========================================
+        function renderTable() {
+            const tbody = document.getElementById('fileListBody');
+            const emptyMsg = document.getElementById('emptyMsg');
+            tbody.innerHTML = '';
+
+            if (fileList.length === 0) {
+                emptyMsg.style.display = 'block';
+                return;
+            }
+            emptyMsg.style.display = 'none';
+
+            fileList.forEach((file, index) => {
+                const isChanged = file.originalName !== file.newName;
+                let newNameClass = isChanged ? 'new-name' : 'unchanged';
+                let warningIcon = '';
+
+                if (file.isEmpty) {
+                    newNameClass = 'invalid-name';
+                    warningIcon = ' <span title="파일 이름이 비어있습니다. 확장자만 있는 파일은 생성할 수 없습니다." style="cursor:help;">⚠️</span>';
+                } else if (file.isInvalid) {
+                    newNameClass = 'invalid-name';
+                    warningIcon = ' <span title="사용할 수 없는 특수문자(\\ / : * ? &quot; < > |)가 포함되어 있습니다." style="cursor:help;">⚠️</span>';
+                }
+
+                // 🌟 핵심 변경: 현재 이름과 바뀔 이름이 같으면(isChanged가 false면) 빈칸으로 표시
+                const displayNewName = isChanged ? file.newName : '';
+
+                const tr = document.createElement('tr');
+                tr.className = 'draggable-row';
+                tr.draggable = true;
+                tr.ondragstart = (e) => rowDragStart(e, index);
+                tr.ondragover = (e) => rowDragOver(e);
+                tr.ondragleave = (e) => rowDragLeave(e);
+                tr.ondrop = (e) => rowDrop(e, index);
+                tr.ondragend = (e) => rowDragEnd(e);
+
+                tr.innerHTML = `
+                        <td align="center">
+                            <span style="color:#ccc; margin-right:5px;" title="드래그하여 순서 변경">☰</span>
+                            ${index + 1}
+                        </td>
+                        <td><span style="white-space: pre-wrap;">${file.originalName}</span></td>
+                        <td class="${newNameClass}"><span style="white-space: pre-wrap;">${displayNewName}</span>${warningIcon}</td>
+                        <td align="center">
+                            <button class="remove-btn" onclick="removeFile(${index})" title="제거">✕</button>
+                        </td>
+                    `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // ==========================================
+        // ✅ 실제 파일명 변경 실행
+        // ==========================================
+        function executeRename() {
+            if (fileList.length === 0) {
+                showToast("변경할 파일이 없습니다.");
+                return;
+            }
+            if (fileList.some(f => f.isEmpty)) {
+                showToast("❌ 오류: 파일 이름이 완전히 지워진 항목이 있습니다. 변경을 중단합니다.");
+                return;
+            }
+            if (fileList.some(f => f.isInvalid)) {
+                showToast("❌ 오류: 파일명에 사용할 수 없는 특수문자가 포함되어 변경을 중단합니다.");
+                return;
+            }
+
+            let isChanged = fileList.some(f => f.originalName !== f.newName);
+            if (!isChanged) {
+                showToast("적용된 규칙이 없거나 파일명이 그대로입니다. 규칙을 추가해 주세요.");
+                return;
+            }
+
+            showModal("우측 리스트에 보이는 대로 <b>실제 파일명</b>을 일괄 변경하시겠습니까?<br><br>⚠️ 주의: 이 작업은 되돌릴 수 없습니다.", true, () => {
+                const api = getApi();
+                if (!api) {
+                    showToast("시스템과 연결되어 있지 않습니다.");
+                    return;
+                }
+
+                let payload = fileList.map(f => {
+                    let dir = f.fullPath.substring(0, f.fullPath.lastIndexOf('\\') + 1);
+                    if (!dir) dir = f.fullPath.substring(0, f.fullPath.lastIndexOf('/') + 1);
+
+                    return {
+                        oldPath: f.fullPath,
+                        newPath: dir + f.newName
+                    };
+                });
+
+                api.execute_rename(payload).then(res => {
+                    if (res && res.success) {
+                        let resultMsg = `<b>✅ 총 ${res.success_cnt}건 변경 완료</b>`;
+                        if (res.fail_cnt > 0) resultMsg += `<br><br><span style="color:red">❌ 실패 ${res.fail_cnt}건</span>`;
+
+                        let diffCount = 0;
+
+                        if (res.success_cnt > 0) {
+                            // 1. 적용했던 규칙 모두 삭제
+                            rules = [];
+                            ruleIdCounter = 0;
+                            renderRules();
+
+                            // 2. 파일 목록은 비우지 않고, 파이썬이 돌려준 '실제 변경된 이름'으로 갱신
+                            if (res.results && res.results.length > 0) {
+                                res.results.forEach(resultItem => {
+                                    // 기존 파일 리스트에서 해당 파일 찾기
+                                    let matchedFile = fileList.find(f => f.fullPath === resultItem.oldPath);
+                                    if (matchedFile) {
+                                        let expectedNewName = extractFileName(resultItem.expectedPath);
+                                        let actualNewName = extractFileName(resultItem.actualPath);
+
+                                        // 3. 미리보기 했던 이름과 실제 저장된 이름이 다르다면 (중복 방지 등)
+                                        if (expectedNewName !== actualNewName) {
+                                            diffCount++;
+                                        }
+
+                                        // 4. 리스트의 데이터(경로, 원본이름, 새이름)를 현재 상태로 동기화
+                                        matchedFile.fullPath = resultItem.actualPath;
+                                        matchedFile.originalName = actualNewName;
+                                        matchedFile.newName = actualNewName;
+                                    }
+                                });
+                            }
+
+                            // 5. 이상(중복 이름 처리)이 있었을 경우 알림창에 경고 문구 추가
+                            if (diffCount > 0) {
+                                resultMsg += `<br><br><span style="color:#d32f2f; font-size:13px;">⚠️ 주의: 동일한 폴더에 중복된 파일명이 있어 <b>${diffCount}건</b>의 이름 뒤에 '(숫자)'가 자동으로 붙었습니다. 변경된 리스트를 확인해 주세요.</span>`;
+                            }
+
+                            // UI 갱신 (규칙이 없으므로 검은색 기본 글씨로 깔끔하게 갱신됨)
+                            updatePreview();
+                        }
+
+                        showModal(resultMsg);
+
+                    } else {
+                        showToast("변경 중 오류가 발생했습니다.");
+                    }
+                }).catch(err => {
+                    showToast("에러 발생: " + err);
+                });
+            });
+        }
+        // ==========================================
+        // 📌 규칙 리스트 드래그 앤 드롭 로직
+        // ==========================================
+        let draggedRuleIndex = null;
+
+        function ruleDragStart(e, index) {
+            draggedRuleIndex = index;
+            e.target.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function ruleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const item = e.target.closest('.rule-item');
+            if (item && !item.classList.contains('dragging')) {
+                const rect = item.getBoundingClientRect();
+                const mid = rect.top + rect.height / 2;
+                if (e.clientY < mid) {
+                    item.classList.add('drag-over-top-rule');
+                    item.classList.remove('drag-over-bottom-rule');
+                } else {
+                    item.classList.add('drag-over-bottom-rule');
+                    item.classList.remove('drag-over-top-rule');
+                }
+            }
+        }
+
+        function ruleDragLeave(e) {
+            const item = e.target.closest('.rule-item');
+            if (item) {
+                if (e.relatedTarget && item.contains(e.relatedTarget)) return;
+                item.classList.remove('drag-over-top-rule', 'drag-over-bottom-rule');
+            }
+        }
+
+        function ruleDrop(e, index) {
+            e.preventDefault();
+            const item = e.target.closest('.rule-item');
+            if (!item) return;
+
+            const isBottom = item.classList.contains('drag-over-bottom-rule');
+            item.classList.remove('drag-over-top-rule', 'drag-over-bottom-rule');
+
+            if (draggedRuleIndex !== null && draggedRuleIndex !== index) {
+                const draggedRule = rules[draggedRuleIndex];
+                rules.splice(draggedRuleIndex, 1);
+
+                let targetIndex = index;
+                if (draggedRuleIndex < index) {
+                    targetIndex = isBottom ? index : index - 1;
+                } else {
+                    targetIndex = isBottom ? index + 1 : index;
+                }
+
+                rules.splice(targetIndex, 0, draggedRule);
+                renderRules();
+                updatePreview();
+            }
+        }
+
+        function ruleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            document.querySelectorAll('.drag-over-top-rule, .drag-over-bottom-rule').forEach(el => {
+                el.classList.remove('drag-over-top-rule', 'drag-over-bottom-rule');
+            });
+            draggedRuleIndex = null;
+        }
+    </script>
+</body>
+</html>

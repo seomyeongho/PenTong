@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>데이터 블록맵</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        
+        body { font-family: 'Pretendard', sans-serif; background-color: #f1f5f9; margin: 0; overflow: hidden; }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        #capture-area { background-color: transparent; cursor: grab; }
+        #capture-area:active { cursor: grabbing; }
+        
+        .district {
+            vector-effect: non-scaling-stroke;
+            transition: fill 0.2s ease, filter 0.2s ease, stroke 0.2s ease;
+            stroke-linejoin: round;
+        }
+
+        .map-text {
+            text-anchor: middle;
+            pointer-events: none;
+            font-weight: 700;
+            paint-order: stroke;
+            stroke: #ffffff;
+            stroke-width: 3px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        
+        .color-picker-compact {
+            -webkit-appearance: none; border: none; width: 24px; height: 24px; padding: 0; cursor: pointer; border-radius: 4px; background-color: transparent;
+        }
+        .color-picker-compact::-webkit-color-swatch-wrapper { padding: 0; }
+        .color-picker-compact::-webkit-color-swatch { border: 1px solid #cbd5e1; border-radius: 4px; }
+        
+        td, th { padding: 0.35rem 0.5rem !important; vertical-align: middle; }
+        
+        #resizer {
+            width: 6px; background-color: #e2e8f0; cursor: col-resize; transition: background-color 0.2s; z-index: 30; display: flex; justify-content: center; align-items: center;
+        }
+        #resizer:hover, #resizer.active { background-color: #94a3b8; }
+        #resizer::after { content: ""; width: 2px; height: 24px; background-color: #cbd5e1; border-radius: 2px; }
+    </style>
+</head>
+<body class="h-screen w-screen flex">
+
+    <aside id="sidebar" class="w-[680px] bg-white shadow-lg flex flex-col h-full z-20 shrink-0">
+        
+        <div class="px-5 py-3 bg-slate-800 text-white flex justify-between items-center">
+            <h1 class="text-lg font-extrabold tracking-tight">데이터 블록맵</h1>
+            <div class="flex space-x-2">
+                <button onclick="loadSampleData()" class="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-xs font-bold rounded transition-colors shadow-sm">샘플 데이터</button>
+                <button onclick="openPasteModal()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold rounded transition-colors shadow-sm">엑셀 붙여넣기</button>
+                <button onclick="copyToClipboard()" class="px-4 py-1.5 bg-blue-500 text-white text-sm font-bold rounded hover:bg-blue-400 transition-colors shadow-md flex items-center">
+                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                    지도 복사
+                </button>
+            </div>
+        </div>
+
+        <div class="flex bg-slate-800 border-b border-slate-700">
+            <button id="tab-busan" onclick="switchMap('busan')" class="flex-1 py-2 text-sm font-bold text-center border-b-[3px] border-blue-500 text-white bg-slate-700/50 transition-colors">부산광역시</button>
+            <button id="tab-national" onclick="switchMap('national')" class="flex-1 py-2 text-sm font-bold text-center border-b-[3px] border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-700/30 transition-colors">전국 시/도</button>
+        </div>
+
+        <div class="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
+            <div class="flex items-center justify-between bg-white p-2 rounded border border-slate-200 shadow-sm text-sm">
+                
+                <div class="flex items-center space-x-3">
+                    <!-- 전국지도 시/도 필터 (목록과 라벨에만 적용) -->
+                    <div id="national-filter-wrap" class="hidden items-center space-x-2 border-r border-slate-200 pr-3">
+                        <span class="font-bold text-slate-700 text-xs">목록 필터:</span>
+                        <select id="region-filter" class="border border-slate-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:border-blue-500" onchange="handleRegionFilter()">
+                            <option value="all">전체 목록</option>
+                            <option value="si">시(특/광)만</option>
+                            <option value="do">도 단위만</option>
+                        </select>
+                    </div>
+
+                    <span class="font-bold text-slate-700 text-xs">지도 형태:</span>
+                    <select id="map-detail-level" class="border border-slate-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:border-blue-500" onchange="applyDetailLevel()">
+                        <option value="1">1단계 (상세 원본)</option>
+                        <option value="2">2단계 (부드러운 곡선)</option>
+                        <option value="3">3단계 (둥근 곡선)</option>
+                        <option value="4">4단계 (각진 블록)</option>
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="font-bold text-slate-700 text-xs">테두리:</span>
+                    <select id="global-border-style" class="border border-slate-300 rounded px-1 py-1 text-xs focus:outline-none" onchange="renderMapStyles()">
+                        <option value="solid">실선</option>
+                        <option value="dashed">점선</option>
+                        <option value="none">없음</option>
+                    </select>
+                    <input type="color" id="global-border-color" value="#ffffff" class="color-picker-compact" onchange="renderMapStyles()">
+                    <input type="number" id="global-border-width" value="1" min="0" max="10" class="w-9 border border-slate-300 rounded px-1 py-1 text-center text-xs" oninput="renderMapStyles()">
+                    <span class="text-xs text-slate-500">px</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between bg-white p-2 rounded border border-slate-200 shadow-sm text-sm">
+                <div class="flex items-center space-x-2">
+                    <span class="font-bold text-slate-700 text-xs">수치 위치:</span>
+                    <select id="value-position" class="border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none" onchange="renderMapStyles()">
+                        <option value="bottom">이름 아래</option>
+                        <option value="top">이름 위</option>
+                    </select>
+                </div>
+                <div class="w-px h-5 bg-slate-200"></div>
+                <div class="flex items-center space-x-1.5">
+                    <span class="font-bold text-slate-700 text-xs mr-1">일괄적용:</span>
+                    <input type="color" id="bulk-bg-color" value="#cbd5e1" class="color-picker-compact" title="배경색">
+                    <button onclick="applyBulk('bg-color')" class="px-2 py-1 bg-slate-100 border border-slate-300 rounded text-xs font-medium hover:bg-slate-200">배경</button>
+                    <input type="color" id="bulk-text-color" value="#1e293b" class="color-picker-compact ml-1" title="글자색">
+                    <button onclick="applyBulk('text-color')" class="px-2 py-1 bg-slate-100 border border-slate-300 rounded text-xs font-medium hover:bg-slate-200">글자</button>
+                </div>
+                <button onclick="applyBulk('clear-highlight')" class="ml-1 px-2 py-1 bg-red-50 text-red-600 border border-red-200 rounded text-xs font-bold hover:bg-red-100">강조 초기화</button>
+            </div>
+            
+            <div class="flex justify-between items-center px-1">
+                <div class="flex items-center space-x-4">
+                    <label class="flex items-center space-x-1.5 cursor-pointer font-bold text-blue-700 text-sm">
+                        <!-- 토글 기능 완벽 동기화 -->
+                        <input type="checkbox" id="toggle-names" checked class="rounded" onchange="toggleAllNames()">
+                        <span>전체 이름 표시</span>
+                    </label>
+                    <div class="w-px h-4 bg-slate-300"></div>
+                    <label class="flex items-center space-x-1.5 cursor-pointer font-bold text-emerald-700 text-sm" title="체크 해제 시 성능 향상을 위해 부속지(섬)들을 생략합니다.">
+                        <input type="checkbox" id="toggle-islands" class="rounded" onchange="applyDetailLevel()">
+                        <span>작은 섬 표시</span>
+                    </label>
+                </div>
+                <button onclick="resetZoom()" class="text-xs px-2 py-1 bg-white border border-slate-300 rounded shadow-sm hover:bg-slate-50 font-medium flex items-center text-slate-600">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    지도 위치 초기화
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto bg-white relative">
+            <table class="w-full text-left border-collapse text-xs">
+                <thead class="bg-slate-100 sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th class="border-b border-slate-200 font-bold text-slate-700 w-20">지역명</th>
+                        <th class="border-b border-slate-200 font-bold text-slate-700">지표/수치</th>
+                        <th class="border-b border-slate-200 font-bold text-slate-700 w-9 text-center">배경</th>
+                        <th class="border-b border-slate-200 font-bold text-slate-700 w-9 text-center">글자</th>
+                        <th class="border-b border-slate-200 font-bold text-slate-700 w-12 text-center">지역px</th>
+                        <th class="border-b border-slate-200 font-bold text-slate-700 w-12 text-center">값px</th>
+                        <th class="border-b border-slate-200 font-bold text-slate-700 w-20 text-center" title="겹치는 글자를 밀어냅니다">위치이동</th>
+                        <th class="border-b border-slate-200 font-bold text-slate-700 w-24 text-center">강조 옵션</th>
+                    </tr>
+                </thead>
+                <tbody id="data-tbody" class="divide-y divide-slate-100"></tbody>
+            </table>
+        </div>
+    </aside>
+
+    <div id="resizer"></div>
+
+    <main class="flex-1 relative bg-white flex justify-center items-center overflow-hidden" id="main-wrap">
+        <div id="loading" class="absolute z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur inset-0">
+            <svg class="animate-spin h-10 w-10 text-slate-800 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <span class="font-bold text-slate-700">지도를 불러오는 중입니다...</span>
+        </div>
+        <div id="capture-area" class="w-full h-full relative overflow-hidden">
+            <svg id="map" class="w-full h-full"></svg>
+        </div>
+    </main>
+
+    <div id="paste-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex justify-center items-center backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-[450px] flex flex-col overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                <h2 class="font-bold text-slate-800">엑셀 데이터 붙여넣기</h2>
+                <button onclick="closePasteModal()" class="text-slate-400 hover:text-red-500 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-5">
+                <p class="text-xs text-slate-500 mb-2 font-medium">서울, 전남, 해운대 등 줄임말을 사용해도 자동으로 매칭됩니다.</p>
+                <textarea id="paste-textarea" rows="6" class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="서울특별시 200명&#10;경기도 150명..."></textarea>
+            </div>
+            <div class="px-5 py-3 bg-slate-50 border-t border-slate-100 flex justify-end space-x-2">
+                <button onclick="closePasteModal()" class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50">취소</button>
+                <button onclick="processPasteData()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm">데이터 적용</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 hidden bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl font-medium text-sm z-50 transition-opacity duration-300 opacity-0 whitespace-nowrap">
+        <span id="toast-msg">메시지</span>
+    </div>
+
+    <script>
+        let currentMapType = 'busan'; 
+        
+        const cachedData = { busan: null, national: null };
+        const cachedState = { busan: null, national: null };
+        
+        let originalGeoData = null; 
+        let currentGeoData = null;  
+        let mapSvg = null;
+        let mapGroup = null;
+        let mapPath = null;
+        let zoomBehavior = null;
+        let initialTransform = null;
+        let state = {}; 
+        
+        const defaultColors = ['#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#f1f5f9'];
+
+        const URL_BUSAN = "https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2013/json/skorea_municipalities_geo.json";
+        const URL_NATIONAL = "https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2013/json/skorea_provinces_geo.json";
+
+        // 겹침 방지를 위해 전국지도 렌더링 시 '도 단위' 이름 기본 Offset 밀어내기 설정
+        const defaultNationalOffsets = {
+            '31': { x: 35, y: 35 },   // 경기 (서울과 겹침 방지)
+            '32': { x: 20, y: 0 },    // 강원
+            '33': { x: 25, y: -20 },  // 충북
+            '34': { x: -35, y: 15 },  // 충남 (대전과 겹침 방지)
+            '35': { x: -15, y: 20 },  // 전북
+            '36': { x: -10, y: 40 },  // 전남 (광주와 겹침 방지)
+            '37': { x: 15, y: -45 },  // 경북 (대구와 겹침 방지)
+            '38': { x: -30, y: -15 }  // 경남 (부산/울산과 겹침 방지)
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchMapData();
+            initSplitter();
+        });
+
+        // 탭 변경
+        function switchMap(type) {
+            if (currentMapType === type) return;
+            cachedState[currentMapType] = JSON.parse(JSON.stringify(state));
+            currentMapType = type;
+            
+            const tBusan = document.getElementById('tab-busan');
+            const tNat = document.getElementById('tab-national');
+            const filterWrap = document.getElementById('national-filter-wrap');
+            
+            if (type === 'busan') {
+                tBusan.className = "flex-1 py-2 text-sm font-bold text-center border-b-[3px] border-blue-500 text-white bg-slate-700/50 transition-colors";
+                tNat.className = "flex-1 py-2 text-sm font-bold text-center border-b-[3px] border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-700/30 transition-colors";
+                filterWrap.style.display = 'none';
+            } else {
+                tNat.className = "flex-1 py-2 text-sm font-bold text-center border-b-[3px] border-blue-500 text-white bg-slate-700/50 transition-colors";
+                tBusan.className = "flex-1 py-2 text-sm font-bold text-center border-b-[3px] border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-700/30 transition-colors";
+                filterWrap.style.display = 'flex';
+            }
+
+            if (cachedData[type]) {
+                originalGeoData = cachedData[type];
+                restoreStateAndDraw();
+            } else {
+                document.getElementById("loading").style.display = "flex";
+                setTimeout(() => { fetchMapData(); }, 10);
+            }
+        }
+
+        // 전체 이름 토글 및 하단 개별 체크박스 동기화
+        function toggleAllNames() {
+            const isChecked = document.getElementById('toggle-names').checked;
+            for (let code in state) {
+                state[code].showName = isChecked;
+            }
+            initTable();
+            renderMapStyles();
+        }
+
+        // 목록 필터 (시만/도만 분리) 변경 감지
+        function handleRegionFilter() {
+            initTable();
+            renderMapStyles();
+        }
+
+        // 특정 코드가 필터 조건(목록 표시 조건)에 맞는지 검사하는 함수
+        function isFilteredIn(code) {
+            if (currentMapType !== 'national') return true;
+            const regionFilter = document.getElementById('region-filter') ? document.getElementById('region-filter').value : 'all';
+            if (regionFilter === 'all') return true;
+            
+            const codeNum = parseInt(code.substring(0, 2));
+            if (regionFilter === 'si') return codeNum < 30; // 11~29: 시
+            if (regionFilter === 'do') return codeNum >= 30; // 31~39: 도
+            return true;
+        }
+
+        function initSplitter() {
+            const resizer = document.getElementById('resizer');
+            const sidebar = document.getElementById('sidebar');
+            const mainWrap = document.getElementById('main-wrap');
+            let isResizing = false;
+
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; mainWrap.style.pointerEvents = 'none';
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                let newWidth = e.clientX;
+                if (newWidth < 400) newWidth = 400; if (newWidth > window.innerWidth - 300) newWidth = window.innerWidth - 300;
+                sidebar.style.width = newWidth + 'px';
+            });
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; mainWrap.style.pointerEvents = 'auto'; window.dispatchEvent(new Event('resize'));
+                }
+            });
+        }
+
+        function fetchMapData() {
+            const geoJsonUrl = currentMapType === 'busan' ? URL_BUSAN : URL_NATIONAL;
+
+            d3.json(geoJsonUrl).then(data => {
+                if (currentMapType === 'busan') {
+                    data.features = data.features.filter(f => f.properties.code.startsWith("21"));
+                }
+                cachedData[currentMapType] = data; 
+                originalGeoData = data;
+                restoreStateAndDraw();
+            }).catch(error => {
+                showToast("데이터 로드 실패."); document.getElementById("loading").style.display = "none";
+            });
+        }
+
+        function restoreStateAndDraw() {
+            if (cachedState[currentMapType]) {
+                state = cachedState[currentMapType];
+            } else {
+                state = {};
+                originalGeoData.features.forEach((f, idx) => {
+                    const code = f.properties.code;
+                    const codeNum = code.substring(0, 2);
+                    
+                    let offX = 0, offY = 0;
+                    if (currentMapType === 'national' && defaultNationalOffsets[codeNum]) {
+                        offX = defaultNationalOffsets[codeNum].x;
+                        offY = defaultNationalOffsets[codeNum].y;
+                    }
+
+                    state[code] = {
+                        name: f.properties.name,
+                        showName: document.getElementById('toggle-names').checked,
+                        value: "",
+                        bgColor: defaultColors[idx % defaultColors.length],
+                        textColor: "#1e293b",
+                        nameSize: currentMapType === 'busan' ? 16 : 14,
+                        valSize: currentMapType === 'busan' ? 14 : 12,
+                        offsetX: offX,
+                        offsetY: offY,
+                        highlightStyle: 'none'
+                    };
+                });
+            }
+            applyDetailLevel();
+            document.getElementById("loading").style.display = "none";
+        }
+
+        function smoothRing(ring, iterations) {
+            if (ring.length < 4) return ring;
+            let smoothed = [...ring];
+            for (let iter = 0; iter < iterations; iter++) {
+                let temp = [];
+                const n = smoothed.length - 1;
+                for (let i = 0; i < n; i++) {
+                    const prev = smoothed[(i - 1 + n) % n]; const curr = smoothed[i]; const next = smoothed[(i + 1) % n];
+                    temp.push([(prev[0] + curr[0] * 2 + next[0]) / 4, (prev[1] + curr[1] * 2 + next[1]) / 4]);
+                }
+                temp.push([...temp[0]]); smoothed = temp;
+            }
+            return smoothed;
+        }
+
+        function smoothCoordinates(coords, iterations) {
+            if (typeof coords[0][0] === 'number') return smoothRing(coords, iterations);
+            else return coords.map(c => smoothCoordinates(c, iterations));
+        }
+
+        function snapCoordinates(coords, gridSize) {
+            if (typeof coords[0] === 'number') return [Math.round(coords[0] / gridSize) * gridSize, Math.round(coords[1] / gridSize) * gridSize];
+            else return coords.map(c => snapCoordinates(c, gridSize));
+        }
+
+        function applyDetailLevel() {
+            const level = document.getElementById('map-detail-level').value;
+            const showIslands = document.getElementById('toggle-islands').checked;
+            
+            // 맵의 Feature(경계선)는 필터링 하지 않고 모두 남겨두어 전체 지도를 보존
+            currentGeoData = JSON.parse(JSON.stringify(originalGeoData));
+            
+            if (!showIslands) {
+                currentGeoData.features.forEach(f => {
+                    if (f.geometry.type === "MultiPolygon") {
+                        const polys = f.geometry.coordinates;
+                        if (polys.length > 1) {
+                            const sortedPolys = [...polys].sort((a, b) => {
+                                const getArea = (p) => {
+                                    const coords = p[0];
+                                    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                                    coords.forEach(c => {
+                                        if (c[0] < minX) minX = c[0]; if (c[0] > maxX) maxX = c[0];
+                                        if (c[1] < minY) minY = c[1]; if (c[1] > maxY) maxY = c[1];
+                                    });
+                                    return (maxX - minX) * (maxY - minY);
+                                };
+                                return getArea(b) - getArea(a);
+                            });
+                            f.geometry.coordinates = [sortedPolys[0]];
+                        }
+                    }
+                });
+            }
+
+            if (level === '2' || level === '3') {
+                const iterations = level === '2' ? 5 : 20; 
+                currentGeoData.features.forEach(f => { f.geometry.coordinates = smoothCoordinates(f.geometry.coordinates, iterations); });
+            } else if (level === '4') {
+                const gridSize = currentMapType === 'busan' ? 0.01 : 0.08; 
+                currentGeoData.features.forEach(f => { f.geometry.coordinates = snapCoordinates(f.geometry.coordinates, gridSize); });
+            }
+            
+            initTable(); 
+            initD3Map();
+        }
+
+        function initTable() {
+            const tbody = document.getElementById('data-tbody');
+            tbody.innerHTML = '';
+            
+            currentGeoData.features.forEach(f => {
+                const code = f.properties.code;
+                if (!isFilteredIn(code)) return; // 필터 조건에 안맞는 지역은 목록에서 숨김
+                
+                const s = state[code];
+                if (!s) return;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="font-bold text-slate-800 whitespace-nowrap">
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="checkbox" id="chk-${code}" ${s.showName ? 'checked' : ''} class="rounded text-blue-600 border-slate-300" onchange="updateState('${code}', 'showName', this.checked)">
+                            <span class="truncate max-w-[70px]" title="${s.name}">${s.name}</span>
+                        </label>
+                    </td>
+                    <td><input type="text" class="w-full border border-slate-200 rounded px-1.5 py-1 text-xs focus:border-blue-500 outline-none" value="${s.value}" placeholder="수치" oninput="updateState('${code}', 'value', this.value)"></td>
+                    <td class="text-center"><input type="color" value="${s.bgColor}" class="color-picker-compact mx-auto" onchange="updateState('${code}', 'bgColor', this.value)"></td>
+                    <td class="text-center"><input type="color" value="${s.textColor}" class="color-picker-compact mx-auto" onchange="updateState('${code}', 'textColor', this.value)"></td>
+                    <td class="text-center"><input type="number" value="${s.nameSize}" min="8" max="40" class="w-10 border border-slate-200 rounded text-center text-xs py-1 outline-none" oninput="updateState('${code}', 'nameSize', this.value)"></td>
+                    <td class="text-center"><input type="number" value="${s.valSize}" min="8" max="40" class="w-10 border border-slate-200 rounded text-center text-xs py-1 outline-none" oninput="updateState('${code}', 'valSize', this.value)"></td>
+                    
+                    <td class="text-center">
+                        <div class="flex justify-center space-x-1">
+                            <input type="number" value="${s.offsetX}" class="w-9 border border-slate-200 rounded text-center text-xs py-1 outline-none" title="X축 이동 (좌우)" placeholder="X" oninput="updateState('${code}', 'offsetX', this.value)">
+                            <input type="number" value="${s.offsetY}" class="w-9 border border-slate-200 rounded text-center text-xs py-1 outline-none" title="Y축 이동 (상하)" placeholder="Y" oninput="updateState('${code}', 'offsetY', this.value)">
+                        </div>
+                    </td>
+
+                    <td class="text-center">
+                        <select class="w-full border border-slate-200 rounded text-xs py-1 px-1 focus:border-blue-500 outline-none bg-white" onchange="updateState('${code}', 'highlightStyle', this.value)">
+                            <option value="none" ${s.highlightStyle === 'none' ? 'selected' : ''}>없음</option>
+                            <option value="red" ${s.highlightStyle === 'red' ? 'selected' : ''}>빨간 테두리</option>
+                            <option value="neon" ${s.highlightStyle === 'neon' ? 'selected' : ''}>파란 네온</option>
+                            <option value="shadow" ${s.highlightStyle === 'shadow' ? 'selected' : ''}>그림자 강조</option>
+                            <option value="dash" ${s.highlightStyle === 'dash' ? 'selected' : ''}>검은 점선</option>
+                        </select>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateState(code, key, value) {
+            state[code][key] = value;
+            if (key === 'showName' && value === false) {
+                document.getElementById('toggle-names').checked = false;
+            }
+            renderMapStyles();
+        }
+
+        function applyBulk(type) {
+            if (type === 'bg-color') { const c = document.getElementById('bulk-bg-color').value; for(let k in state) state[k].bgColor = c; }
+            else if (type === 'text-color') { const c = document.getElementById('bulk-text-color').value; for(let k in state) state[k].textColor = c; }
+            else if (type === 'clear-highlight') { for(let k in state) state[k].highlightStyle = 'none'; }
+            initTable(); renderMapStyles();
+        }
+
+        function loadSampleData() {
+            for(let k in state) { state[k].value = `${Math.floor(Math.random() * 500) + 50}명`; }
+            initTable(); renderMapStyles();
+            showToast("샘플 데이터가 적용되었습니다.");
+        }
+
+        function initD3Map() {
+            const container = document.getElementById('capture-area');
+            container.innerHTML = '<svg id="map" class="w-full h-full"></svg>';
+            const w = container.clientWidth, h = container.clientHeight;
+            mapSvg = d3.select("#map").attr("width", w).attr("height", h);
+            mapGroup = mapSvg.append("g");
+            
+            const projection = d3.geoMercator();
+            projection.fitExtent([[30, 30], [w - 30, h - 30]], currentGeoData);
+            mapPath = d3.geoPath().projection(projection);
+            
+            zoomBehavior = d3.zoom().scaleExtent([0.5, 5]).on("zoom", (e) => mapGroup.attr("transform", e.transform));
+            mapSvg.call(zoomBehavior);
+            initialTransform = d3.zoomIdentity;
+
+            mapGroup.selectAll("path").data(currentGeoData.features).enter().append("path").attr("d", mapPath).attr("class", "district").attr("id", d => "path-" + d.properties.code);
+            
+            const labels = mapGroup.selectAll("g.label-group").data(currentGeoData.features).enter().append("g").attr("class", "label-group").attr("id", d => "label-" + d.properties.code);
+            labels.append("text").attr("class", "map-text name-text");
+            labels.append("text").attr("class", "map-text value-text");
+            
+            renderMapStyles();
+        }
+
+        function renderMapStyles() {
+            if (!mapGroup || !mapPath) return;
+            const valPos = document.getElementById('value-position').value;
+            const gBC = document.getElementById('global-border-color').value;
+            const gBW = document.getElementById('global-border-width').value;
+            const gBS = document.getElementById('global-border-style').value;
+
+            currentGeoData.features.forEach(f => {
+                const c = f.properties.code, s = state[c], pathEl = d3.select("#path-" + c);
+                const filteredIn = isFilteredIn(c); // 필터 여부 확인
+                
+                let sc = gBS === 'none' ? 'transparent' : gBC, sw = gBW, sd = gBS === 'dashed' ? '4,4' : 'none', sf = 'none';
+                
+                // 목록에서 제거된 항목은 외곽선(테두리)을 투명하게 숨겨 자연스럽게 녹아들게 함
+                if (filteredIn) {
+                    if (s.highlightStyle === 'red') { sc = '#ef4444'; sw = 3; sd = 'none'; }
+                    else if (s.highlightStyle === 'neon') { sc = '#3b82f6'; sw = 3; sf = 'drop-shadow(0 0 6px rgba(59,130,246,0.8))'; sd = 'none'; }
+                    else if (s.highlightStyle === 'shadow') { sf = 'drop-shadow(4px 4px 6px rgba(0,0,0,0.5))'; }
+                    else if (s.highlightStyle === 'dash') { sc = '#0f172a'; sw = 2; sd = '6,4'; }
+                } else {
+                    sc = 'transparent';
+                }
+
+                pathEl.attr("fill", s.bgColor).attr("stroke", sc).attr("stroke-width", sw).attr("stroke-dasharray", sd).style("filter", sf);
+                if (filteredIn && s.highlightStyle !== 'none') pathEl.node().parentNode.appendChild(pathEl.node());
+            });
+
+            mapGroup.selectAll(".label-group").each(function() { this.parentNode.appendChild(this); });
+
+            currentGeoData.features.forEach(f => {
+                const c = f.properties.code, s = state[c], lg = d3.select("#label-" + c);
+                const filteredIn = isFilteredIn(c);
+                
+                const centroid = mapPath.centroid(f);
+                const offsetX = Number(s.offsetX) || 0;
+                const offsetY = Number(s.offsetY) || 0;
+                lg.attr("transform", `translate(${centroid[0] + offsetX}, ${centroid[1] + offsetY})`);
+
+                const ndy = valPos === 'bottom' ? "-0.2em" : "1.0em", vdy = valPos === 'bottom' ? "1.2em" : "-0.5em";
+                
+                // 목록 필터에서 제외되었으면 글자도 함께 숨김
+                lg.select(".name-text").style("display", (filteredIn && s.showName) ? "block" : "none").style("font-size", s.nameSize + "px").style("fill", s.textColor).attr("dy", ndy).text(s.name);
+                lg.select(".value-text").style("display", (filteredIn && s.value !== "") ? "block" : "none").style("font-size", s.valSize + "px").style("fill", s.textColor).attr("dy", vdy).text(s.value);
+            });
+        }
+
+        function resetZoom() { mapSvg.transition().duration(500).call(zoomBehavior.transform, initialTransform); }
+        function openPasteModal() { document.getElementById('paste-modal').classList.remove('hidden'); document.getElementById('paste-textarea').value = ''; document.getElementById('paste-textarea').focus(); }
+        function closePasteModal() { document.getElementById('paste-modal').classList.add('hidden'); }
+
+        function processPasteData() {
+            const t = document.getElementById('paste-textarea').value, l = t.trim().split('\n');
+            let count = 0;
+            l.forEach(line => {
+                const p = line.trim().split(/\s+/);
+                if (p.length >= 2) {
+                    const n = p[0], v = p.slice(1).join(" ");
+                    let normN = n.replace(/특별시|광역시|특별자치시|특별자치도|자치도|도|시|구|군/g, '');
+                    
+                    for (let c in state) {
+                        let sName = state[c].name;
+                        let normS = sName.replace(/특별시|광역시|특별자치시|특별자치도|자치도|도|시|구|군/g, '');
+                        
+                        if (sName === n || normS === normN || sName.startsWith(n) ||
+                           (n === '전남' && sName.startsWith('전라남')) || (n === '전북' && sName.startsWith('전라북')) ||
+                           (n === '경남' && sName.startsWith('경상남')) || (n === '경북' && sName.startsWith('경상북')) ||
+                           (n === '충남' && sName.startsWith('충청남')) || (n === '충북' && sName.startsWith('충청북'))) {
+                            state[c].value = v; 
+                            count++; 
+                            break; 
+                        }
+                    }
+                }
+            });
+            closePasteModal(); initTable(); renderMapStyles(); showToast(`${count}개의 데이터 적용 완료.`);
+        }
+
+        async function copyToClipboard() {
+            const target = document.getElementById('capture-area'), node = mapGroup.node();
+            showToast("이미지 복사 중...");
+            try {
+                const scale = 2;
+                const canvas = await html2canvas(target, { scale, backgroundColor: null, logging: false });
+                const tb = target.getBoundingClientRect(), mb = node.getBoundingClientRect();
+                const pad = 20;
+                let x = mb.left - tb.left - pad, y = mb.top - tb.top - pad, w = mb.width + (pad * 2), h = mb.height + (pad * 2);
+                x = Math.max(0, x); y = Math.max(0, y);
+                if (x + w > tb.width) w = tb.width - x; if (y + h > tb.height) h = tb.height - y;
+
+                const crop = document.createElement('canvas');
+                crop.width = w * scale; crop.height = h * scale;
+                const ctx = crop.getContext('2d');
+                ctx.clearRect(0, 0, crop.width, crop.height);
+                ctx.drawImage(canvas, x * scale, y * scale, w * scale, h * scale, 0, 0, w * scale, h * scale);
+
+                crop.toBlob(async (b) => {
+                    const i = new ClipboardItem({ "image/png": b });
+                    await navigator.clipboard.write([i]);
+                    showToast("지도가 클립보드에 복사되었습니다.");
+                }, "image/png");
+            } catch (e) { showToast("복사 실패. 브라우저가 지원하지 않을 수 있습니다."); }
+        }
+
+        function showToast(m) {
+            const t = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = m;
+            t.classList.remove('hidden'); void t.offsetWidth; t.style.opacity = "1";
+            setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.classList.add('hidden'), 300); }, 2500);
+        }
+
+        window.addEventListener('resize', () => {
+            const c = document.getElementById('capture-area');
+            if(mapSvg && currentGeoData) {
+                const w = c.clientWidth, h = c.clientHeight;
+                mapSvg.attr("width", w).attr("height", h);
+                const proj = d3.geoMercator();
+                proj.fitExtent([[30, 30], [w - 30, h - 30]], currentGeoData);
+                mapPath.projection(proj);
+                mapGroup.selectAll("path").attr("d", mapPath);
+                renderMapStyles();
+            }
+        });
+    </script>
+</body>
+</html>

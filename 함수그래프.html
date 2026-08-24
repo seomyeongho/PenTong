@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>함수 그래프 도구</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Function Plot Library -->
+    <script src="https://unpkg.com/function-plot@1.23.3/dist/function-plot.js"></script>
+    <!-- Math.js (자동 미분 및 수식 계산용) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f3f4f6;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .key-btn {
+            transition: all 0.1s;
+            box-shadow: 0 2px 0 #e5e7eb;
+        }
+        .key-btn:active {
+            transform: translateY(2px);
+            box-shadow: none;
+        }
+
+        #graph-container {
+            width: 100%;
+            height: 100%;
+            background: white;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: move;
+        }
+        
+        .modal {
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        .modal.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .tab-btn {
+            border-bottom: 2px solid transparent;
+        }
+        .tab-btn.active {
+            color: #2563eb;
+            border-bottom: 2px solid #2563eb;
+            font-weight: 700;
+        }
+
+        .input-ring:focus-within {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
+        }
+
+        #toast {
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .example-group h4 {
+            font-size: 0.7rem;
+            color: #9ca3af;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            padding-left: 0.25rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .example-btn {
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            background-color: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            transition: all 0.2s;
+        }
+        .example-btn:hover {
+            background-color: #eff6ff;
+            border-color: #93c5fd;
+        }
+        .example-btn span:first-child {
+            display: block;
+            font-weight: 700;
+            color: #374151;
+            font-size: 0.875rem;
+        }
+        .example-btn:hover span:first-child {
+            color: #1d4ed8;
+        }
+        .example-btn span:last-child {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            font-family: monospace;
+        }
+        
+        @keyframes flashHighlight {
+            0% { background-color: #fef08a; border-color: #3b82f6; }
+            100% { background-color: #ffffff; border-color: #3b82f6; }
+        }
+        .flash {
+            animation: flashHighlight 0.8s ease-out;
+        }
+        
+        /* 슬라이더 커스텀 */
+        input[type=range] {
+            accent-color: #2563eb;
+        }
+        
+        .opacity-50-custom { opacity: 0.5; }
+        
+        /* input number 스피너 숨기기 */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+
+        /* 톱니바퀴 색상 패커 깔끔하게 */
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            padding: 0;
+            background: transparent;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen text-gray-800">
+
+    <header class="bg-white shadow-sm border-b border-gray-200 px-6 py-2 flex justify-between items-center z-10 h-14 shrink-0">
+        <div class="flex items-center gap-2">
+            <div class="bg-blue-600 text-white p-1.5 rounded-lg shadow-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+            </div>
+            <h1 class="text-lg font-bold text-gray-800 tracking-tight">함수 그래프 탐구 도구</h1>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="showHelpModal()" class="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1.5 transition font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                도움말
+            </button>
+            <button onclick="resetView()" class="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1.5 transition font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                화면 초기화
+            </button>
+            <button onclick="copyGraphImage()" class="px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-1.5 shadow-sm transition font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                그래프 복사
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden">
+
+        <!-- 왼쪽 사이드바 -->
+        <div class="w-96 bg-white border-r border-gray-200 flex flex-col z-20 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.05)] relative">
+
+            <!-- 탭 메뉴 -->
+            <div class="flex border-b border-gray-200 shrink-0 bg-gray-50">
+                <button onclick="switchTab('input')" id="tab-input" class="tab-btn active flex-1 py-2.5 text-sm font-medium text-gray-500 hover:text-blue-600 transition">수식 입력</button>
+                <button onclick="switchTab('explore')" id="tab-explore" class="tab-btn flex-1 py-2.5 text-sm font-medium text-gray-500 hover:text-blue-600 transition flex items-center justify-center gap-1">
+                    <svg class="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6c0 1.887.454 3.665 1.257 5.234a.5.5 0 01-.06.58l-2.096 2.096a.5.5 0 10.707.707l2.096-2.096a.5.5 0 01.58-.06A11.956 11.956 0 0010 16a6 6 0 100-14zm0 10a4 4 0 110-8 4 4 0 010 8z"></path></svg>
+                    탐구 활동
+                </button>
+                <button onclick="switchTab('table')" id="tab-table" class="tab-btn flex-1 py-2.5 text-sm font-medium text-gray-500 hover:text-blue-600 transition flex items-center justify-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    함수값 표
+                </button>
+                <button onclick="switchTab('settings')" id="tab-settings" class="tab-btn w-12 py-2.5 text-sm font-medium text-gray-500 hover:text-blue-600 transition flex justify-center">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                </button>
+            </div>
+
+            <!-- 탭 1: 수식 입력 및 키패드 -->
+            <div id="panel-input" class="flex-1 flex flex-col h-full overflow-hidden bg-white">
+                <div class="bg-gray-50 border-b border-gray-200 flex flex-col shrink-0 max-h-[45%] shadow-inner">
+                    <div id="function-list" class="p-3 overflow-y-auto custom-scrollbar flex flex-col gap-2"></div>
+                    <div class="px-3 pb-3 pt-1">
+                        <div class="flex gap-2">
+                            <button onclick="addNewFunction()" class="flex-1 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 font-bold hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition shadow-sm flex items-center justify-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                수식 추가
+                            </button>
+                            <button onclick="clearAllInputs()" class="px-3 py-2 bg-white border border-gray-300 rounded text-sm text-red-500 font-medium hover:bg-red-50 transition shadow-sm" title="모두 지우기">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 p-3 overflow-y-auto custom-scrollbar bg-white">
+                    <!-- 매개변수 리본 (가로 스크롤) -->
+                    <div class="flex gap-1.5 overflow-x-auto custom-scrollbar pb-2 mb-3 px-1">
+                        <span class="text-xs font-bold text-yellow-700 self-center whitespace-nowrap mr-1">계수/상수:</span>
+                        <button onclick="insertKey('a')" class="key-btn px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded font-serif italic font-bold text-sm hover:bg-yellow-100 shrink-0">a</button>
+                        <button onclick="insertKey('b')" class="key-btn px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded font-serif italic font-bold text-sm hover:bg-yellow-100 shrink-0">b</button>
+                        <button onclick="insertKey('c')" class="key-btn px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded font-serif italic font-bold text-sm hover:bg-yellow-100 shrink-0">c</button>
+                        <button onclick="insertKey('d')" class="key-btn px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded font-serif italic font-bold text-sm hover:bg-yellow-100 shrink-0">d</button>
+                        <button onclick="insertKey('f')" class="key-btn px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded font-serif italic font-bold text-sm hover:bg-yellow-100 shrink-0">f</button>
+                        <button onclick="insertKey('g')" class="key-btn px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded font-serif italic font-bold text-sm hover:bg-yellow-100 shrink-0">g</button>
+                        <button onclick="insertKey('h')" class="key-btn px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded font-serif italic font-bold text-sm hover:bg-yellow-100 shrink-0">h</button>
+                        <button onclick="insertKey('j')" class="key-btn px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded font-serif italic font-bold text-sm hover:bg-yellow-100 shrink-0">j</button>
+                        <button onclick="insertKey('k')" class="key-btn px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded font-serif italic font-bold text-sm hover:bg-yellow-100 shrink-0">k</button>
+                    </div>
+
+                    <!-- 메인 계산기 키패드 -->
+                    <div class="grid grid-cols-4 gap-2 mb-5 shrink-0 p-2 bg-gray-50 rounded-lg border border-gray-100">
+                        <button onclick="insertKey('x')" class="key-btn py-2 bg-blue-50 text-blue-700 rounded font-serif italic font-bold text-lg hover:bg-blue-100">x</button>
+                        <button onclick="insertKey('y')" class="key-btn py-2 bg-blue-50 text-blue-700 rounded font-serif italic font-bold text-lg hover:bg-blue-100">y</button>
+                        <button onclick="insertKey('(')" class="key-btn py-2 bg-white border border-gray-200 rounded text-gray-600 hover:bg-gray-50">(</button>
+                        <button onclick="insertKey(')')" class="key-btn py-2 bg-white border border-gray-200 rounded text-gray-600 hover:bg-gray-50">)</button>
+
+                        <button onclick="insertKey('^')" class="key-btn py-2 bg-white border border-gray-200 rounded text-gray-600 hover:bg-gray-50">^</button>
+                        <button onclick="insertKey('sqrt(')" class="key-btn py-2 bg-white border border-gray-200 rounded text-gray-600 hover:bg-gray-50">√</button>
+                        <button onclick="insertKey('sin(')" class="key-btn py-2 bg-white border border-gray-200 rounded text-gray-600 text-xs font-bold hover:bg-gray-50">sin</button>
+                        <button onclick="insertKey('cos(')" class="key-btn py-2 bg-white border border-gray-200 rounded text-gray-600 text-xs font-bold hover:bg-gray-50">cos</button>
+
+                        <button onclick="insertKey('7')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">7</button>
+                        <button onclick="insertKey('8')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">8</button>
+                        <button onclick="insertKey('9')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">9</button>
+                        <button onclick="insertKey('/')" class="key-btn py-2 bg-gray-200 text-gray-700 rounded font-bold hover:bg-gray-300">÷</button>
+
+                        <button onclick="insertKey('4')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">4</button>
+                        <button onclick="insertKey('5')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">5</button>
+                        <button onclick="insertKey('6')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">6</button>
+                        <button onclick="insertKey('*')" class="key-btn py-2 bg-gray-200 text-gray-700 rounded font-bold hover:bg-gray-300">×</button>
+
+                        <button onclick="insertKey('1')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">1</button>
+                        <button onclick="insertKey('2')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">2</button>
+                        <button onclick="insertKey('3')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">3</button>
+                        <button onclick="insertKey('-')" class="key-btn py-2 bg-gray-200 text-gray-700 rounded font-bold hover:bg-gray-300">-</button>
+
+                        <button onclick="insertKey('0')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">0</button>
+                        <button onclick="insertKey('.')" class="key-btn py-2 bg-white border border-gray-200 rounded text-lg font-medium hover:bg-gray-50">.</button>
+                        <button onclick="insertKey('=')" class="key-btn py-2 bg-indigo-50 text-indigo-700 rounded font-bold text-lg hover:bg-indigo-100">=</button>
+                        <button onclick="insertKey('+')" class="key-btn py-2 bg-gray-200 text-gray-700 rounded font-bold hover:bg-gray-300">+</button>
+
+                        <button onclick="triggerDrawGraph()" class="key-btn col-span-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 shadow-md">선택한 수식 그래프 적용</button>
+                    </div>
+
+                    <div class="border-t border-gray-200 pt-4">
+                        <h3 class="text-xs font-bold text-blue-600 mb-4 uppercase tracking-wide px-1">기본 함수 예시</h3>
+
+                        <div class="example-group mb-4">
+                            <h4>계수 및 상수 탐구 (a~k 지원)</h4>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="setExample('a*x + b')" class="example-btn">
+                                    <span>1차 함수</span><span>ax + b</span>
+                                </button>
+                                <button onclick="setExample('a*x^2 + b*x + c')" class="example-btn">
+                                    <span>2차 함수</span><span>ax² + bx + c</span>
+                                </button>
+                                <button onclick="setExample('a*x^3 + b*x^2 + c*x + d')" class="example-btn">
+                                    <span>3차 함수</span><span>ax³ + bx² + cx + d</span>
+                                </button>
+                                <button onclick="setExample('a * sin(b * (x - c)) + d')" class="example-btn">
+                                    <span>삼각함수 조작</span><span>a·sin(b(x-c))+d</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="example-group mb-4">
+                            <h4>다항 / 유리 / 무리 / 지수 / 로그</h4>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="setExample('x^3')" class="example-btn"><span>3차 함수</span><span>x^3</span></button>
+                                <button onclick="setExample('1/x')" class="example-btn"><span>유리함수</span><span>1/x</span></button>
+                                <button onclick="setExample('sqrt(x)')" class="example-btn"><span>무리함수</span><span>√x</span></button>
+                                <button onclick="setExample('exp(x)')" class="example-btn"><span>자연지수</span><span>e^x</span></button>
+                            </div>
+                        </div>
+
+                        <h3 class="text-xs font-bold text-indigo-600 mb-4 uppercase tracking-wide px-1 pt-4 border-t border-gray-200">방정식 / 도형 예시 (음함수)</h3>
+                        <div class="example-group mb-4">
+                            <h4>원 / 타원 / 특수 곡선</h4>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="setExample('x^2 + y^2 = 9')" class="example-btn"><span>원 (중심 0,0)</span><span>x² + y² = 9</span></button>
+                                <button onclick="setExample('a*x^2 + b*y^2 = k')" class="example-btn"><span>동적 타원/원</span><span>ax² + by² = k</span></button>
+                                <button onclick="setExample('x^2 - y^2 = 1')" class="example-btn"><span>쌍곡선</span><span>x² - y² = 1</span></button>
+                                <button onclick="setExample('(x^2 + y^2 - 1)^3 + 27*x^2*y^2 = 0')" class="example-btn"><span>아스트로이드</span><span>별 모양</span></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 탭 2: 탐구 활동 -->
+            <div id="panel-explore" class="hidden flex-1 p-5 overflow-y-auto bg-gray-50">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 shadow-sm">
+                    <h3 class="text-sm font-bold text-blue-800 mb-2 flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                        현재 탐구 중인 수식
+                    </h3>
+                    <div class="flex items-center bg-white border border-blue-300 rounded px-3 py-2 shadow-inner focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
+                        <span id="explore-prefix" class="text-gray-400 font-serif italic text-lg mr-2 select-none">y=</span>
+                        <input type="text" id="explore-fn-input" class="flex-1 outline-none text-lg font-mono text-gray-800 bg-transparent placeholder-gray-300" placeholder="선택된 수식이 없습니다." autocomplete="off" spellcheck="false" oninput="syncExploreInput()">
+                    </div>
+                    <p class="text-[11px] text-blue-600 mt-2 leading-relaxed">수식을 수정하면 즉시 반영됩니다.</p>
+                </div>
+
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 shadow-sm">
+                    <h3 class="text-sm font-bold text-yellow-800 mb-1 flex items-center gap-1.5">동적 계수/상수 조작</h3>
+                    <p class="text-xs text-yellow-700 leading-relaxed mb-3">수식에 포함된 문자(a~k)에 값을 직접 입력하거나 슬라이더를 통해 변경해보세요.</p>
+                    <div id="dynamic-sliders-container" class="space-y-3"></div>
+                    <div id="no-params-msg" class="text-center py-4 hidden">
+                        <span class="text-xs text-gray-500 bg-white px-3 py-1.5 rounded-full border border-gray-200 shadow-sm">수식에 조작할 문자(a~k)가 없습니다.</span>
+                    </div>
+                </div>
+
+                <div class="mb-6 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">접선의 방정식 (미분)</h3>
+                    <p class="text-xs text-blue-600 font-medium mb-1">※ 활성화된(선택된) 수식에만 적용됩니다.</p>
+                    <label class="flex items-center gap-2 cursor-pointer bg-gray-50 p-2.5 rounded border border-gray-100 hover:bg-gray-100 transition mt-3">
+                        <input type="checkbox" id="explore-derivative" class="w-4 h-4 text-blue-600 rounded" onchange="triggerDrawGraph()">
+                        <span class="text-sm font-medium text-gray-700">선택된 그래프에 접선 그리기</span>
+                    </label>
+                </div>
+
+                <div class="mb-6 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">구간의 넓이 (정적분)</h3>
+                    <p class="text-xs text-blue-600 font-medium mb-1">※ 활성화된(선택된) 수식에만 적용됩니다.</p>
+                    <label class="flex items-center gap-2 cursor-pointer mb-3 bg-gray-50 p-2.5 rounded border border-gray-100 hover:bg-gray-100 transition mt-3">
+                        <input type="checkbox" id="explore-integral" class="w-4 h-4 text-blue-600 rounded" onchange="toggleIntegralOptions(); triggerDrawGraph()">
+                        <span class="text-sm font-medium text-gray-700">구간 넓이 색칠 및 계산 켜기</span>
+                    </label>
+                    <div id="integral-options" class="flex flex-col gap-3 opacity-40 pointer-events-none transition-opacity bg-blue-50 p-3 rounded-lg border border-blue-100">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs font-bold text-blue-800 w-12">x 구간 :</label>
+                            <input type="number" id="int-min" value="-2" step="0.5" class="w-16 p-1 border border-blue-300 rounded text-sm text-center" onchange="triggerDrawGraph()">
+                            <span class="text-xs text-blue-600 font-bold">~</span>
+                            <input type="number" id="int-max" value="2" step="0.5" class="w-16 p-1 border border-blue-300 rounded text-sm text-center" onchange="triggerDrawGraph()">
+                        </div>
+                        <div class="bg-white p-2 rounded border border-blue-200 text-center">
+                            <span class="text-xs text-gray-500">계산된 정적분 값</span>
+                            <div id="integral-result" class="text-base font-bold text-blue-700 mt-0.5">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 탭 3: 표 (Table) -->
+            <div id="panel-table" class="hidden flex-1 flex flex-col h-full bg-white">
+                <div class="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
+                    <h3 class="text-sm font-bold text-gray-800 mb-1">함수값 표 생성기</h3>
+                    <p class="text-xs text-gray-500 mb-3">활성화된 (선택된) 수식의 x값 변화에 따른 y값을 표출합니다.</p>
+                    <div class="flex gap-2 mb-3">
+                        <div class="flex-1">
+                            <label class="text-[10px] text-gray-500 block mb-1">x 시작</label>
+                            <input type="number" id="tbl-start" value="-5" class="w-full p-1 border rounded text-xs text-center">
+                        </div>
+                        <div class="flex-1">
+                            <label class="text-[10px] text-gray-500 block mb-1">x 끝</label>
+                            <input type="number" id="tbl-end" value="5" class="w-full p-1 border rounded text-xs text-center">
+                        </div>
+                        <div class="flex-1">
+                            <label class="text-[10px] text-gray-500 block mb-1">간격</label>
+                            <input type="number" id="tbl-step" value="1" step="0.1" class="w-full p-1 border rounded text-xs text-center">
+                        </div>
+                    </div>
+                    <button onclick="generateTable()" class="w-full py-2 bg-blue-600 text-white rounded text-sm font-bold hover:bg-blue-700 transition shadow-sm">표 생성하기</button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    <div id="table-result-title" class="text-sm font-bold text-center mb-2 text-indigo-600 hidden"></div>
+                    <table class="w-full text-sm text-left border-collapse" id="data-table">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-100 hidden" id="table-head">
+                            <tr>
+                                <th scope="col" class="px-4 py-2 border">x 값</th>
+                                <th scope="col" class="px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700">y 값 (f(x))</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <tr><td colspan="2" class="text-center py-10 text-gray-400 text-xs">수식을 선택하고 [표 생성하기]를 누르세요. (방정식 제외)</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 탭 4: 화면 설정 -->
+            <div id="panel-settings" class="hidden flex-1 p-5 overflow-y-auto bg-gray-50">
+                <div class="mb-6 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-gray-800 mb-3 border-b pb-2">X축 범위 (Domain)</h3>
+                    <div class="flex items-center gap-3 mb-2">
+                        <label class="text-xs text-gray-500 font-medium w-8">최소:</label>
+                        <input type="number" id="x-min" value="-10" class="flex-1 p-1.5 border rounded text-sm text-center bg-gray-50">
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <label class="text-xs text-gray-500 font-medium w-8">최대:</label>
+                        <input type="number" id="x-max" value="10" class="flex-1 p-1.5 border rounded text-sm text-center bg-gray-50">
+                    </div>
+                </div>
+
+                <div class="mb-6 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-gray-800 mb-3 border-b pb-2">Y축 범위 (Range)</h3>
+                    <div class="flex items-center gap-3 mb-2">
+                        <label class="text-xs text-gray-500 font-medium w-8">최소:</label>
+                        <input type="number" id="y-min" value="-6" class="flex-1 p-1.5 border rounded text-sm text-center bg-gray-50">
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <label class="text-xs text-gray-500 font-medium w-8">최대:</label>
+                        <input type="number" id="y-max" value="6" class="flex-1 p-1.5 border rounded text-sm text-center bg-gray-50">
+                    </div>
+                </div>
+
+                <!-- [신규 기능] 글로벌 축 스타일링 -->
+                <div class="mb-6 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-gray-800 mb-3 border-b pb-2">축 스타일 (Axis Style)</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="text-sm font-medium text-gray-700">축 색상</span>
+                            <input type="color" id="axis-color" value="#000000" class="w-8 h-8 rounded cursor-pointer" onchange="triggerDrawGraph()">
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-medium text-gray-700 whitespace-nowrap">축 굵기 (<span id="val-axis-width">1</span>)</span>
+                            <input type="range" id="axis-width" min="1" max="5" value="1" class="flex-1" oninput="document.getElementById('val-axis-width').innerText = this.value; triggerDrawGraph()">
+                        </div>
+                        <label class="flex items-center gap-2 cursor-pointer pt-1">
+                            <input type="checkbox" id="axis-arrows" checked class="w-4 h-4 text-blue-600 rounded" onchange="triggerDrawGraph()">
+                            <span class="text-sm font-medium text-gray-700">x, y축 양끝 화살표 표시</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-6 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-gray-800 mb-3 border-b pb-2">기타 옵션</h3>
+                    <label class="flex items-center gap-2 mb-3 cursor-pointer">
+                        <input type="checkbox" id="show-grid" checked class="w-4 h-4 text-blue-600 rounded" onchange="triggerDrawGraph()">
+                        <span class="text-sm text-gray-700">모눈종이(Grid) 표시</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="disable-zoom" class="w-4 h-4 text-blue-600 rounded" onchange="triggerDrawGraph()">
+                        <span class="text-sm text-gray-700">마우스 줌/이동 잠금</span>
+                    </label>
+                </div>
+
+                <button onclick="triggerDrawGraph()" class="w-full py-3 bg-gray-800 text-white rounded-lg font-bold hover:bg-gray-700 transition shadow-md">
+                    설정 적용하여 그리기
+                </button>
+            </div>
+        </div>
+
+        <!-- 오른쪽: 그래프 영역 -->
+        <div class="flex-1 bg-white relative overflow-hidden flex flex-col">
+            <!-- 에러 알림 배너 -->
+            <div id="error-banner" class="hidden absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-red-50 border border-red-300 text-red-700 px-5 py-2.5 rounded-full shadow-md text-sm font-bold flex items-center gap-2 transition-all">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                <span id="error-banner-msg">수식에 오류가 있습니다.</span>
+            </div>
+
+            <div id="graph-container" class="flex-1 w-full h-full relative z-0"></div>
+
+            <div id="welcome-msg" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none z-10">
+                <div class="bg-blue-50 p-6 rounded-full mb-4 shadow-sm border border-blue-100">
+                    <svg class="w-14 h-14 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-700 mb-2">수학의 아름다움을 시각화하세요</h2>
+                <p class="text-sm text-gray-500 text-center leading-relaxed">
+                    왼쪽 패널에서 수식을 자유롭게 추가하고, 예제를 클릭해 보세요.<br>
+                    톱니바퀴 아이콘을 누르면 각 선의 색상, 굵기 등을 바꿀 수 있습니다.
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <!-- 커스텀 모달 -->
+    <div id="custom-modal" class="modal fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-80 max-w-sm p-6 transform transition-all scale-95" id="modal-content">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <h3 class="text-lg font-bold text-gray-800">안내</h3>
+            </div>
+            <p id="modal-message" class="text-gray-600 mb-6 leading-relaxed text-sm break-words"></p>
+            <div class="flex justify-end">
+                <button onclick="closeModal()" class="px-5 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 font-medium transition text-sm shadow-sm">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 토스트 메시지 -->
+    <div id="toast" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-2.5 rounded-full shadow-xl text-sm font-medium z-50 flex items-center gap-2">
+        <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        <span id="toast-msg">메시지</span>
+    </div>
+    <div id="help-modal" class="modal fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-40 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col transform transition-all scale-95" id="help-modal-content">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50 rounded-t-xl shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-800">도움말 및 사용 가이드</h3>
+                </div>
+                <button onclick="closeHelpModal()" class="text-gray-400 hover:text-gray-600 transition p-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-1 text-sm text-gray-600 leading-relaxed space-y-6">
+
+                <section>
+                    <h4 class="text-base font-bold text-blue-700 mb-2 border-b border-blue-100 pb-1">1. 수식 입력 방법</h4>
+                    <ul class="list-disc pl-5 space-y-1.5">
+                        <li>좌측 패널에서 <span class="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-xs">수식 추가</span>를 눌러 여러 개의 함수를 동시에 그릴 수 있습니다.</li>
+                        <li><strong>곱셈 기호 생략 지원:</strong> <code class="bg-gray-100 px-1 rounded">2x</code>, <code class="bg-gray-100 px-1 rounded">3sin(x)</code>, <code class="bg-gray-100 px-1 rounded">(x+1)(x-1)</code> 처럼 입력해도 자동으로 인식하여 계산합니다.</li>
+                        <li><strong>음함수(방정식) 지원:</strong> <code class="bg-gray-100 px-1 rounded">x^2 + y^2 = 9</code> 처럼 <code class="font-mono">=</code> 기호를 포함하여 입력하면 도형의 방정식을 그릴 수 있습니다.</li>
+                        <li>수식 옆의 <strong>눈동자 아이콘</strong>을 클릭해 그래프를 일시적으로 숨길 수 있으며, <strong>톱니바퀴 아이콘</strong>을 눌러 선의 색상, 굵기, 점선 여부를 자유롭게 꾸밀 수 있습니다.</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4 class="text-base font-bold text-yellow-700 mb-2 border-b border-yellow-100 pb-1">2. 동적 계수 조작 (매개변수)</h4>
+                    <ul class="list-disc pl-5 space-y-1.5">
+                        <li>수식에 <strong>a, b, c, d, f, g, h, j, k</strong> 문자를 넣으면 프로그램이 이를 인식하여 조작 슬라이더를 자동으로 만들어 줍니다. <br>(예: <code class="bg-gray-100 px-1 rounded">a*x^2 + b*x + c</code>)</li>
+                        <li>슬라이더를 움직이거나, 옆에 있는 숫자를 직접 클릭하여 원하는 숫자(큰 수나 소수점)를 직접 타이핑할 수 있습니다.</li>
+                        <li><span class="bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-bold text-xs">▶</span> 재생 버튼을 누르면 해당 값이 자동으로 변하며 그래프가 움직이는 애니메이션을 볼 수 있습니다. 평행이동이나 폭의 변화를 관찰할 때 유용합니다.</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4 class="text-base font-bold text-indigo-700 mb-2 border-b border-indigo-100 pb-1">3. 탐구 활동 (미분과 정적분)</h4>
+                    <p class="mb-2 pl-1 bg-indigo-50 p-2 rounded text-indigo-800 font-medium text-xs">※ 이 기능은 방정식(음함수)에는 적용되지 않으며, 좌측 목록에서 <strong>클릭되어 활성화된 수식 1개</strong>에만 적용됩니다.</p>
+                    <ul class="list-disc pl-5 space-y-1.5">
+                        <li><strong>접선의 방정식:</strong> 옵션을 켜고 캔버스에 마우스를 올리면, 해당 x좌표에서의 접선이 실시간으로 따라다닙니다.</li>
+                        <li><strong>구간의 넓이 (정적분):</strong> 옵션을 켜고 x 구간을 설정하면, 함수와 x축 사이의 넓이를 색칠하고 하단에 계산된 실제 정적분 값을 표시해 줍니다.</li>
+                    </ul>
+                </section>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end shrink-0">
+                <button onclick="closeHelpModal()" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold transition shadow-md">확인</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        // --- 전역 상태 및 데이터 ---
+        let isModalActive = false;
+        const colorPalette = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#db2777', '#0891b2'];
+
+        let functions = [];
+        let functionIdCounter = 0;
+        let activeInputId = null;
+
+        const AVAILABLE_PARAMS = ['a', 'b', 'c', 'd', 'f', 'g', 'h', 'j', 'k'];
+
+        let params = {};
+        let animTimers = {};
+        let animDirs = {};
+
+        AVAILABLE_PARAMS.forEach(p => {
+            params[p] = (p === 'c' || p === 'd') ? 0 : 1;
+            animTimers[p] = null;
+            animDirs[p] = 1;
+        });
+
+        let currentlyRenderedParams = [];
+
+        window.onload = function () {
+            drawInitialGrid();
+            addNewFunction();
+        };
+
+        // --- UI 및 탭 관리 ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+
+            ['input', 'explore', 'table', 'settings'].forEach(id => {
+                document.getElementById('panel-' + id).classList.add('hidden');
+            });
+            document.getElementById('panel-' + tabId).classList.remove('hidden');
+
+            if (tabId === 'explore') updateExploreUI();
+        }
+
+        function toggleIntegralOptions() {
+            const isChecked = document.getElementById('explore-integral').checked;
+            const optionsDiv = document.getElementById('integral-options');
+            if (isChecked) optionsDiv.classList.remove('opacity-40', 'pointer-events-none');
+            else {
+                optionsDiv.classList.add('opacity-40', 'pointer-events-none');
+                document.getElementById('integral-result').innerText = '-';
+            }
+        }
+
+        // --- 애니메이션 로직 ---
+        function toggleAnim(param) {
+            const btn = document.getElementById(`btn-anim-${param}`);
+            if (!btn) return;
+
+            if (animTimers[param]) {
+                clearInterval(animTimers[param]);
+                animTimers[param] = null;
+                btn.innerHTML = '▶';
+                btn.classList.remove('bg-red-100', 'text-red-800');
+                btn.classList.add('bg-yellow-100', 'text-yellow-800');
+            } else {
+                btn.innerHTML = '⏸';
+                btn.classList.remove('bg-yellow-100', 'text-yellow-800');
+                btn.classList.add('bg-red-100', 'text-red-800');
+
+                animTimers[param] = setInterval(() => {
+                    let slider = document.getElementById(`param-${param}`);
+                    if (!slider) { toggleAnim(param); return; }
+
+                    let val = parseFloat(params[param]);
+                    let max = parseFloat(slider.max);
+                    let min = parseFloat(slider.min);
+
+                    if (val >= max) animDirs[param] = -1;
+                    if (val <= min) animDirs[param] = 1;
+
+                    let step = (max - min) / 100;
+                    if (step <= 0) step = 0.1;
+
+                    val += step * animDirs[param];
+
+                    slider.value = val;
+                    updateParamSlider(param, val);
+                }, 50);
+            }
+        }
+
+        // --- 스마트 수식 보정 기능 (2x -> 2*x) ---
+        function autoFixExpression(expr) {
+            let res = expr;
+            res = res.replace(/(\d)([a-zA-Z\(])/g, '$1*$2');
+            res = res.replace(/(\))([a-zA-Z0-9\(])/g, '$1*$2');
+            return res;
+        }
+
+        // --- 계수/상수 치환 및 조작 로직 ---
+        function getUsedParams(expr) {
+            const used = [];
+            AVAILABLE_PARAMS.forEach(p => {
+                const regex = new RegExp(`(^|[^a-zA-Z])${p}(?![a-zA-Z])`, 'g');
+                if (regex.test(expr)) used.push(p);
+            });
+            return used;
+        }
+
+        function replaceDynamicParams(expr) {
+            let res = expr;
+            const used = getUsedParams(expr);
+            used.forEach(p => {
+                const regex = new RegExp(`(^|[^a-zA-Z])${p}(?![a-zA-Z])`, 'g');
+                res = res.replace(regex, `$1(${params[p]})`);
+            });
+            return res;
+        }
+
+        function updateParamSlider(param, value) {
+            let num = parseFloat(value);
+            num = Math.round(num * 10000) / 10000;
+            params[param] = num;
+
+            const inputEl = document.getElementById('val-' + param);
+            if (inputEl) inputEl.value = num;
+            triggerDrawGraph();
+        }
+
+        function updateParamManual(param, value) {
+            let num = parseFloat(value);
+            if (isNaN(num)) num = 0;
+            params[param] = num;
+
+            const slider = document.getElementById('param-' + param);
+            if (slider) {
+                let currentMin = parseFloat(slider.min);
+                let currentMax = parseFloat(slider.max);
+
+                if (num > currentMax) slider.max = num > 0 ? num * 1.5 : 5;
+                if (num < currentMin) slider.min = num < 0 ? num * 1.5 : -5;
+                slider.value = num;
+            }
+            triggerDrawGraph();
+        }
+
+        // --- 다중 수식 관리 ---
+        function getNextColor() { return colorPalette[functions.length % colorPalette.length]; }
+
+        function addNewFunction(expr = '') {
+            const id = `fn-${functionIdCounter++}`;
+            const color = getNextColor();
+            // 선 옵션 속성 (기본 굵기 2, 실선, 옵션창 닫힘)
+            functions.push({ id, expr, color, visible: true, lineWidth: 2, lineStyle: 'solid', showOptions: false });
+            renderFunctions();
+            setActiveInput(id);
+            return id;
+        }
+
+        function removeFunction(id) {
+            functions = functions.filter(f => f.id !== id);
+            if (functions.length === 0) {
+                addNewFunction();
+                document.getElementById('welcome-msg').style.display = 'flex';
+                drawInitialGrid();
+            } else {
+                if (activeInputId === id) setActiveInput(functions[functions.length - 1].id);
+                renderFunctions();
+                triggerDrawGraph();
+            }
+        }
+
+        function toggleVisibility(id) {
+            const func = functions.find(f => f.id === id);
+            if (func) {
+                func.visible = !func.visible;
+                renderFunctions();
+                triggerDrawGraph();
+            }
+        }
+
+        // 개별 선 옵션 패널 열기/닫기
+        function toggleFuncOptions(id) {
+            const func = functions.find(f => f.id === id);
+            if (func) {
+                func.showOptions = !func.showOptions;
+                renderFunctions();
+            }
+        }
+
+        // 개별 선 옵션 데이터 업데이트
+        function updateFuncOption(id, key, value) {
+            const func = functions.find(f => f.id === id);
+            if (func) {
+                if (key === 'lineWidth') func[key] = parseInt(value);
+                else func[key] = value;
+
+                if (key === 'color') {
+                    const colorDot = document.getElementById(`color-dot-${id}`);
+                    if (colorDot) colorDot.style.backgroundColor = value;
+                }
+                triggerDrawGraph();
+            }
+        }
+
+        function clearAllInputs() {
+            functions = [];
+            functionIdCounter = 0;
+            addNewFunction();
+            document.getElementById('welcome-msg').style.display = 'flex';
+            drawInitialGrid();
+        }
+
+        function updateFunctionExpr(id, value) {
+            const func = functions.find(f => f.id === id);
+            if (func) {
+                func.expr = value;
+                const prefixLabel = document.getElementById(`prefix-${id}`);
+                if (prefixLabel) {
+                    if (value.includes('=')) prefixLabel.classList.add('hidden');
+                    else prefixLabel.classList.remove('hidden');
+                }
+
+                if (id === activeInputId) {
+                    const expInput = document.getElementById('explore-fn-input');
+                    const expPrefix = document.getElementById('explore-prefix');
+                    if (expInput && expInput.value !== value) {
+                        expInput.value = value;
+                        if (value.includes('=')) expPrefix.classList.add('hidden');
+                        else expPrefix.classList.remove('hidden');
+                    }
+                }
+            }
+        }
+
+        function syncExploreInput() {
+            if (!activeInputId) return;
+            const val = document.getElementById('explore-fn-input').value;
+            updateFunctionExpr(activeInputId, val);
+
+            const mainInput = document.getElementById(activeInputId);
+            if (mainInput && mainInput.value !== val) {
+                mainInput.value = val;
+                mainInput.style.height = 'auto';
+                mainInput.style.height = (mainInput.scrollHeight) + 'px';
+            }
+            triggerDrawGraph();
+        }
+
+        function setActiveInput(id) {
+            if (activeInputId !== id) {
+                activeInputId = id;
+                document.querySelectorAll('.fn-row').forEach(row => row.classList.remove('active'));
+                const activeRow = document.getElementById(`row-${id}`);
+                if (activeRow) {
+                    activeRow.classList.add('active');
+                    const textarea = document.getElementById(id);
+                    if (textarea) textarea.focus();
+                }
+                triggerDrawGraph();
+            }
+        }
+
+        // 수식 목록 전체 렌더링
+        function renderFunctions() {
+            const container = document.getElementById('function-list');
+            container.innerHTML = '';
+
+            functions.forEach(f => {
+                const isImplicit = f.expr.includes('=');
+
+                const itemContainer = document.createElement('div');
+                itemContainer.className = 'flex flex-col mb-1.5';
+
+                const row = document.createElement('div');
+                row.id = `row-${f.id}`;
+                // CSS 우선순위 z-10 부여하여 옵션 패널이 밑으로 들어가도록 층 분리
+                row.className = `fn-row bg-white rounded-lg border border-gray-200 flex items-start px-3 py-2 cursor-text transition relative z-10 ${f.id === activeInputId ? 'active' : ''} ${!f.visible ? 'opacity-50-custom' : ''}`;
+                row.onclick = () => setActiveInput(f.id);
+
+                const eyeIcon = f.visible
+                    ? `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />`
+                    : `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />`;
+
+                row.innerHTML = `
+                        <button onclick="event.stopPropagation(); toggleVisibility('${f.id}')" class="mt-1.5 mr-2 text-gray-400 hover:text-blue-600 transition shrink-0" title="숨기기/보이기">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">${eyeIcon}</svg>
+                        </button>
+                        <div class="flex-1 flex items-start">
+                            <span id="prefix-${f.id}" class="text-gray-400 font-serif italic text-lg mr-1 select-none mt-0.5 ${isImplicit ? 'hidden' : ''}">y=</span>
+                            <textarea id="${f.id}" rows="1"
+                                class="flex-1 outline-none text-lg font-mono text-${f.visible ? 'gray-800' : 'gray-400'} bg-transparent placeholder-gray-300 resize-none overflow-hidden py-0.5"
+                                placeholder="수식 입력..." autocomplete="off" spellcheck="false" ${f.visible ? '' : 'readonly'}>${f.expr}</textarea>
+                        </div>
+                        <div class="flex flex-col items-center justify-center ml-1 shrink-0">
+                            <div id="color-dot-${f.id}" class="w-3 h-3 rounded-full mb-1.5 shadow-inner border border-gray-200" style="background-color: ${f.color}"></div>
+                            <div class="flex gap-1">
+                                <button onclick="event.stopPropagation(); toggleFuncOptions('${f.id}')" class="text-gray-400 hover:text-blue-500 p-0.5 transition rounded hover:bg-blue-50" title="선 스타일 설정">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                </button>
+                                <button onclick="event.stopPropagation(); removeFunction('${f.id}')" class="text-gray-300 hover:text-red-500 p-0.5 transition rounded hover:bg-red-50" title="삭제">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                itemContainer.appendChild(row);
+
+                // 개별 옵션 패널 UI 추가 (CSS 레이어 분리 처리됨)
+                if (f.showOptions) {
+                    const optionsDiv = document.createElement('div');
+                    optionsDiv.className = 'w-full bg-blue-50 border border-blue-200 rounded-b-lg p-2.5 flex gap-3 text-xs items-center shadow-inner mt-[-6px] pt-4 relative z-0';
+                    optionsDiv.innerHTML = `
+                            <label class="flex items-center gap-1.5 cursor-pointer shrink-0">
+                                <span class="font-bold text-gray-600">색상</span>
+                                <input type="color" value="${f.color}" class="w-6 h-6 cursor-pointer" onchange="updateFuncOption('${f.id}', 'color', this.value)">
+                            </label>
+                            <div class="h-5 border-l border-blue-200"></div>
+                            <label class="flex items-center gap-2 flex-1">
+                                <span class="font-bold text-gray-600 whitespace-nowrap">굵기 (<span id="lw-val-${f.id}">${f.lineWidth}</span>)</span>
+                                <input type="range" min="1" max="10" value="${f.lineWidth}" class="w-full" oninput="updateFuncOption('${f.id}', 'lineWidth', this.value); document.getElementById('lw-val-${f.id}').innerText=this.value;">
+                            </label>
+                            <div class="h-5 border-l border-blue-200 shrink-0"></div>
+                            <label class="flex items-center gap-1.5 shrink-0">
+                                <span class="font-bold text-gray-600 whitespace-nowrap">종류</span>
+                                <select class="border border-gray-300 rounded p-1 outline-none bg-white" onchange="updateFuncOption('${f.id}', 'lineStyle', this.value)">
+                                    <option value="solid" ${f.lineStyle === 'solid' ? 'selected' : ''}>실선</option>
+                                    <option value="dashed" ${f.lineStyle === 'dashed' ? 'selected' : ''}>점선</option>
+                                    <option value="dotted" ${f.lineStyle === 'dotted' ? 'selected' : ''}>짧은점선</option>
+                                </select>
+                            </label>
+                        `;
+                    itemContainer.appendChild(optionsDiv);
+                }
+
+                container.appendChild(itemContainer);
+
+                const textarea = row.querySelector('textarea');
+                const adjustHeight = () => {
+                    textarea.style.height = 'auto';
+                    textarea.style.height = (textarea.scrollHeight) + 'px';
+                };
+                textarea.addEventListener('input', (e) => { updateFunctionExpr(f.id, e.target.value); adjustHeight(); });
+                textarea.addEventListener('focus', () => setActiveInput(f.id));
+                textarea.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); triggerDrawGraph(); } });
+                setTimeout(adjustHeight, 0);
+            });
+        }
+
+        // --- 상호작용 로직 ---
+        function insertKey(value) {
+            if (!activeInputId) return;
+            const func = functions.find(f => f.id === activeInputId);
+            if (!func || !func.visible) return;
+
+            const textarea = document.getElementById(activeInputId);
+            if (!textarea) return;
+
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            textarea.value = textarea.value.substring(0, start) + value + textarea.value.substring(end);
+            textarea.dispatchEvent(new Event('input'));
+
+            const newPos = start + value.length;
+            textarea.setSelectionRange(newPos, newPos);
+            textarea.focus();
+        }
+
+        function setExample(expr) {
+            const cleanExpr = expr.replace(/\s+/g, '');
+            const existingFunc = functions.find(f => f.expr.replace(/\s+/g, '') === cleanExpr);
+
+            if (existingFunc) {
+                if (!existingFunc.visible) toggleVisibility(existingFunc.id);
+                setActiveInput(existingFunc.id);
+                const row = document.getElementById(`row-${existingFunc.id}`);
+                if (row) {
+                    row.classList.remove('flash');
+                    void row.offsetWidth;
+                    row.classList.add('flash');
+                }
+                showToast("이미 입력된 수식입니다.");
+                switchTab('input');
+                return;
+            }
+
+            let targetId = activeInputId;
+            const activeFunc = functions.find(f => f.id === targetId);
+
+            if (activeFunc && activeFunc.expr.trim() !== '') {
+                targetId = addNewFunction(expr);
+            } else if (activeFunc) {
+                activeFunc.expr = expr;
+                activeFunc.visible = true;
+                renderFunctions();
+            }
+
+            switchTab('input');
+            triggerDrawGraph();
+        }
+
+        window.addEventListener('resize', function () {
+            if (isModalActive) return;
+            const hasData = functions.some(f => f.expr.trim() !== '' && f.visible);
+            if (hasData) triggerDrawGraph();
+            else drawInitialGrid();
+        });
+
+        function drawInitialGrid() {
+            try {
+                const container = document.getElementById('graph-container');
+                container.innerHTML = '';
+                functionPlot({
+                    target: '#graph-container',
+                    width: container.clientWidth,
+                    height: container.clientHeight,
+                    grid: true,
+                    xAxis: { domain: [-10, 10] },
+                    yAxis: { domain: [-6, 6] },
+                    data: []
+                });
+            } catch (e) { }
+        }
+
+        function resetView() {
+            document.getElementById('x-min').value = -10;
+            document.getElementById('x-max').value = 10;
+            document.getElementById('y-min').value = -6;
+            document.getElementById('y-max').value = 6;
+            document.getElementById('show-grid').checked = true;
+            document.getElementById('disable-zoom').checked = false;
+
+            document.getElementById('axis-color').value = "#000000";
+            document.getElementById('axis-width').value = 1;
+            document.getElementById('val-axis-width').innerText = "1";
+            document.getElementById('axis-arrows').checked = true;
+
+            document.getElementById('explore-derivative').checked = false;
+            document.getElementById('explore-integral').checked = false;
+            toggleIntegralOptions();
+
+            AVAILABLE_PARAMS.forEach(p => {
+                params[p] = (p === 'c' || p === 'd') ? 0 : 1;
+                let slider = document.getElementById(`param-${p}`);
+                if (slider) {
+                    slider.min = -5;
+                    slider.max = 5;
+                    slider.value = params[p];
+                }
+                let inputEl = document.getElementById(`val-${p}`);
+                if (inputEl) inputEl.value = params[p];
+
+                if (animTimers[p]) toggleAnim(p);
+            });
+
+            triggerDrawGraph();
+        }
+
+        function calculateIntegral(expr, min, max) {
+            try {
+                const compiled = math.compile(expr);
+                let area = 0;
+                const steps = 1000;
+                const dx = (max - min) / steps;
+
+                for (let i = 0; i < steps; i++) {
+                    let x1 = min + i * dx;
+                    let x2 = min + (i + 1) * dx;
+                    let y1 = compiled.evaluate({ x: x1 });
+                    let y2 = compiled.evaluate({ x: x2 });
+                    if (isNaN(y1) || isNaN(y2)) return "계산 불가 (범위 오류)";
+                    area += ((y1 + y2) * dx) / 2;
+                }
+                return area.toFixed(4);
+            } catch (e) { return "계산 오류"; }
+        }
+
+        function updateExploreUI() {
+            const exploreInput = document.getElementById('explore-fn-input');
+            const explorePrefix = document.getElementById('explore-prefix');
+            const activeFunc = functions.find(f => f.id === activeInputId);
+
+            if (exploreInput) {
+                if (activeFunc && activeFunc.visible && activeFunc.expr.trim() !== '') {
+                    exploreInput.value = activeFunc.expr;
+                    exploreInput.disabled = false;
+                    if (activeFunc.expr.includes('=')) explorePrefix.classList.add('hidden');
+                    else explorePrefix.classList.remove('hidden');
+                } else {
+                    exploreInput.value = '';
+                    exploreInput.disabled = true;
+                    explorePrefix.classList.remove('hidden');
+                }
+            }
+
+            let usedParams = [];
+            if (activeFunc && activeFunc.visible && activeFunc.expr.trim() !== '') {
+                usedParams = getUsedParams(activeFunc.expr);
+            }
+
+            const container = document.getElementById('dynamic-sliders-container');
+            const noMsg = document.getElementById('no-params-msg');
+
+            if (JSON.stringify(usedParams) !== JSON.stringify(currentlyRenderedParams)) {
+                currentlyRenderedParams = usedParams;
+                container.innerHTML = '';
+
+                AVAILABLE_PARAMS.forEach(p => {
+                    if (!usedParams.includes(p) && animTimers[p]) toggleAnim(p);
+                });
+
+                if (usedParams.length === 0) {
+                    noMsg.classList.remove('hidden');
+                } else {
+                    noMsg.classList.add('hidden');
+                    usedParams.forEach(p => {
+                        const div = document.createElement('div');
+                        div.className = "flex flex-col gap-1 bg-white p-2 rounded border border-yellow-100 mb-2";
+                        div.innerHTML = `
+                                <div class="flex justify-between items-center">
+                                    <label class="text-xs font-bold text-gray-700 flex items-center gap-1">
+                                        값 ${p} =
+                                        <input type="number" step="any" id="val-${p}" value="${params[p]}"
+                                            class="w-20 text-right font-mono text-blue-600 font-bold border-b border-blue-200 focus:border-blue-500 focus:outline-none bg-transparent"
+                                            onchange="updateParamManual('${p}', this.value)">
+                                    </label>
+                                    <button id="btn-anim-${p}" onclick="toggleAnim('${p}')" class="text-xs ${animTimers[p] ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'} hover:bg-yellow-200 px-2 py-1 rounded transition shadow-sm font-bold w-12">${animTimers[p] ? '⏸' : '▶'}</button>
+                                </div>
+                                <input type="range" id="param-${p}" min="-5" max="5" step="any" value="${params[p]}" class="w-full mt-1" oninput="updateParamSlider('${p}', this.value)">
+                            `;
+                        container.appendChild(div);
+                    });
+                }
+            } else {
+                usedParams.forEach(p => {
+                    const inputEl = document.getElementById(`val-${p}`);
+                    const sliderEl = document.getElementById(`param-${p}`);
+                    if (inputEl && document.activeElement !== inputEl) inputEl.value = params[p];
+                    if (sliderEl) sliderEl.value = params[p];
+                });
+            }
+        }
+
+        // 글로벌 축(Axis) 화살표 및 스타일 강제 적용
+        function applyGlobalAxisStyles() {
+            const svg = document.querySelector('#graph-container svg');
+            if (!svg) return;
+
+            const axisColor = document.getElementById('axis-color').value || '#000000';
+            const axisWidth = document.getElementById('axis-width').value || 1;
+            const showArrows = document.getElementById('axis-arrows').checked;
+
+            let defs = svg.querySelector('defs');
+            if (!defs) {
+                defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+                svg.prepend(defs);
+            }
+
+            ['axis-arrow-end', 'axis-arrow-start'].forEach(id => {
+                let m = document.getElementById(id);
+                if (m) m.remove();
+            });
+
+            if (showArrows) {
+                let markerEnd = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+                markerEnd.setAttribute("id", "axis-arrow-end");
+                markerEnd.setAttribute("viewBox", "0 0 10 10");
+                markerEnd.setAttribute("refX", "10");
+                markerEnd.setAttribute("refY", "5");
+                markerEnd.setAttribute("markerWidth", "6");
+                markerEnd.setAttribute("markerHeight", "6");
+                markerEnd.setAttribute("orient", "auto");
+                let pathEnd = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                pathEnd.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+                pathEnd.setAttribute("fill", axisColor);
+                markerEnd.appendChild(pathEnd);
+                defs.appendChild(markerEnd);
+
+                let markerStart = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+                markerStart.setAttribute("id", "axis-arrow-start");
+                markerStart.setAttribute("viewBox", "0 0 10 10");
+                markerStart.setAttribute("refX", "0");
+                markerStart.setAttribute("refY", "5");
+                markerStart.setAttribute("markerWidth", "6");
+                markerStart.setAttribute("markerHeight", "6");
+                markerStart.setAttribute("orient", "auto-start-reverse");
+                let pathStart = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                pathStart.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+                pathStart.setAttribute("fill", axisColor);
+                markerStart.appendChild(pathStart);
+                defs.appendChild(markerStart);
+            }
+
+            const origins = svg.querySelectorAll('.origin');
+            origins.forEach(line => {
+                line.setAttribute('stroke', axisColor);
+                line.setAttribute('stroke-width', axisWidth);
+                line.style.strokeOpacity = 1;
+
+                if (showArrows) {
+                    line.setAttribute('marker-end', 'url(#axis-arrow-end)');
+                    line.setAttribute('marker-start', 'url(#axis-arrow-start)');
+                } else {
+                    line.removeAttribute('marker-end');
+                    line.removeAttribute('marker-start');
+                }
+            });
+        }
+
+        // --- 핵심 그래프 그리기 ---
+        function triggerDrawGraph() {
+            const errorBanner = document.getElementById('error-banner');
+            errorBanner.classList.add('hidden');
+
+            const validFunctions = functions.filter(f => f.expr.trim() !== '' && f.visible);
+            if (validFunctions.length === 0) {
+                document.getElementById('welcome-msg').style.display = 'flex';
+                drawInitialGrid();
+                document.getElementById('integral-result').innerText = '-';
+                updateExploreUI();
+                return;
+            }
+
+            const xMin = parseFloat(document.getElementById('x-min').value) || -10;
+            const xMax = parseFloat(document.getElementById('x-max').value) || 10;
+            const yMin = parseFloat(document.getElementById('y-min').value) || -6;
+            const yMax = parseFloat(document.getElementById('y-max').value) || 6;
+            const showGrid = document.getElementById('show-grid').checked;
+            const disableZoom = document.getElementById('disable-zoom').checked;
+
+            const exploreDeriv = document.getElementById('explore-derivative').checked;
+            const exploreInteg = document.getElementById('explore-integral').checked;
+            const intMin = parseFloat(document.getElementById('int-min').value) || -2;
+            const intMax = parseFloat(document.getElementById('int-max').value) || 2;
+
+            const container = document.getElementById('graph-container');
+            document.getElementById('welcome-msg').style.display = 'none';
+            container.innerHTML = '';
+            document.getElementById('integral-result').innerText = '-';
+
+            let options = {
+                target: '#graph-container',
+                width: container.clientWidth,
+                height: container.clientHeight,
+                grid: showGrid,
+                disableZoom: disableZoom,
+                xAxis: { domain: [xMin, xMax] },
+                yAxis: { domain: [yMin, yMax] },
+                data: []
+            };
+
+            let hasImplicit = false;
+
+            validFunctions.forEach(f => {
+                let expr = f.expr.trim();
+                let fixedExpr = autoFixExpression(expr);
+                let evalExpr = replaceDynamicParams(fixedExpr);
+                let isActive = (f.id === activeInputId);
+
+                // 개별 선(Line) 속성 설정
+                let strokeDasharray = '';
+                if (f.lineStyle === 'dashed') strokeDasharray = '8,8';
+                else if (f.lineStyle === 'dotted') strokeDasharray = '2,4';
+
+                let baseAttr = { 'stroke-width': f.lineWidth || 2 };
+                if (strokeDasharray) baseAttr['stroke-dasharray'] = strokeDasharray;
+
+                if (evalExpr.includes('=')) {
+                    hasImplicit = true;
+                    const parts = evalExpr.split('=');
+                    if (parts.length >= 2) {
+                        const left = parts[0].trim();
+                        const right = parts.slice(1).join('=').trim();
+                        if (left && right) {
+                            options.data.push({
+                                fn: `(${left}) - (${right})`,
+                                fnType: 'implicit',
+                                color: f.color,
+                                attr: baseAttr
+                            });
+                        }
+                    }
+                } else {
+                    let dataItem = {
+                        fn: evalExpr,
+                        graphType: 'polyline',
+                        color: f.color,
+                        attr: baseAttr
+                    };
+
+                    if (exploreDeriv && isActive) {
+                        try {
+                            let derivativeExpr = math.derivative(evalExpr, 'x').toString();
+                            dataItem.derivative = { fn: derivativeExpr, updateOnMouseMove: true };
+                        } catch (e) { console.warn("미분 불가능 수식:", evalExpr); }
+                    }
+
+                    options.data.push(dataItem);
+
+                    if (exploreInteg && isActive) {
+                        options.data.push({
+                            fn: evalExpr,
+                            range: [intMin, intMax],
+                            closed: true,
+                            color: f.color,
+                            skipTip: true
+                        });
+
+                        let resultVal = calculateIntegral(evalExpr, intMin, intMax);
+                        document.getElementById('integral-result').innerText = resultVal;
+                    }
+                }
+            });
+
+            if (hasImplicit) options.tip = null;
+            else options.tip = { xLine: true, yLine: true };
+
+            try {
+                let instance = functionPlot(options);
+                instance.on('after:draw', applyGlobalAxisStyles);
+                setTimeout(applyGlobalAxisStyles, 10);
+            } catch (err) {
+                if (!err.message || (!err.message.includes('unexpected') && !err.message.includes('must be a string') && !err.message.includes('undefined'))) {
+                    document.getElementById('error-banner-msg').innerText = "수식 오류: 올바른 수식인지 확인해주세요.";
+                    errorBanner.classList.remove('hidden');
+                }
+            }
+
+            updateExploreUI();
+        }
+
+        // --- 함수값 표 생성기 ---
+        function generateTable() {
+            const activeFunc = functions.find(f => f.id === activeInputId);
+            const tbody = document.getElementById('table-body');
+            const thead = document.getElementById('table-head');
+            const title = document.getElementById('table-result-title');
+
+            if (!activeFunc || activeFunc.expr.trim() === '' || !activeFunc.visible) {
+                tbody.innerHTML = `<tr><td colspan="2" class="text-center py-10 text-gray-400 text-xs">수식을 활성화(클릭)하고 눈동자를 켠 후 표를 생성하세요.</td></tr>`;
+                return;
+            }
+
+            if (activeFunc.expr.includes('=')) {
+                tbody.innerHTML = `<tr><td colspan="2" class="text-center py-10 text-red-400 text-xs">방정식(음함수)은 표 생성을 지원하지 않습니다.</td></tr>`;
+                return;
+            }
+
+            const start = parseFloat(document.getElementById('tbl-start').value);
+            const end = parseFloat(document.getElementById('tbl-end').value);
+            const step = parseFloat(document.getElementById('tbl-step').value);
+
+            if (isNaN(start) || isNaN(end) || isNaN(step) || step <= 0 || start > end) {
+                showModal("표 생성 범위 또는 간격이 올바르지 않습니다.");
+                return;
+            }
+
+            if ((end - start) / step > 500) {
+                showModal("생성할 데이터가 너무 많습니다. 간격을 넓히거나 범위를 줄이세요.");
+                return;
+            }
+
+            try {
+                const fixedExpr = autoFixExpression(activeFunc.expr);
+                const evalExpr = replaceDynamicParams(fixedExpr);
+                const compiled = math.compile(evalExpr);
+
+                thead.classList.remove('hidden');
+                title.classList.remove('hidden');
+                title.textContent = `y = ${activeFunc.expr}`;
+                tbody.innerHTML = '';
+
+                for (let x = start; x <= end; x += step) {
+                    let currentX = Math.round(x * 100000) / 100000;
+                    let scope = { x: currentX };
+                    let y = compiled.evaluate(scope);
+                    let displayY = typeof y === 'number' && !isNaN(y) ? (Math.round(y * 10000) / 10000) : "정의되지 않음";
+
+                    const tr = document.createElement('tr');
+                    tr.className = "border-b border-gray-100 hover:bg-gray-50";
+                    tr.innerHTML = `
+                            <td class="px-4 py-2 font-mono text-gray-700">${currentX}</td>
+                            <td class="px-4 py-2 font-mono font-bold text-blue-700 border-l">${displayY}</td>
+                        `;
+                    tbody.appendChild(tr);
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="2" class="text-center py-10 text-red-400 text-xs">수식을 계산할 수 없습니다.</td></tr>`;
+            }
+        }
+
+        async function copyGraphImage() {
+            const svg = document.querySelector('#graph-container svg');
+            if (!svg) {
+                showToast("복사할 그래프가 없습니다.");
+                return;
+            }
+            try {
+                const serializer = new XMLSerializer();
+                let svgString = serializer.serializeToString(svg);
+
+                const canvas = document.createElement('canvas');
+                const svgRect = svg.getBoundingClientRect();
+                canvas.width = svgRect.width;
+                canvas.height = svgRect.height;
+                const ctx = canvas.getContext('2d');
+
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const img = new Image();
+                const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(svgBlob);
+
+                img.onload = function () {
+                    ctx.drawImage(img, 0, 0);
+                    URL.revokeObjectURL(url);
+                    canvas.toBlob(async function (blob) {
+                        try {
+                            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                            showToast("그래프 이미지가 클립보드에 복사되었습니다.");
+                        } catch (err) {
+                            showModal("클립보드 접근 권한이 없거나 지원하지 않는 브라우저입니다.");
+                        }
+                    }, 'image/png');
+                };
+                img.src = url;
+            } catch (e) { showModal("이미지 변환 중 오류가 발생했습니다."); }
+        }
+
+        function showModal(msg) {
+            if (isModalActive) return;
+            isModalActive = true;
+            document.getElementById('modal-message').innerHTML = msg;
+            document.getElementById('custom-modal').classList.add('active');
+            document.getElementById('modal-content').style.transform = 'scale(1)';
+        }
+
+        function closeModal() {
+            isModalActive = false;
+            document.getElementById('custom-modal').classList.remove('active');
+            document.getElementById('modal-content').style.transform = 'scale(0.95)';
+            if (activeInputId && !document.getElementById('panel-explore').classList.contains('hidden')) {
+                document.getElementById('explore-fn-input').focus();
+            } else if (activeInputId) {
+                const input = document.getElementById(activeInputId);
+                if (input) input.focus();
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        document.getElementById('custom-modal').addEventListener('click', function (e) {
+            if (e.target === this) closeModal();
+        });
+        // --- 도움말 모달 로직 (신규 추가) ---
+        function showHelpModal() {
+            document.getElementById('help-modal').classList.add('active');
+            document.getElementById('help-modal-content').style.transform = 'scale(1)';
+        }
+
+        function closeHelpModal() {
+            document.getElementById('help-modal').classList.remove('active');
+            document.getElementById('help-modal-content').style.transform = 'scale(0.95)';
+        }
+
+        // 도움말 모달 바깥 영역 클릭 시 닫기
+        document.getElementById('help-modal').addEventListener('click', function (e) {
+            if (e.target === this) closeHelpModal();
+        });
+
+    </script>
+</body>
+</html>

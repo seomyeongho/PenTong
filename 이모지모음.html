@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이모지 모음</title>
+    <style>
+        :root {
+            --primary-color: #9C27B0; /* 메뉴 아이콘 테마에 맞춘 보라색 포인트 */
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+        }
+
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+       
+
+        h1 {
+            text-align: center;
+            font-size: 1.5rem;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        .categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .category-btn {
+            background-color: #f0f2f5;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #555;
+            transition: all 0.2s;
+        }
+
+            .category-btn:hover {
+                background-color: #e4e6e9;
+            }
+
+            .category-btn.active {
+                background-color: var(--primary-color);
+                color: white;
+            }
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+            gap: 10px;
+            justify-items: center;
+            min-height: 200px; /* 카테고리 전환 시 높이 유지 */
+            align-content: start;
+        }
+
+        .emoji-item {
+            font-size: 2rem;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: transform 0.1s, background-color 0.2s;
+            user-select: none;
+        }
+
+            .emoji-item:hover {
+                background-color: #f0f2f5;
+                transform: scale(1.2);
+            }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: bold;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+            z-index: 1000;
+        }
+
+            .toast.show {
+                opacity: 1;
+                visibility: visible;
+            }
+        /* 모달 배경 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(3px);
+        }
+
+       
+
+        /* 닫기 버튼 */
+        .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #aaa;
+        }
+
+            .close-btn:hover {
+                color: #000;
+            }
+
+        .modal-content h2 {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+
+        .modal-content ul {
+            padding-left: 20px;
+        }
+
+        .modal-content li {
+            margin-bottom: 8px;
+        }
+        /* 1. 컨테이너에 relative 설정 (버튼 배치를 위해) */
+        .container {
+            position: relative; /* 우상단 버튼 배치의 기준점 */
+            width: 100%;
+            max-width: 1000px;
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            padding-top: 40px; /* 버튼 공간 확보 */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        /* 2. '이모지란?' 버튼 전용 스타일 (카테고리 버튼과 차별화) */
+        #infoBtn {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: transparent;
+            border: 1.5px solid #9C27B0;
+            color: #9C27B0;
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        #infoBtn:hover {
+            background: #9C27B0;
+            color: white;
+        }
+
+        /* 3. 팝업 크기 제한 및 내부 스크롤 설정 */
+        .modal-content {
+            background-color: #fff;
+            margin: 5vh auto; /* 화면 상단에서 5% 여백 */
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+    
+            /* 핵심: 크기 제한 및 스크롤 */
+            max-height: 85vh; /* 화면 높이의 85%까지만 커짐 */
+            overflow-y: auto; /* 내용이 많으면 내부 스크롤 생성 */
+    
+            line-height: 1.6;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+            position: relative;
+        }
+
+        /* 스크롤바 디자인 (선택 사항) */
+        .modal-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        .modal-content::-webkit-scrollbar-thumb {
+            background: #ddd;
+            border-radius: 10px;
+        }
+        #copyAllBtn {
+            background-color: #4CAF50; /* 초록색 계열로 차별화 */
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+            #copyAllBtn:hover {
+                background-color: #45a049;
+            }
+
+        /* 복사 성공 시 반짝이는 피드백 효과 */
+        .copy-success {
+            background-color: #2196F3 !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- 우측 상단으로 이동된 버튼 -->
+        <button id="infoBtn">❓ 이모지란?</button>
+
+        <h1>😀 이모지 모음</h1>
+
+        <div class="categories" id="categoryContainer">
+            <!-- 카테고리 버튼들 -->
+        </div>
+
+        <!-- 카테고리 버튼들 아래, 이모지 그리드 위에 추가 -->
+        <div class="action-area" style="text-align: right; margin-bottom: 15px;">
+            <button id="copyAllBtn" style="display: none;">📋 전부 복사</button>
+        </div>
+
+        <div class="emoji-grid" id="emojiContainer">
+            <!-- 이모지들 -->
+        </div>
+    </div>
+
+    <div class="toast" id="toast">복사되었습니다!</div>
+    <!-- body 태그 닫기 직전에 모달 레이아웃 추가 -->
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2 style="color: #9C27B0; margin-bottom: 20px;">✨ 이모지(Emoji) 가이드</h2>
+
+            <!-- 1. 정의 섹션 -->
+            <section style="margin-bottom: 25px;">
+                <h3 style="border-left: 4px solid #9C27B0; padding-left: 10px;">❓ 이모지란?</h3>
+                <p style="line-height: 1.6; color: #444;">
+                    이모지는 그림(E) + 문자(Moji)의 합성어로, 디지털 환경에서 감정, 사물, 장소 등을 나타내는 <strong>시각적 문자</strong>입니다. 텍스트만으로는 전달하기 어려운 미묘한 뉘앙스를 풍부하게 만들어 줍니다.
+                </p>
+            </section>
+
+            <!-- 2. 사용 예시 섹션 -->
+            <section style="margin-bottom: 25px;">
+                <h3 style="border-left: 4px solid #9C27B0; padding-left: 10px;">📝 사용 예시</h3>
+                <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; font-style: italic; color: #555;">
+                    "오늘 수업 정말 즐거웠어요! 🌟"<br>
+                    "공지사항을 반드시 확인해 주세요. ⚠️"<br>
+                    "이번 주말에 같이 캠핑 가요! 🏕️"
+                </div>
+            </section>
+
+            <!-- 3. 주요 활용처 섹션 -->
+            <section>
+                <h3 style="border-left: 4px solid #9C27B0; padding-left: 10px;">🏫 주요 활용처</h3>
+                <ul style="list-style: none; padding-left: 5px;">
+                    <li style="margin-bottom: 10px;"><strong>📍 수업 자료:</strong> 추상적인 단어 옆에 이모지를 배치해 학생들의 직관적인 이해와 암기를 돕습니다.</li>
+                    <li style="margin-bottom: 10px;"><strong>📍 게시판 글쓰기:</strong> 제목에 핵심 이모지를 넣어 가독성을 높이고 클릭을 유도합니다.</li>
+                    <li style="margin-bottom: 10px;"><strong>📍 메신저 소통:</strong> 딱딱한 업무 지시나 공지를 부드럽고 친근하게 완화해 줍니다.</li>
+                    <li style="margin-bottom: 10px;"><strong>📍 SNS 및 콘텐츠:</strong> 자막이나 본문에 생동감을 불어넣어 시각적 재미를 더합니다.</li>
+                </ul>
+            </section>
+
+            <p style="font-size: 0.85rem; color: #888; border-top: 1px solid #eee; margin-top: 20px; padding-top: 10px; text-align: center;">
+                ※ 이모지를 적절히 활용하여 더 스마트한 소통을 시작해 보세요!
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // 추후 전체 이모지를 넣을 때 띄어쓰기로 구분하여 문자열에 추가하시면 됩니다.
+        const emojiData = {
+            "😀 얼굴 (표정)": "😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 ☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😶‍🌫️ 😏 😒 🙄 😬 😮‍💨 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 😵‍💫 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👹 👺 👻 👽 👾 🤖".split(" "),
+            "❤️ 하트 및 감정": "💋 💌 💘 💝 💖 💗 💓 💞 💕 💟 ❣️ 💔 ❤️‍🔥 ❤️‍🩹 ❤️ 🧡 💛 💚 💙 🩵 💜 🤎 🖤 🩶 🤍 💯 💢 💥 💫 💦 💨 🕳️ 💣 💬 👁️‍🗨️ 🗨️ 🗯️ 💭 💤".split(" "),
+            "👋 손동작": "👋 🤚 🖐 ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪 🦾 🫱 🫲 🫳 🫴 🫰 🫵".split(" "),
+            "🧑‍🦱 사람 및 신체": "🦵 🦶 🦿 👂 🦻 👃 🫀 🫁 🧠 🦷 🦴 👀 👁️ 👅 👄 🫦 👶 👧 🧒 👦 👩 🧑 👨 👩‍🦱 🧑‍🦱 👨‍🦱 👩‍🦰 🧑‍🦰 👨‍🦰 👱‍♀️ 👱 👱‍♂️ 👩‍🦳 🧑‍🦳 👨‍🦳 👩‍🦲 🧑‍🦲 👨‍🦲 🧔 🧔‍♀️ 🧔‍♂️ 👵 🧓 👴 👲 👳‍♀️ 👳 👳‍♂️ 🧕 🥷 🦸‍♀️ 🦸 🦸‍♂️ 🦹‍♀️ 🦹 🦹‍♂️ 🤶 🧑‍🎄 🎅 🧙‍♀️ 🧙 🧙‍♂️ 🧝‍♀️ 🧝 🧝‍♂️ 🧛‍♀️ 🧛 🧛‍♂️ 🧟‍♀️ 🧟 🧟‍♂️ 🧞‍♀️ 🧞 🧞‍♂️ 🧜‍♀️ 🧜 🧜‍♂️ 🧚‍♀️ 🧚 🧚‍♂️ 👼 🤰 🫄 🫃 🤱 👩‍🍼 🧑‍🍼 👨‍🍼".split(" "),
+            "👮 직업 및 역할": "👮‍♀️ 👮 👮‍♂️ 🕵️‍♀️ 🕵️ 🕵️‍♂️ 💂‍♀️ 💂 💂‍♂️ 👷‍♀️ 👷 👷‍♂️ 🤴 👸 🫅 🤵‍♀️ 🤵 🤵‍♂️ 👰‍♀️ 👰 👰‍♂️ 👩‍⚕️ 🧑‍⚕️ 👨‍⚕️ 👩‍🎓 🧑‍🎓 👨‍🎓 👩‍🏫 🧑‍🏫 👨‍🏫 👩‍⚖️ 🧑‍⚖️ 👨‍⚖️ 👩‍🌾 🧑‍🌾 👨‍🌾 👩‍🍳 🧑‍🍳 👨‍🍳 👩‍🔧 🧑‍🔧 👨‍🔧 👩‍🏭 🧑‍🏭 👨‍🏭 👩‍💼 🧑‍💼 👨‍💼 👩‍🔬 🧑‍🔬 👨‍🔬 👩‍💻 🧑‍💻 👨‍💻 👩‍🎤 🧑‍🎤 👨‍🎤 👩‍🎨 🧑‍🎨 👨‍🎨 👩‍✈️ 🧑‍✈️ 👨‍✈️ 👩‍🚀 🧑‍🚀 👨‍🚀 👩‍🚒 🧑‍🚒 👨‍🚒".split(" "),
+            "👨‍👩‍👧 가족 및 활동": "🙇‍♀️ 🙇 🙇‍♂️ 💁‍♀️ 💁 💁‍♂️ 🙅‍♀️ 🙅 🙅‍♂️ 🙆‍♀️ 🙆 🙆‍♂️ 🙋‍♀️ 🙋 🙋‍♂️ 🧏‍♀️ 🧏 🧏‍♂️ 🤦‍♀️ 🤦 🤦‍♂️ 🤷‍♀️ 🤷 🤷‍♂️ 🚶‍♀️ 🚶 🚶‍♂️ 👩‍🦯 🧑‍🦯 👨‍🦯 🧎‍♀️ 🧎 🧎‍♂️ 🏃‍♀️ 🏃 🏃‍♂️ 🧍‍♀️ 🧍 🧍‍♂️ 💃 🕺 🕴️ 👯‍♀️ 👯 👯‍♂️ 🧖‍♀️ 🧖 🧖‍♂️ 💆‍♀️ 💆 💆‍♂️ 💇‍♀️ 💇 💇‍♂️ 🧑‍🤝‍🧑 👭 👫 👬 💏 👩‍❤️‍💋‍👨 👨‍❤️‍💋‍👨 👩‍❤️‍💋‍👩 💑 👩‍❤️‍👨 👨‍❤️‍👨 👩‍❤️‍👩 👪 👨‍👩‍👦 👨‍👩‍👧 👨‍👩‍👧‍👦 👨‍👩‍👦‍👦 👨‍👩‍👧‍👧 👨‍👨‍👦 👨‍👨‍👧 👨‍👨‍👧‍👦 👨‍👨‍👦‍👦 👨‍👨‍👧‍👧 👩‍👩‍👦 👩‍👩‍👧 👩‍👩‍👧‍👦 👩‍👩‍👦‍👦 👩‍👩‍👧‍👧 👨‍👦 👨‍👦‍👦 👨‍👧 👨‍👧‍👦 👨‍👧‍👧 👩‍👦 👩‍👦‍👦 👩‍👧 👩‍👧‍👦 👩‍👧‍👧 🗣️ 👤 👥 🫂".split(" "),
+            "🐶 동물 및 곤충": "🐵 🐒 🦍 🦧 🐶 🐕 🦮 🐕‍🦺 🐩 🐺 🦊 🦝 🐱 🐈 🐈‍⬛ 🦁 🐯 🐅 🐆 🐴 🐎 🦄 🦓 🦌 🦬 🐮 🐂 🐃 🐄 🐷 🐖 🐗 🐽 🐏 🐑 🐐 🐪 🐫 🦙 🦒 🐘 🦣 🦏 🦛 🐭 🐁 🐀 🐹 🐰 🐇 🐿️ 🦫 🦔 🦇 🐻 🐻‍❄️ 🐨 🐼 🦥 🦦 🦨 🦘 🦡 🐾 🦃 🐔 🐓 🐣 🐤 🐥 🐦 🐧 🕊️ 🦅 🦆 🦢 🦉 🦤 🪶 🦩 🦚 🦜 🐸 🐊 🐢 🦎 🐍 🐲 🐉 🦕 🦖 🐳 🐋 🐬 🦭 🐟 🐠 🐡 🦈 🐙 🐚 🪸 🐌 🦋 🐛 🐜 🐝 🪲 🐞 🦗 🪳 🕷️ 🕸️ 🦂 🦟 🪰 🪱 🦠".split(" "),
+            "🌿 식물 및 꽃": "💐 🌸 💮 🏵️ 🌹 🥀 🌺 🌻 🌼 🌷 🪷 🌱 🪴 🌲 🌳 🌴 🌵 🌾 🌿 ☘️ 🍀 🍁 🍂 🍃 🍄 🌰".split(" "),
+            "🌤️ 날씨 및 우주": "🌍 🌎 🌏 🌐 🌑 🌒 🌓 🌔 🌕 🌖 🌗 🌘 🌙 🌚 🌛 🌜 ☀️ 🌝 🌞 ⭐ 🌟 🌠 🪐 ☁️ ⛅ ⛈️ 🌤️ 🌥️ 🌦️ 🌧️ 🌨️ 🌩️ 🌪️ 🌫️ 🌬️ 🌀 🌈 🌂 ☂️ ☔ ⚡ ❄️ ☃️ ⛄ ☄️ 🔥 💧 🌊".split(" "),
+            "🍎 과일 및 채소": "🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶️ 🫑 🌽 🥕 🫒 🧄 🧅 🥔 🍠 🫘 🫛".split(" "),
+            "🍔 요리 및 음식": "🥐 🥯 🍞 🥖 🥨 🧀 🥚 🍳 🧈 🥞 🧇 🥓 🥩 🍗 🍖 🦴 🌭 🍔 🍟 🍕 🫓 🥪 🥙 🧆 🌮 🌯 🫔 🥗 🥘 🫕 🥫 🍝 🍜 🍲 🍛 🍣 🍱 🥟 🦪 🍤 🍙 🍚 🍘 🍥 🥠 🥮 🍢 🍡 🍧 🍨 🍦 🥧 🧁 🍰 🎂 🍮 🍭 🍬 🍫 🍿 🍩 🍪 🌰 🥜 🍯".split(" "),
+            "☕ 음료 및 식기": "🥛 🍼 🫖 ☕ 🍵 🧃 🥤 🧋 🍶 🍺 🍻 🥂 🍷 🥃 🍸 🍹 🧉 🍾 🧊 🥄 🍴 🍽️ 🥣 🥡 🥢 🧂".split(" "),
+            "🚗 교통수단": "🚗 🚕 🚙 🚌 🚎 🏎️ 🚓 🚑 🚒 🚐 🛻 🚚 🚛 🚜 🦯 🦽 🦼 🛴 🚲 🛵 🏍️ 🛺 🚨 🚔 🚍 🚘 🚖 🚡 🚠 🚟 🚃 🚋 🚞 🚝 🚄 🚅 🚈 🚂 🚆 🚇 🚊 🚉 ✈️ 🛫 🛬 🛩️ 💺 🛰️ 🚀 🛸 🚁 🛶 ⛵ 🚤 🛥️ 🛳️ ⛴️ 🚢 ⚓ 🛟".split(" "),
+            "🏠 장소 및 건물": "🏔️ ⛰️ 🌋 🗻 🏕️ ⛺ 🛖 🏠 🏡 🏘️ 🏚️ 🏗️ 🏭 🏢 🏬 🏣 🏤 🏥 🏦 🏨 🏪 🏫 🏩 💒 🏛️ ⛪ 🕌 🕍 🛕 🕋 ⛩️ 🛤️ 🛣️ 🗾 🎑 🏞️ 🌅 🌄 🌇 🌆 🏙️ 🌃 🌌 🌉 🌁 🏟️ 🎡 🎢 🎠 ⛲ ⛱️ 🏖️ 🏝️ 🏜️".split(" "),
+            "⚽ 스포츠 및 게임": "⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🪀 🏓 🏸 🏒 🏑 🥍 🏏 🪃 🥅 ⛳ 🪁 🏹 🎣 🤿 🥊 🥋 🎽 🛹 🛼 🛷 ⛸️ 🥌 🎿 ⛷️ 🏂 🪂 🏋️‍♀️ 🏋️ 🏋️‍♂️ 🤼‍♀️ 🤼 🤼‍♂️ 🤸‍♀️ 🤸 🤸‍♂️ ⛹️‍♀️ ⛹️ ⛹️‍♂️ 🤺 🤾‍♀️ 🤾 🤾‍♂️ 🏌️‍♀️ 🏌️ 🏌️‍♂️ 🏇 🧘‍♀️ 🧘 🧘‍♂️ 🏄‍♀️ 🏄 🏄‍♂️ 🏊‍♀️ 🏊 🏊‍♂️ 🤽‍♀️ 🤽 🤽‍♂️ 🚣‍♀️ 🚣 🚣‍♂️ 🧗‍♀️ 🧗 🧗‍♂️ 🚵‍♀️ 🚵 🚵‍♂️ 🚴‍♀️ 🚴 🚴‍♂️ 🏆 🥇 🥈 🥉 🏅 🎖️ 🏵️ 🎗️ 🎫 🎟️ 🎲 ♟️ 🎯 🎳 🎮 🎰 🧩".split(" "),
+            "🎨 취미 및 예술": "🎨 🧵 🧶 🎼 🎵 🎶 🎙️ 🎚️ 🎛️ 🎤 🎧 🎷 🎸 🎹 🎺 🎻 🪕 🥁 🪘 🪗 🎬 🎞️ 📽️ 🎭 🩰 🎪 🪄".split(" "),
+            "👕 의류 및 장신구": "👓 🕶️ 🥽 🥼 🦺 👔 👕 👖 🧣 🧤 🧥 🧦 👗 👘 🥻 🩱 🩲 🩳 👙 👚 👛 👜 👝 🎒 🩴 👞 👟 🥾 🥿 👠 👡 🩰 👢 👑 👒 🎩 🎓 🧢 🪖 ⛑️ 💄 💍 💎".split(" "),
+            "📱 전자기기 및 문구": "📱 📲 💻 ⌨️ 🖥️ 🖨️ 🖱️ 🖲️ 🕹️ 🗜️ 💽 💾 💿 📀 📼 📷 📸 📹 🎥 📽️ 📞 ☎️ 📟 📠 📺 📻 🧭 ⏱️ ⏲️ ⏰ 🕰️ ⌛ ⏳ 📡 🔋 🔌 💡 🔦 🕯️ 🪔 ✉️ 📩 📨 📧 💌 📥 📤 📦 🏷️ 📪 📫 📬 📭 📮 📯 📜 📃 📄 📑 🧾 📊 📈 📉 🗒️ 🗓️ 📆 📅 🗑️ 📇 🗃️ 🗳️ 🗄️ 📋 📁 📂 🗂️ 🗞️ 📰 📓 📔 📒 📕 📗 📘 📙 📚 📖 🔖 🧷 🔗 📎 🖇️ 📐 📏 🧮 📌 📍 ✂️ 🖊️ 🖋️ ✒️ 🖌️ 🖍️ 📝 ✏️ 🔍 🔎".split(" "),
+            "🔨 도구 및 기타 사물": "🔨 ⚒️ 🛠️ ⛏️ 🪚 🔩 ⚙️ 🧱 ⛓️ 🧲 🔫 💣 🧨 🪓 🔪 🗡️ ⚔️ 🛡️ 🚬 ⚰️ ⚱️ 🏺 🔮 📿 🧿 💈 ⚗️ 🔭 🔬 🕳️ 🩹 🩺 💊 💉 🩸 🧬 🦠 🧫 🧪 🧹 🪠 🧺 🧻 🚽 🚰 🚿 🛁 🛀 🧼 🪒 🧽 🪣 🧴 🛎️ 🔑 🗝️ 🚪 🪑 🛋️ 🛏️ 🛌 🧸 🪆 🖼️ 🪞 🪟 🛍️ 🛒 🎁 🎈 🎏 🎀 🎊 🎉 🎎 🏮 🎐 🧧 💸 💵 💴 💶 💷 🪙 💰 💳 🧯 🛢️ ⚖️ 🧰 🔧 🪜 🪧 🪤".split(" "),
+            "⛔ 기호 및 마크": "🛑 ⛔ 🚫 🔇 🔕 🚭 🚷 🚯 🚳 🚱 🔞 📵 ❗️ ❕ ❓ ❔ ‼️ ⁉️ 🔅 🔆 〽️ ⚠️ 🚸 🔱 ⚜️ 🔰 ♻️ ✅ ☑️ ✔️ ❌ ❎ ❇️ ✳️ 🈯 💹 🌐 💠 Ⓜ️ 🌀 💤 🏧 🚾 ♿ 🅿️ 🈳 🈂️ 🛂 🛃 🛄 🛅 🚹 🚺 🚼 🚻 🚮 🎦 📶 🈁 🔣 ℹ️ 🔤 🔡 🔠 🆖 🆗 🆙 🆒 🆕 🆓 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ 🔟 🔢 #️⃣ *️⃣ ⏏️ ▶️ ⏸️ ⏯️ ⏹️ ⏺️ ⏭️ ⏮️ ⏩ ⏪ ⏫ ⏬ ◀️ 🔼 🔽 ➡️ ⬅️ ⬆️ ⬇️ ↗️ ↘️ ↙️ ↖️ ↕️ ↔️ ↪️ ↩️ ⤴️ ⤵️ 🔀 🔁 🔂 🔄 🔃 🎵 🎶 ➕ ➖ ➗ ✖️ ♾️ 💲 💱 ™️ ©️ ®️ 〰️ ➰ ➿ 🔚 🔙 🔛 🔝 🔜 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ ◾ ◽ ◼️ ◻️ 🟥 🟧 🟨 🟩 🟦 🟪 ⬛ ⬜ 🟫 ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ ⛎ ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ 🛐 ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ ⛎ 🅰️ 🅱️ 🆎 🅾️ 🆘 ♠️ ♣️ ♥️ ♦️ 🃏 🎴 🀄".split(" "),
+            "🇰🇷 국기": "🏁 🚩 🎌 🏴 🏳️ 🏳️‍🌈 🏳️‍⚧️ 🏴‍☠️ 🇦🇫 🇦🇽 🇦🇱 🇩🇿 🇦🇸 🇦🇩 🇦🇴 🇦🇮 🇦🇶 🇦🇬 🇦🇷 🇦🇲 🇦🇼 🇦🇺 🇦🇹 🇦🇿 🇧🇸 🇧🇭 🇧🇩 🇧🇧 🇧🇾 🇧🇪 🇧🇿 🇧🇯 🇧🇲 🇧🇹 🇧🇴 🇧🇦 🇧🇼 🇧🇷 🇮🇴 🇻🇬 🇧🇳 🇧🇬 🇧🇫 🇧🇮 🇰🇭 🇨🇲 🇨🇦 🇮🇨 🇨🇻 🇧🇶 🇰🇾 🇨🇫 🇹🇩 🇨🇱 🇨🇳 🇨🇽 🇨🇨 🇨🇴 🇰🇲 🇨🇬 🇨🇩 🇨🇰 🇨🇷 🇨🇮 🇭🇷 🇨🇺 🇨🇼 🇨🇾 🇨🇿 🇩🇰 🇩🇯 🇩🇲 🇩🇴 🇪🇨 🇪🇬 🇸🇻 🇬🇶 🇪🇷 🇪🇪 🇸🇿 🇪🇹 🇪🇺 🇫🇰 🇫🇴 🇫🇯 🇫🇮 🇫🇷 🇬🇫 🇵🇫 🇹🇫 🇬🇦 🇬🇲 🇬🇪 🇩🇪 🇬🇭 🇬🇮 🇬🇷 🇬🇱 🇬🇩 🇬🇵 🇬🇺 🇬🇹 🇬🇬 🇬🇳 🇬🇼 🇬🇾 🇭🇹 🇭🇳 🇭🇰 🇭🇺 🇮🇸 🇮🇳 🇮🇩 🇮🇷 🇮🇶 🇮🇪 🇮🇲 🇮🇱 🇮🇹 🇯🇲 🇯🇵 🇯🇪 🇯🇴 🇰🇿 🇰🇪 🇰🇮 🇽🇰 🇰🇼 🇰🇬 🇱🇦 🇱🇻 🇱🇧 🇱🇸 🇱🇷 🇱🇾 🇱🇮 🇱🇹 🇱🇺 🇲🇴 🇲🇰 🇲🇬 🇲🇼 🇲🇾 🇲🇻 🇲🇱 🇲🇹 🇲🇭 🇲🇶 🇲🇷 🇲🇺 🇾🇹 🇲🇽 🇫🇲 🇲🇩 🇲🇨 🇲🇳 🇲🇪 🇲🇸 🇲🇦 🇲🇿 🇲🇲 ＮＡ 🇳🇷 🇳🇵 🇳🇱 🇳🇨 🇳🇿 🇳🇮 🇳🇪 🇳🇬 🇳🇺 🇳🇫 🇰🇵 🇲🇵 🇳🇴 🇴🇲 🇵🇰 🇵🇼 🇵🇸 🇵🇦 🇵🇬 🇵🇾 🇵🇪 🇵🇭 🇵🇳 🇵🇱 🇵🇹 🇵🇷 🇶🇦 🇷🇪 🇷🇴 🇷🇺 🇷🇼 🇼🇸 🇸🇲 🇸🇹 🇸🇦 🇸🇳 🇷🇸 🇸🇨 🇸🇱 🇸🇬 🇸🇽 🇸🇰 🇸🇮 🇬🇸 🇸🇧 🇸🇴 🇿🇦 🇰🇷 🇸🇸 🇪🇸 🇱🇰 🇧🇱 🇸🇭 🇰🇳 🇱🇨 🇵🇲 🇻🇨 🇸🇩 🇸🇷 🇸🇪 🇨🇭 🇸🇾 🇹🇼 🇹🇯 🇹🇿 🇹🇭 🇹🇱 🇹🇬 🇹🇰 🇹🇴 🇹🇹 🇹🇳 🇹🇷 🇹🇲 🇹🇨 🇹🇻 🇻🇮 🇺🇬 🇺🇦 🇦🇪 🇬🇧 🏴󠁧󠁢󠁥󠁮󠁧󠁿 🏴󠁧󠁢󠁳󠁣󠁴󠁿 🏴󠁧󠁢󠁷󠁬󠁳󠁿 🇺🇸 🇺🇾 🇺🇿 🇻🇺 🇻🇦 🇻🇪 🇻🇳 🇼🇫 🇪🇭 🇾🇪 🇿🇲 🇿🇼".split(" ")
+        };
+
+        const categoryContainer = document.getElementById('categoryContainer');
+        const emojiContainer = document.getElementById('emojiContainer');
+        const toast = document.getElementById('toast');
+
+        const modal = document.getElementById("infoModal");
+        const infoBtn = document.getElementById("infoBtn");
+        const closeBtn = document.querySelector(".close-btn");
+
+        const copyAllBtn = document.getElementById('copyAllBtn');
+        
+
+     
+        // 2. 전체 복사 버튼 클릭 이벤트
+        copyAllBtn.addEventListener('click', () => {
+            // 그리드 내 모든 이모지 텍스트 추출 (공백 없이 합침)
+            const allEmojis = Array.from(emojiContainer.querySelectorAll('.emoji-item'))
+                .map(item => item.textContent)
+                .join(' '); // 띄워쓰기를 포함하려면 ' ' 사용, 없으려면 '' 사용
+
+            if (!allEmojis) return;
+
+            // 클립보드 복사
+            navigator.clipboard.writeText(allEmojis).then(() => {
+                // 시각적 피드백
+                const originalText = copyAllBtn.textContent;
+                copyAllBtn.textContent = '✅ 복사 완료!';
+                copyAllBtn.classList.add('copy-success');
+
+                setTimeout(() => {
+                    copyAllBtn.textContent = originalText;
+                    copyAllBtn.classList.remove('copy-success');
+                }, 1500);
+            });
+        });
+
+        // 버튼 클릭 시 팝업 열기
+        infoBtn.onclick = () => {
+            modal.style.display = "block";
+        };
+
+        // 닫기 버튼 클릭 시 팝업 닫기
+        closeBtn.onclick = () => {
+            modal.style.display = "none";
+        };
+
+        // 팝업 바깥쪽 클릭 시 닫기
+        window.onclick = (event) => {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        };
+
+        // 카테고리 버튼 생성
+        Object.keys(emojiData).forEach((category, index) => {
+            const btn = document.createElement('button');
+            btn.className = `category-btn ${index === 0 ? 'active' : ''}`;
+            btn.textContent = category;
+            btn.onclick = () => {
+                document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                renderEmojis(category);
+            };
+            categoryContainer.appendChild(btn);
+        });
+
+        // 클립보드 복사 함수
+        function copyToClipboard(emoji) {
+            navigator.clipboard.writeText(emoji).then(() => {
+                toast.textContent = `${emoji} 복사되었습니다!`;
+                toast.classList.add('show');
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 1500);
+            }).catch(err => {
+                console.error('복사 실패:', err);
+            });
+        }
+
+        // 이모지 렌더링
+        function renderEmojis(category) {
+            emojiContainer.innerHTML = '';
+            emojiData[category].forEach(emoji => {
+                if (!emoji.trim()) return; // 빈 공백 무시
+                const div = document.createElement('div');
+                div.className = 'emoji-item';
+                div.textContent = emoji;
+                div.onclick = () => copyToClipboard(emoji);
+                emojiContainer.appendChild(div);
+            });
+            // 이모지가 생성된 후 버튼 보이기
+            if (emojiContainer.children.length > 0) {
+                copyAllBtn.style.display = 'inline-block';
+            }
+        }
+
+        // 초기 렌더링 (첫 번째 카테고리)
+        renderEmojis(Object.keys(emojiData)[0]);
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인공 신경망 시각화</title>
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome (CDN) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+            background-color: #f1f5f9;
+            margin: 0;
+            overflow: hidden; /* 윈도우 스크롤바 숨김 */
+        }
+        
+        /* 커스텀 스크롤바 (사이드바용) */
+        aside::-webkit-scrollbar { width: 6px; }
+        aside::-webkit-scrollbar-track { background: transparent; }
+        aside::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+
+        /* 캔버스 컨테이너 스타일 */
+        #canvas-wrapper {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            box-shadow: inset 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 슬라이더 커스텀 스타일 */
+        input[type=range] {
+            accent-color: #3b82f6;
+        }
+
+        /* 커스텀 모달 애니메이션 */
+        .modal-overlay {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            transform: scale(0.95);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col text-slate-800">
+
+    <!-- 상단 헤더 -->
+    <header class="bg-white shadow-sm py-3 px-6 flex items-center justify-between z-10">
+        <h1 class="text-xl font-bold flex items-center gap-2">
+            <div class="bg-blue-100 text-blue-600 p-2 rounded-lg">
+                <i class="fas fa-brain"></i>
+            </div>
+            인공 신경망 시각화
+        </h1>
+        <div class="flex items-center gap-3">
+            <button id="help-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md text-sm font-bold transition flex items-center gap-1 shadow-sm border border-slate-200">
+                <i class="fas fa-question-circle"></i> 신경망이란?
+            </button>
+            <div class="text-sm text-slate-500 font-medium hidden sm:block">
+                AI 구조 및 데이터 흐름 이해
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 레이아웃 -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- 왼쪽 컨트롤 패널 -->
+        <aside class="w-80 bg-white border-r border-slate-200 flex flex-col z-10 shadow-lg">
+            <div class="flex-1 overflow-y-auto p-5 space-y-6">
+                
+                <!-- 입력층 설정 -->
+                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <h3 class="font-bold text-blue-800 mb-3 flex justify-between items-center">
+                        <span><i class="fas fa-sign-in-alt mr-2"></i>입력층 (Input)</span>
+                        <span class="bg-white px-2 py-1 rounded shadow-sm text-sm" id="val-input">3</span>
+                    </h3>
+                    <input type="range" id="input-nodes" min="1" max="15" value="3" class="w-full cursor-pointer">
+                    <p class="text-xs text-blue-600 mt-2">외부에서 들어오는 데이터의 수</p>
+                </div>
+
+                <!-- 은닉층 설정 관리영역 -->
+                <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-emerald-800"><i class="fas fa-layer-group mr-2"></i>은닉층 (Hidden)</h3>
+                        <button id="add-hidden-btn" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md shadow transition flex items-center gap-1">
+                            <i class="fas fa-plus"></i> 층 추가
+                        </button>
+                    </div>
+                    <div id="hidden-layers-container" class="space-y-4">
+                        <!-- JS로 은닉층 슬라이더들이 동적 생성됩니다 -->
+                    </div>
+                    <p class="text-xs text-emerald-600 mt-3 border-t border-emerald-200 pt-2 leading-tight">
+                        데이터의 특징을 학습하는 계층<br>
+                        <span class="text-emerald-500 font-semibold">※ 화면 표시를 위해 최대 5개로 제한됨</span>
+                    </p>
+                </div>
+
+                <!-- 출력층 설정 -->
+                <div class="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                    <h3 class="font-bold text-purple-800 mb-3 flex justify-between items-center">
+                        <span><i class="fas fa-sign-out-alt mr-2"></i>출력층 (Output)</span>
+                        <span class="bg-white px-2 py-1 rounded shadow-sm text-sm" id="val-output">2</span>
+                    </h3>
+                    <input type="range" id="output-nodes" min="1" max="10" value="2" class="w-full cursor-pointer accent-purple-600">
+                    <p class="text-xs text-purple-600 mt-2">최종 예측/분류 결과의 수</p>
+                </div>
+
+                <!-- 표시 옵션 (가중치 및 편향) -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-2">
+                    <h3 class="font-bold text-slate-700 mb-3"><i class="fas fa-eye mr-2"></i>표시 옵션</h3>
+                    <label class="flex items-center cursor-pointer">
+                        <div class="relative">
+                            <input type="checkbox" id="toggle-params" class="sr-only">
+                            <div class="block bg-slate-300 w-10 h-6 rounded-full transition-colors duration-300" id="toggle-bg"></div>
+                            <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-300" id="toggle-dot"></div>
+                        </div>
+                        <div class="ml-3 text-slate-600 font-medium text-sm">가중치(w) / 편향(b) 보기</div>
+                    </label>
+                </div>
+
+                <!-- LLM 규모 정보 버튼 -->
+                <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-100 mt-2 hover:bg-indigo-100 transition cursor-pointer flex justify-between items-center" id="llm-info-btn">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-robot text-indigo-600"></i>
+                        <span class="font-bold text-indigo-800 text-sm">요즘 LLM의 크기는?</span>
+                    </div>
+                    <i class="fas fa-question-circle text-indigo-500 text-lg"></i>
+                </div>
+            </div>
+            
+            <!-- 하단 애니메이션 제어부 -->
+            <div class="p-5 border-t border-slate-200 bg-slate-50">
+                <button id="toggle-anim-btn" class="w-full bg-slate-800 hover:bg-black text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-play"></i>
+                    <span>데이터 흐름 재생</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- 우측 캔버스 (시각화 영역) -->
+        <section class="flex-1 p-4 relative flex flex-col">
+            <div id="canvas-wrapper" class="flex-1 rounded-2xl relative overflow-hidden">
+                <canvas id="nn-canvas" class="absolute top-0 left-0 w-full h-full"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <!-- 커스텀 모달 (경고창) -->
+    <div id="custom-modal" class="modal-overlay fixed inset-0 bg-slate-900/60 z-50 flex justify-center items-center backdrop-blur-sm">
+        <div class="modal-content bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center border-t-4 border-amber-500">
+            <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-amber-100 mb-4 text-amber-500 text-3xl">
+                <i class="fas fa-exclamation"></i>
+            </div>
+            <h3 class="text-xl font-bold text-slate-800 mb-2" id="modal-title">알림</h3>
+            <p class="text-slate-600 mb-6" id="modal-message">메시지 내용</p>
+            <button id="modal-close-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">
+                확인
+            </button>
+        </div>
+    </div>
+
+    <!-- 도움말 모달 (신경망 설명) -->
+    <div id="help-modal" class="modal-overlay fixed inset-0 bg-slate-900/60 z-50 flex justify-center items-center backdrop-blur-sm">
+        <div class="modal-content bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col border-t-4 border-blue-500 overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fas fa-book text-blue-500"></i> 인공 신경망(ANN) 이해하기
+                </h3>
+                <button id="help-close-btn" class="text-slate-400 hover:text-red-500 transition text-xl">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto text-slate-700 space-y-5 text-sm leading-relaxed">
+                <div>
+                    <h4 class="font-bold text-lg text-blue-700 mb-1"><i class="fas fa-network-wired w-5"></i> 인공 신경망(Artificial Neural Network)</h4>
+                    <p>인간 뇌의 신경망 구조를 모방하여 만든 기계학습(머신러닝) 모델입니다. 데이터를 입력받아 복잡한 패턴을 스스로 학습하고 결과를 예측합니다.</p>
+                </div>
+                
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                    <h4 class="font-bold text-md text-slate-800 mb-2"><i class="fas fa-circle-nodes w-5"></i> 뉴런(Neuron) / 노드(Node)</h4>
+                    <p class="mb-2">신경망을 구성하는 가장 작은 단위(동그라미)입니다. 뉴런은 이전 층에서 데이터를 받아 다음의 계산을 수행합니다.</p>
+                    <ul class="list-disc list-inside space-y-1 ml-2 text-slate-600">
+                        <li><b>가중치(Weight):</b> 입력된 데이터의 중요도를 조절하는 값 (연결선의 굵기나 강도를 의미)</li>
+                        <li><b>편향(Bias):</b> 결과값이 너무 한쪽으로 치우치지 않도록 조절해주는 추가 기준값</li>
+                        <li><b>활성화 함수(Activation):</b> 계산된 값을 다음 층으로 넘길지 말지 결정하는 필터 (예: 일정 신호 이상일 때만 통과시킴)</li>
+                    </ul>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="border-l-4 border-blue-400 pl-3">
+                        <h4 class="font-bold text-blue-600 mb-1">입력층 (Input Layer)</h4>
+                        <p class="text-xs text-slate-600">외부에서 데이터(예: 사진 픽셀, 학생 성적)를 처음으로 받아들이는 관문입니다.</p>
+                    </div>
+                    <div class="border-l-4 border-emerald-400 pl-3">
+                        <h4 class="font-bold text-emerald-600 mb-1">은닉층 (Hidden Layer)</h4>
+                        <p class="text-xs text-slate-600">데이터의 숨겨진 특징과 패턴을 복잡하게 얽혀 학습하는 공간입니다. 층이 많을수록 '딥러닝'이 됩니다.</p>
+                    </div>
+                    <div class="border-l-4 border-purple-400 pl-3">
+                        <h4 class="font-bold text-purple-600 mb-1">출력층 (Output Layer)</h4>
+                        <p class="text-xs text-slate-600">학습된 정보를 바탕으로 최종적인 예측이나 분류 결과(예: 고양이일 확률)를 내놓습니다.</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="font-bold text-lg text-slate-800 mb-3"><i class="fas fa-exchange-alt w-5"></i> 데이터 흐름 애니메이션 의미</h4>
+                    <div class="space-y-3">
+                        <div class="flex gap-3 items-start">
+                            <div class="bg-amber-100 text-amber-600 p-2 rounded shrink-0"><i class="fas fa-arrow-right"></i></div>
+                            <div>
+                                <h5 class="font-bold text-amber-600">순전파 (Forward Propagation) <span class="text-xs font-normal text-slate-500">- 노란색 입자</span></h5>
+                                <p class="text-slate-600">데이터가 입력층에서 시작해 은닉층을 거쳐 차례대로 전달되며 예측값을 만들어내는 계산 과정입니다.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3 items-start">
+                            <div class="bg-red-100 text-red-600 p-2 rounded shrink-0"><i class="fas fa-arrow-left"></i></div>
+                            <div>
+                                <h5 class="font-bold text-red-600">역전파 (Backpropagation) <span class="text-xs font-normal text-slate-500">- 빨간색 입자</span></h5>
+                                <p class="text-slate-600">예측값과 실제 정답의 차이(오차)를 계산한 뒤, 이 <b>오차를 줄이기 위해 거꾸로(출력층 → 입력층) 돌아가며 각 뉴런의 가중치를 수정</b>하는 핵심 학습 과정입니다.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LLM 규모 설명 모달 -->
+    <div id="llm-modal" class="modal-overlay fixed inset-0 bg-slate-900/60 z-50 flex justify-center items-center backdrop-blur-sm">
+        <div class="modal-content bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col border-t-4 border-indigo-500 overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fas fa-robot text-indigo-500"></i> 실제 최신 AI(LLM)의 규모
+                </h3>
+                <button id="llm-close-btn" class="text-slate-400 hover:text-red-500 transition text-xl">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto text-slate-700 space-y-5 text-sm leading-relaxed">
+                <p class="bg-indigo-50 p-3 rounded text-indigo-800 font-medium">
+                    지금 화면의 시각화는 원리 이해를 돕기 위해 아주 작게 축소한 <b>장난감 모델(Toy Model)</b>입니다. ChatGPT 같은 실제 거대 언어 모델(LLM)은 상상을 초월하는 크기를 가집니다.
+                </p>
+
+                <div class="space-y-4 mt-4">
+                    <div class="flex gap-4 items-start">
+                        <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0">1</div>
+                        <div>
+                            <h4 class="font-bold text-blue-600 text-base">입력층 (Input) : 수천 ~ 수만 개</h4>
+                            <p class="text-slate-600 mt-1">단어를 직접 입력받는 것이 아니라, 단어를 수많은 숫자의 배열(임베딩 벡터)로 변환하여 입력받습니다. 보통 한 단어당 <b>4,096개 이상의 노드(차원)</b>로 쪼개어 입력됩니다.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4 items-start">
+                        <div class="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold shrink-0">2</div>
+                        <div>
+                            <h4 class="font-bold text-emerald-600 text-base">은닉층 (Hidden) : 수십 ~ 수백 개 층</h4>
+                            <p class="text-slate-600 mt-1">이 프로그램은 5개로 제한되어 있지만, 최신 모델들은 <b>96층, 128층 이상의 아주 깊은 신경망(Deep Learning)</b> 구조를 가집니다. 각 층마다 수만 개의 노드가 복잡하게 얽혀 언어의 맥락, 문법, 지식을 추론합니다.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4 items-start">
+                        <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-bold shrink-0">3</div>
+                        <div>
+                            <h4 class="font-bold text-purple-600 text-base">출력층 (Output) : 수만 ~ 십만 개 이상</h4>
+                            <p class="text-slate-600 mt-1">LLM의 최종 목표는 <b>'다음에 올 가장 자연스러운 단어 하나'</b>를 맞추는 것입니다. 따라서 AI가 알고 있는 전체 단어 사전(약 50,000 ~ 100,000개 이상의 토큰)의 개수만큼 노드가 존재하며, 이 중 가장 확률이 높은 단어에 불이 들어옵니다.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4 pt-4 border-t border-slate-200 text-center">
+                    <p class="font-bold text-slate-800">이 모든 연결선(가중치)의 개수가 바로<br><span class="text-lg text-indigo-600">수백억 ~ 수천억 개(Parameters)</span>입니다!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 스크립트 로직 -->
+    <script>
+        // === 상태 관리 ===
+        let networkData = {
+            input: 3,
+            hidden: [4, 4], // 초기 은닉층 2개, 각 4개 노드
+            output: 2
+        };
+        const MAX_HIDDEN_LAYERS = 5;
+
+        // 색상 팔레트
+        const colors = {
+            input: '#3b82f6', // Blue
+            hidden: '#10b981', // Emerald
+            output: '#a855f7', // Purple
+            line: 'rgba(255, 255, 255, 0.15)',
+            particle: '#fbbf24', // Amber (흐르는 데이터)
+            text: '#94a3b8' // Slate 400
+        };
+
+        // 캔버스 및 컨텍스트
+        const canvas = document.getElementById('nn-canvas');
+        const ctx = canvas.getContext('2d');
+        let nodeCoordinates = []; // 계산된 노드들의 좌표 저장
+        
+        // 애니메이션 상태
+        let isAnimating = false;
+        let particles = [];
+        let animationFrameId;
+        
+        // 추가된 흐름 제어 상태
+        let animPhase = 'forward'; // 'forward' 또는 'backward'
+        let currentWaveLayer = 0;
+        let showParameters = false; // 가중치/편향 표시 여부
+        let layerLearningProgress = new Array(20).fill(0); // 층별 학습 진행도 (가중치 순차 변화 시뮬레이션용)
+
+        // === UI 엘리먼트 ===
+        const inputNodesSlider = document.getElementById('input-nodes');
+        const outputNodesSlider = document.getElementById('output-nodes');
+        const hiddenLayersContainer = document.getElementById('hidden-layers-container');
+        const addHiddenBtn = document.getElementById('add-hidden-btn');
+        const toggleAnimBtn = document.getElementById('toggle-anim-btn');
+        
+        // 토글 버튼 엘리먼트
+        const toggleParamsBtn = document.getElementById('toggle-params');
+        const toggleBg = document.getElementById('toggle-bg');
+        const toggleDot = document.getElementById('toggle-dot');
+        
+        // === 초기화 및 이벤트 바인딩 ===
+        function init() {
+            // 입력/출력 슬라이더 이벤트
+            inputNodesSlider.addEventListener('input', (e) => {
+                networkData.input = parseInt(e.target.value);
+                document.getElementById('val-input').textContent = networkData.input;
+                updateVisualization();
+            });
+
+            outputNodesSlider.addEventListener('input', (e) => {
+                networkData.output = parseInt(e.target.value);
+                document.getElementById('val-output').textContent = networkData.output;
+                updateVisualization();
+            });
+
+            // 은닉층 추가 버튼 이벤트
+            addHiddenBtn.addEventListener('click', () => {
+                if (networkData.hidden.length >= MAX_HIDDEN_LAYERS) {
+                    showModal('은닉층 추가 불가', `화면이 너무 복잡해지는 것을 막기 위해 최대 ${MAX_HIDDEN_LAYERS}개까지만 추가할 수 있습니다.\n\n(실제 최신 AI는 수십~수백 개의 층으로 구성되어 있습니다!)`);
+                    return;
+                }
+                networkData.hidden.push(4); // 기본 4개짜리 층 추가
+                renderHiddenLayersUI();
+                updateVisualization();
+            });
+
+            // 애니메이션 토글 버튼
+            toggleAnimBtn.addEventListener('click', () => {
+                isAnimating = !isAnimating;
+                const icon = toggleAnimBtn.querySelector('i');
+                const text = toggleAnimBtn.querySelector('span');
+                
+                if (isAnimating) {
+                    toggleAnimBtn.classList.replace('bg-slate-800', 'bg-amber-500');
+                    toggleAnimBtn.classList.replace('hover:bg-black', 'hover:bg-amber-600');
+                    icon.classList.replace('fa-play', 'fa-stop');
+                    text.textContent = '데이터 흐름 정지';
+                    
+                    // 흐름 초기화 후 파티클 웨이브 시작
+                    animPhase = 'forward';
+                    currentWaveLayer = 0;
+                    particles = [];
+                    startAnimation();
+                } else {
+                    toggleAnimBtn.classList.replace('bg-amber-500', 'bg-slate-800');
+                    toggleAnimBtn.classList.replace('hover:bg-amber-600', 'hover:bg-black');
+                    icon.classList.replace('fa-stop', 'fa-play');
+                    text.textContent = '데이터 흐름 재생';
+                    
+                    cancelAnimationFrame(animationFrameId);
+                    particles = []; // 파티클 초기화
+                    drawNetwork(); // 정지 상태 렌더링
+                }
+            });
+
+            // 창 크기 조절 이벤트
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                updateVisualization();
+            });
+
+            // 가중치/편향 표시 토글 이벤트
+            toggleParamsBtn.addEventListener('change', (e) => {
+                showParameters = e.target.checked;
+                if (showParameters) {
+                    toggleBg.classList.replace('bg-slate-300', 'bg-blue-500');
+                    toggleDot.classList.add('translate-x-4');
+                } else {
+                    toggleBg.classList.replace('bg-blue-500', 'bg-slate-300');
+                    toggleDot.classList.remove('translate-x-4');
+                }
+                if (!isAnimating) drawNetwork(); // 정지 상태일 때 즉시 다시 그리기
+            });
+
+            // 도움말 및 모달 이벤트
+            document.getElementById('modal-close-btn').addEventListener('click', hideModal);
+            
+            const helpModal = document.getElementById('help-modal');
+            document.getElementById('help-btn').addEventListener('click', () => {
+                helpModal.classList.add('active');
+            });
+            document.getElementById('help-close-btn').addEventListener('click', () => {
+                helpModal.classList.remove('active');
+            });
+
+            // LLM 정보 모달 이벤트
+            const llmModal = document.getElementById('llm-modal');
+            document.getElementById('llm-info-btn').addEventListener('click', () => {
+                llmModal.classList.add('active');
+            });
+            document.getElementById('llm-close-btn').addEventListener('click', () => {
+                llmModal.classList.remove('active');
+            });
+
+            renderHiddenLayersUI();
+            resizeCanvas(); // <-- 처음 렌더링 시 캔버스 크기를 맞추기 위해 이 줄을 추가합니다.
+            updateVisualization();
+        }
+
+        // === 동적 UI 렌더링 ===
+        function renderHiddenLayersUI() {
+            hiddenLayersContainer.innerHTML = '';
+            
+            networkData.hidden.forEach((nodeCount, index) => {
+                const layerDiv = document.createElement('div');
+                layerDiv.className = 'bg-white p-3 rounded-lg border border-emerald-100 shadow-sm';
+                
+                layerDiv.innerHTML = `
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm font-semibold text-emerald-700">Hidden ${index + 1}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-mono">${nodeCount}</span>
+                            <button class="text-red-400 hover:text-red-600 transition" onclick="removeHiddenLayer(${index})" title="층 삭제">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <input type="range" min="1" max="15" value="${nodeCount}" class="w-full h-1.5 bg-emerald-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" oninput="updateHiddenLayer(${index}, this.value)">
+                `;
+                hiddenLayersContainer.appendChild(layerDiv);
+            });
+        }
+
+        // 전역에서 접근 가능하도록 window에 함수 바인딩 (인라인 HTML 이벤트 핸들러용)
+        window.removeHiddenLayer = function(index) {
+            if (networkData.hidden.length <= 1) {
+                showModal('삭제 불가', '최소 1개의 은닉층은 유지해야 합니다.');
+                return;
+            }
+            networkData.hidden.splice(index, 1);
+            renderHiddenLayersUI();
+            updateVisualization();
+        };
+
+        window.updateHiddenLayer = function(index, value) {
+            networkData.hidden[index] = parseInt(value);
+            // 숫자 라벨 즉시 업데이트
+            const label = hiddenLayersContainer.children[index].querySelector('.font-mono');
+            label.textContent = value;
+            updateVisualization();
+        };
+
+        // === 캔버스 관련 로직 ===
+        function getStructure() {
+            return [networkData.input, ...networkData.hidden, networkData.output];
+        }
+
+        function resizeCanvas() {
+            const wrapper = document.getElementById('canvas-wrapper');
+            // 고해상도 디스플레이 지원을 위해 pixelRatio 적용
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = wrapper.clientWidth * dpr;
+            canvas.height = wrapper.clientHeight * dpr;
+            ctx.scale(dpr, dpr);
+            // CSS 크기는 원래 크기로 유지
+            canvas.style.width = wrapper.clientWidth + 'px';
+            canvas.style.height = wrapper.clientHeight + 'px';
+        }
+
+        // 각 노드의 화면상 좌표 계산
+        function calculateNodeCoordinates() {
+            const wrapper = document.getElementById('canvas-wrapper');
+            const width = wrapper.clientWidth;
+            const height = wrapper.clientHeight;
+            const structure = getStructure();
+            const layersCount = structure.length;
+            
+            nodeCoordinates = [];
+
+            // 층간 X 간격
+            const xGap = width / (layersCount + 1);
+
+            structure.forEach((nodeCount, layerIndex) => {
+                const layerCoords = [];
+                const x = xGap * (layerIndex + 1);
+                
+                // 해당 층의 위아래 마진을 남기기 위한 Y 간격
+                const yGap = height / (nodeCount + 1);
+
+                for (let i = 0; i < nodeCount; i++) {
+                    const y = yGap * (i + 1);
+                    layerCoords.push({ x, y, layerIndex, nodeIndex: i, flash: 0 }); // nodeIndex 추가
+                }
+                nodeCoordinates.push(layerCoords);
+            });
+        }
+
+        // 시각화 업데이트 (좌표 재계산 후 그리기)
+        function updateVisualization() {
+            calculateNodeCoordinates();
+            if (!isAnimating) {
+                drawNetwork();
+            }
+        }
+
+        // 전체 신경망 그리기 함수
+        function drawNetwork() {
+            const wrapper = document.getElementById('canvas-wrapper');
+            ctx.clearRect(0, 0, wrapper.clientWidth, wrapper.clientHeight);
+
+            drawConnections();
+            
+            if (isAnimating) {
+                drawAndUpdateParticles();
+            }
+
+            drawNodes();
+            drawLayerLabels(wrapper.clientWidth, wrapper.clientHeight);
+        }
+
+        // 층 간의 연결선 그리기
+        function drawConnections() {
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = colors.line;
+
+            for (let i = 0; i < nodeCoordinates.length - 1; i++) {
+                const currentLayer = nodeCoordinates[i];
+                const nextLayer = nodeCoordinates[i + 1];
+
+                currentLayer.forEach(startNode => {
+                    nextLayer.forEach(endNode => {
+                        ctx.beginPath();
+                        ctx.moveTo(startNode.x, startNode.y);
+                        ctx.lineTo(endNode.x, endNode.y);
+                        ctx.stroke();
+
+                        // 가중치(w) 값 텍스트 표시
+                        if (showParameters) {
+                            // 고정된 가상의 난수 생성에 층별 학습 진행도(layerLearningProgress)를 더해 해당 층만 동적 변화 시뮬레이션
+                            const seed = i * 1000 + startNode.nodeIndex * 100 + endNode.nodeIndex;
+                            let currentProgress = layerLearningProgress[i] || 0;
+                            let w = (Math.sin(seed + 1 + currentProgress) * 10000);
+                            w = (w - Math.floor(w)) * 2 - 1; // -1.0 ~ 1.0 범위
+                            
+                            // 선의 25% 지점에 텍스트 표시 (가운데가 뭉치는 것 방지)
+                            const textX = startNode.x + (endNode.x - startNode.x) * 0.25;
+                            const textY = startNode.y + (endNode.y - startNode.y) * 0.25;
+                            
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; // 반투명하게
+                            ctx.font = '10px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(w.toFixed(1), textX, textY - 4);
+                        }
+                    });
+                });
+            }
+        }
+
+        // 노드(뉴런) 그리기
+        function drawNodes() {
+            const radius = 12;
+
+            nodeCoordinates.forEach((layer, layerIndex) => {
+                let color;
+                if (layerIndex === 0) color = colors.input;
+                else if (layerIndex === nodeCoordinates.length - 1) color = colors.output;
+                else color = colors.hidden;
+
+                layer.forEach(node => {
+                    // 글로우 효과 (그림자) - 활성화(flash) 상태에 따라 밝기 증가
+                    ctx.shadowBlur = node.flash > 0 ? 25 : 15;
+                    ctx.shadowColor = node.flash > 0 ? '#ffffff' : color;
+
+                    // 노드 본체 (그라데이션으로 입체감)
+                    const gradient = ctx.createRadialGradient(
+                        node.x - radius/3, node.y - radius/3, 2,
+                        node.x, node.y, radius + (node.flash > 0 ? 2 : 0)
+                    );
+                    
+                    // 데이터가 노드에 도달하여 플래시 상태일 때 하얗게 빛남
+                    if (node.flash > 0) {
+                        gradient.addColorStop(0, '#ffffff');
+                        gradient.addColorStop(0.5, color);
+                        gradient.addColorStop(1, '#ffffff');
+                        node.flash -= 0.05; // 플래시 자연스럽게 감소
+                        if (node.flash < 0) node.flash = 0;
+                    } else {
+                        gradient.addColorStop(0, '#ffffff');
+                        gradient.addColorStop(0.3, color);
+                        gradient.addColorStop(1, shadeColor(color, -20)); // 약간 어둡게
+                    }
+
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, radius + (node.flash > 0 ? 2 : 0), 0, Math.PI * 2);
+                    ctx.fillStyle = gradient;
+                    ctx.fill();
+
+                    // 테두리
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = node.flash > 0 ? '#ffffff' : 'rgba(255, 255, 255, 0.8)';
+                    ctx.stroke();
+                    
+                    // 그림자 리셋
+                    ctx.shadowBlur = 0;
+
+                    // 편향(b) 값 텍스트 표시 (입력층 제외)
+                    if (showParameters && layerIndex > 0) {
+                        const seed = layerIndex * 100 + node.nodeIndex;
+                        let currentProgress = layerLearningProgress[layerIndex - 1] || 0;
+                        let b = (Math.sin(seed + 5 + currentProgress) * 10000);
+                        b = (b - Math.floor(b)) * 2 - 1; // -1.0 ~ 1.0 범위
+                        
+                        ctx.fillStyle = '#fbbf24'; // 눈에 띄는 노란색
+                        ctx.font = 'bold 11px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('b:' + b.toFixed(1), node.x, node.y - radius - 6);
+                    }
+                });
+            });
+        }
+
+        // 계층 이름표 텍스트 그리기
+        function drawLayerLabels(width, height) {
+            ctx.font = 'bold 14px Pretendard, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = colors.text;
+
+            const structure = getStructure();
+            const xGap = width / (structure.length + 1);
+
+            structure.forEach((_, index) => {
+                const x = xGap * (index + 1);
+                const y = 30; // 상단 여백
+                let text = '';
+
+                if (index === 0) {
+                    text = 'Input Layer';
+                    ctx.fillStyle = colors.input;
+                } else if (index === structure.length - 1) {
+                    text = 'Output Layer';
+                    ctx.fillStyle = colors.output;
+                } else {
+                    text = `Hidden ${index}`;
+                    ctx.fillStyle = colors.hidden;
+                }
+
+                ctx.fillText(text, x, y);
+            });
+        }
+
+        // === 애니메이션 (파티클) 시스템 ===
+        class Particle {
+            constructor(startX, startY, endX, endY, color, targetNode, isBackward, layerIndex) {
+                this.startX = startX;
+                this.startY = startY;
+                this.endX = endX;
+                this.endY = endY;
+                this.color = color;
+                this.targetNode = targetNode;
+                this.isBackward = isBackward; // 역전파 여부
+                this.layerIndex = layerIndex; // 현재 이동 중인 계층의 인덱스
+                this.progress = 0;
+                // 약간의 무작위성을 주어 파티클이 겹쳐 보이지 않게 처리
+                this.speed = 0.01 + Math.random() * 0.015; 
+            }
+
+            update() {
+                this.progress += this.speed;
+                if (this.progress >= 1) {
+                    if (this.targetNode) {
+                        this.targetNode.flash = 1; // 도달 시 노드 반짝임 효과
+                    }
+                    return false; // 도착하면 배열에서 소멸
+                }
+                return true;
+            }
+
+            draw(ctx) {
+                const x = this.startX + (this.endX - this.startX) * this.progress;
+                const y = this.startY + (this.endY - this.startY) * this.progress;
+
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff'; // 중심은 하얗게
+                ctx.fill();
+
+                // 꼬리 효과
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                const tailX = this.startX + (this.endX - this.startX) * Math.max(0, this.progress - 0.1);
+                const tailY = this.startY + (this.endY - this.startY) * Math.max(0, this.progress - 0.1);
+                ctx.lineTo(tailX, tailY);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = this.color;
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function startAnimation() {
+            if (!isAnimating) return;
+            
+            drawNetwork();
+            drawAndUpdateParticles();
+
+            animationFrameId = requestAnimationFrame(startAnimation);
+        }
+
+        function drawAndUpdateParticles() {
+            // 업데이트 및 생존한 파티클 필터링
+            particles = particles.filter(p => p.update());
+            
+            // 파티클 그리기 및 역전파 중인 층의 학습 진행도만 업데이트
+            let activeBackwardLayers = new Set();
+            particles.forEach(p => {
+                p.draw(ctx);
+                if (p.isBackward) {
+                    activeBackwardLayers.add(p.layerIndex);
+                }
+            });
+
+            activeBackwardLayers.forEach(idx => {
+                layerLearningProgress[idx] += 0.015; // 파티클이 지나가는 층의 가중치/편향만 변경
+            });
+
+            // 현재 층의 파티클 이동이 모두 끝났으면 다음 층으로 흐름(Wave) 넘김
+            if (particles.length === 0 && isAnimating) {
+                triggerNextWave();
+            }
+        }
+
+        function triggerNextWave() {
+            if(nodeCoordinates.length < 2) return;
+
+            if (animPhase === 'forward') {
+                const currentLayer = nodeCoordinates[currentWaveLayer];
+                const nextLayer = nodeCoordinates[currentWaveLayer + 1];
+                
+                // 순전파: 현재 층 -> 다음 층 (노란색)
+                currentLayer.forEach(startNode => {
+                    nextLayer.forEach(endNode => {
+                        particles.push(new Particle(startNode.x, startNode.y, endNode.x, endNode.y, colors.particle, endNode, false, currentWaveLayer));
+                    });
+                });
+
+                currentWaveLayer++;
+                // 출력층 도달 시 역전파 방향으로 전환
+                if (currentWaveLayer >= nodeCoordinates.length - 1) {
+                    animPhase = 'backward';
+                    currentWaveLayer = nodeCoordinates.length - 1;
+                }
+            } else if (animPhase === 'backward') {
+                const currentLayer = nodeCoordinates[currentWaveLayer];
+                const prevLayer = nodeCoordinates[currentWaveLayer - 1];
+                
+                // 역전파: 현재 층 -> 이전 층 (빨간색 - 오차 역전파 학습)
+                currentLayer.forEach(startNode => {
+                    prevLayer.forEach(endNode => {
+                        particles.push(new Particle(startNode.x, startNode.y, endNode.x, endNode.y, '#ef4444', endNode, true, currentWaveLayer - 1));
+                    });
+                });
+
+                currentWaveLayer--;
+                // 입력층 도달 시 다시 순전파 방향으로 전환
+                if (currentWaveLayer <= 0) {
+                    animPhase = 'forward';
+                    currentWaveLayer = 0;
+                }
+            }
+        }
+
+        // === 유틸리티 ===
+        
+        // 색상 밝기 조절 함수 (그라데이션용)
+        function shadeColor(color, percent) {
+            let R = parseInt(color.substring(1,3),16);
+            let G = parseInt(color.substring(3,5),16);
+            let B = parseInt(color.substring(5,7),16);
+
+            R = parseInt(R * (100 + percent) / 100);
+            G = parseInt(G * (100 + percent) / 100);
+            B = parseInt(B * (100 + percent) / 100);
+
+            R = (R<255)?R:255;  
+            G = (G<255)?G:255;  
+            B = (B<255)?B:255;  
+
+            const RR = ((R.toString(16).length==1)?"0"+R.toString(16):R.toString(16));
+            const GG = ((G.toString(16).length==1)?"0"+G.toString(16):G.toString(16));
+            const BB = ((B.toString(16).length==1)?"0"+B.toString(16):B.toString(16));
+
+            return "#"+RR+GG+BB;
+        }
+
+        // === 커스텀 모달(Alert 대체) 로직 ===
+        const modal = document.getElementById('custom-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+
+        function showModal(title, message) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modal.classList.add('active');
+        }
+
+        function hideModal() {
+            modal.classList.remove('active');
+        }
+
+        // 프로그램 실행
+        window.onload = init;
+
+    </script>
+</body>
+</html>

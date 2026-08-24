@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>사진 반듯하게 펴기</title>
+    <!-- OpenCV.js 로드 -->
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()" type="text/javascript"></script>
+    <!-- Cropper.js 로드 (자르기 기능) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: #f9f9f9;
+            color: #333;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header-title {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+
+            .header-title .main-title {
+                font-size: 20px;
+                font-weight: bold;
+                color: #217346;
+            }
+
+            .header-title .sub-desc {
+                font-size: 13px;
+                color: #666;
+                line-height: 1.4;
+            }
+
+        .container {
+            display: flex;
+            flex-direction: row;
+            flex: 1;
+            height: calc(100% - 60px);
+            overflow: hidden;
+        }
+
+        /* 좌측/우측 패널 및 스플리터 */
+        .left-panel {
+            width: 50%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 20%;
+        }
+
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 20%;
+        }
+
+        .splitter {
+            width: 10px;
+            background-color: #ddd;
+            margin: 0 10px;
+            border-radius: 5px;
+            cursor: col-resize;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+
+            .splitter:hover, .splitter.dragging {
+                background-color: #217346;
+            }
+
+        /* 업로드 및 뷰어 영역 */
+        .upload-area, .result-area {
+            flex: 1;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            background-color: white;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* [개선] 우측 패널 안쪽 회색 배경 제거하여 통일감 부여 */
+        .result-area {
+            border: 1px solid #ddd;
+            background-color: white;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #217346;
+            background-color: #eaf1ed;
+        }
+
+        /* [개선] padding 40px 제거하여 화면 영역 100% 활용 */
+        .view-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            overflow: hidden;
+            position: relative;
+            padding: 0px;
+            box-sizing: border-box;
+        }
+
+        /* 새로 추가 및 교체할 CSS */
+        .zoom-indicator-wrapper {
+            display: flex;
+            justify-content: flex-end; /* 오른쪽 정렬 (왼쪽 정렬을 원하면 flex-start) */
+            margin-bottom: 5px;
+            min-height: 24px;
+        }
+
+        .zoom-indicator {
+            background: #eaf1ed;
+            color: #217346;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: bold;
+            border: 1px solid #c8dcd0;
+            display: none;
+        }
+
+        /* 조절점 및 테두리 유지 */
+        .cropper-point {
+            width: 10px !important;
+            height: 10px !important;
+            background-color: #00ff00 !important;
+            border: 1px solid #ff0000 !important;
+            border-radius: 50% !important;
+            opacity: 1 !important;
+        }
+
+            .cropper-point.point-se {
+                right: -5px !important;
+                bottom: -5px !important;
+            }
+
+            .cropper-point.point-sw {
+                left: -5px !important;
+                bottom: -5px !important;
+            }
+
+            .cropper-point.point-nw {
+                left: -5px !important;
+                top: -5px !important;
+            }
+
+            .cropper-point.point-ne {
+                right: -5px !important;
+                top: -5px !important;
+            }
+
+            .cropper-point.point-e {
+                right: -5px !important;
+                margin-top: -5px !important;
+            }
+
+            .cropper-point.point-w {
+                left: -5px !important;
+                margin-top: -5px !important;
+            }
+
+            .cropper-point.point-s {
+                bottom: -5px !important;
+                margin-left: -5px !important;
+            }
+
+            .cropper-point.point-n {
+                top: -5px !important;
+                margin-left: -5px !important;
+            }
+
+        .cropper-line {
+            background-color: #ff0000 !important;
+            opacity: 0.6 !important;
+            display: none !important;
+        }
+
+        .cropper-view-box {
+            outline: calc(1px / var(--zoom-scale, 1)) solid #ff0000 !important;
+        }
+
+        .cropper-point {
+            transform: scale(calc(1 / var(--zoom-scale, 1))) !important;
+        }
+
+        .view-container img, .view-container canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        img#imageOriginal {
+            display: none !important;
+        }
+
+        .upload-placeholder {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #888;
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 10px;
+            pointer-events: none;
+        }
+
+            .upload-placeholder span {
+                font-size: 40px;
+                display: block;
+                margin-bottom: 10px;
+            }
+
+        .empty-text {
+            position: absolute;
+            color: #aaa;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        .controls-area {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .radio-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            background: white;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+
+            .radio-options label {
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: bold;
+                color: #444;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+
+        .action-btn {
+            background-color: #217346;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            flex-shrink: 0;
+            align-self: center;
+        }
+
+            .action-btn:hover:not(:disabled) {
+                background-color: #1a5c38;
+            }
+
+            .action-btn:disabled {
+                background-color: #a5d6a7;
+                cursor: not-allowed;
+            }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .crop-btn, .cancel-crop-btn, .download-btn {
+            flex: none;
+            width: 140px;
+            background-color: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 0;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            display: none;
+            text-align: center;
+        }
+
+            .crop-btn:hover {
+                background-color: #1565c0;
+            }
+
+            .crop-btn.active {
+                background-color: #d32f2f;
+            }
+
+                .crop-btn.active:hover {
+                    background-color: #c62828;
+                }
+
+        .cancel-crop-btn {
+            background-color: #757575;
+        }
+
+            .cancel-crop-btn:hover {
+                background-color: #616161;
+            }
+
+        .download-btn {
+            background-color: #f39c12;
+        }
+
+            .download-btn:hover:not(:disabled) {
+                background-color: #e67e22;
+            }
+        .copy-btn {
+            flex: none;
+            width: 140px;
+            background-color: #8e44ad; /* 눈에 띄는 보라색 */
+            color: white;
+            border: none;
+            padding: 10px 0;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            display: none;
+            text-align: center;
+        }
+
+            .copy-btn:hover {
+                background-color: #732d91;
+            }
+        /* 토스트 및 로딩 */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 12px 20px;
+            position: fixed;
+            z-index: 1000;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s;
+        }
+
+            #toast.show {
+                visibility: visible;
+                opacity: 1;
+                bottom: 50px;
+            }
+
+        #loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            border-radius: 8px;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #217346;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header-title">
+        <span class="main-title">📸 스마트 문서 스캐너</span>
+        <span class="sub-desc">
+            스마트폰으로 대충 찍은 삐뚤어진 문서나 책을 스캐너로 밀어낸 것처럼 반듯하게 펴고,<br>
+            글자가 잘 보이도록 흑백/컬러 필터를 적용한 뒤 원하는 영역만 잘라 복사해 보세요.
+        </span>
+    </div>
+
+    <div class="container" id="main-container">
+        <!-- 좌측 원본 패널 -->
+        <div class="left-panel" id="left-panel">
+            <div id="loading-overlay">
+                <div class="loader"></div>
+                <div id="loading-msg" style="color:#217346; font-weight:bold;">엔진을 불러오는 중입니다...</div>
+            </div>
+            <div class="zoom-indicator-wrapper">
+                <div class="zoom-indicator" id="left-zoom">100%</div>
+            </div>
+            <div class="upload-area" id="drop-zone" onclick="if(event.target === this || event.target.id==='upload-placeholder' || event.target.tagName==='SPAN') document.getElementById('file-input').click()">
+                
+                <div class="view-container" id="orig-container" style="display: none; cursor: grab;">
+                    <div id="orig-wrapper" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+                        <img id="original-preview" src="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+                    </div>
+                </div>
+                <img id="imageOriginal" src="">
+                <div class="upload-placeholder" id="upload-placeholder">
+                    <span>🖼️</span>여기로 사진을 드래그하거나 클릭하세요.
+                </div>
+                <input type="file" id="file-input" style="display: none;" accept="image/png, image/jpeg, image/jpg">
+            </div>
+
+            <div class="controls-area">
+                <div class="radio-options">
+                    <label><input type="radio" name="filterMode" value="color" checked> 🎨 컬러 (원본 유지)</label>
+                    <label><input type="radio" name="filterMode" value="magic"> ✨ 컬러 (선명하게)</label>
+                    <label><input type="radio" name="filterMode" value="gray"> 🎞️ 회색조</label>
+                    <label><input type="radio" name="filterMode" value="bw"> 📝 흑백 (텍스트 스캔)</label>
+                </div>
+                <button class="action-btn" id="scan-btn" disabled onclick="processImage(true)">✨ 문서 반듯하게 펴기</button>
+            </div>
+        </div>
+
+        <div class="splitter" id="splitter"></div>
+
+        <!-- 우측 결과 패널 -->
+        <div class="right-panel" id="right-panel">
+            <div class="zoom-indicator-wrapper">
+                <div class="zoom-indicator" id="right-zoom">100%</div>
+            </div>
+            <div class="result-area" id="result-area">
+                <span class="empty-text" id="result-empty">변환된 결과가 여기에 표시됩니다.</span>
+                <div class="view-container" id="result-container" style="display: none; width: 100%; height: 100%;">
+                    <div id="result-wrapper" style="width: 100%; height: 100%; display: block; position: relative;">
+                        <img id="imageForCrop" style="display:none; max-width:100%; max-height:100%;" src="">
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="crop-btn" id="crop-btn" onclick="toggleCrop()">✂️ 자르기</button>
+                <button class="cancel-crop-btn" id="cancel-crop-btn" onclick="cancelCrop()">❌ 취소</button>
+                <!-- 아래 복사 버튼 한 줄을 추가합니다 -->
+                <button class="copy-btn" id="copy-btn" onclick="copyImage()">📋 복사</button>
+                <button class="download-btn" id="download-btn" onclick="downloadImage()">💾 다른 이름으로 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast">메시지</div>
+
+    <script>
+        let cvReady = false, imageLoaded = false, isProcessing = false;
+        let originalFileName = "스캔이미지";
+
+        let cropper = null;
+        let cachedWarpedMat = null;
+        let scannedBaseDataUrl = null;
+
+        // 자르기 상태 기억용 변수
+        let savedCropData = null;
+        let croppedDataUrl = null;
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById("toast");
+            toast.innerText = message;
+            toast.style.backgroundColor = isError ? "#e74c3c" : "#333";
+            toast.className = "show";
+            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+        }
+
+        function onOpenCvReady() {
+            cvReady = true; document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        function callPythonAPI(method, payload) {
+            return new Promise((resolve, reject) => {
+                const id = Math.random().toString(36).substr(2, 9);
+                const handler = (e) => {
+                    if (e.data && e.data.id === id) {
+                        window.removeEventListener('message', handler);
+                        if (e.data.status === 'success') resolve(e.data.response);
+                        else reject(e.data.error);
+                    }
+                };
+                window.addEventListener('message', handler);
+                window.parent.postMessage({ type: 'pywebview-call', id: id, method: method, payload: payload }, '*');
+            });
+        }
+
+        // --- 스플리터 로직 ---
+        const splitter = document.getElementById('splitter');
+        const leftPanel = document.getElementById('left-panel');
+        const rightPanel = document.getElementById('right-panel');
+        let isDraggingSplitter = false;
+
+        splitter.addEventListener('mousedown', () => { isDraggingSplitter = true; splitter.classList.add('dragging'); document.body.style.cursor = 'col-resize'; });
+        document.addEventListener('mousemove', (e) => {
+            if (!isDraggingSplitter) return;
+            const container = document.getElementById('main-container');
+            const rect = container.getBoundingClientRect();
+            let newWidthPercent = ((e.clientX - rect.left) / rect.width) * 100;
+            if (newWidthPercent < 20) newWidthPercent = 20;
+            if (newWidthPercent > 80) newWidthPercent = 80;
+            leftPanel.style.flex = `0 0 calc(${newWidthPercent}% - 15px)`;
+            rightPanel.style.flex = `1 1 0%`;
+        });
+        document.addEventListener('mouseup', () => { if (isDraggingSplitter) { isDraggingSplitter = false; splitter.classList.remove('dragging'); document.body.style.cursor = 'default'; } });
+
+        // --- 공통 확대/축소 핸들러 ---
+        const cropperZoomHandler = function (event) {
+            const newAbsoluteScale = event.detail.ratio;
+            document.getElementById('right-zoom').innerText = Math.round(newAbsoluteScale * 100) + '%';
+            document.getElementById('result-wrapper').style.setProperty('--zoom-scale', newAbsoluteScale);
+        };
+
+        // --- 좌측 패널 전용 Pan/Zoom 로직 ---
+        function initPanZoom(containerId, wrapperId) {
+            const container = document.getElementById(containerId);
+            const wrapper = document.getElementById(wrapperId);
+            if (!container || !wrapper) return;
+
+            let scale = 1, pointX = 0, pointY = 0, panning = false, start = { x: 0, y: 0 };
+
+            function updateZoomUI() {
+                const img = document.getElementById('original-preview');
+                if (img && img.naturalWidth > 0 && container.clientWidth > 0) {
+                    const ratio = Math.min(container.clientWidth / img.naturalWidth, container.clientHeight / img.naturalHeight);
+                    const trueScale = ratio * scale * 100;
+                    const el = document.getElementById('left-zoom');
+                    el.innerText = Math.round(trueScale) + '%';
+                    el.style.display = 'block';
+                }
+            }
+
+            container.addEventListener('mousedown', e => {
+                e.preventDefault();
+                start = { x: e.clientX - pointX, y: e.clientY - pointY };
+                panning = true; container.style.cursor = 'grabbing';
+            });
+            container.addEventListener('mouseup', () => { panning = false; container.style.cursor = 'grab'; });
+            container.addEventListener('mouseleave', () => { panning = false; container.style.cursor = 'grab'; });
+
+            container.addEventListener('mousemove', e => {
+                if (!panning) return;
+                pointX = e.clientX - start.x; pointY = e.clientY - start.y;
+                wrapper.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+            });
+            container.addEventListener('wheel', e => {
+                e.preventDefault();
+                const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+                scale = Math.max(0.1, Math.min(scale * zoomFactor, 10));
+                wrapper.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+                updateZoomUI();
+            });
+            wrapper.resetPanZoom = function () {
+                scale = 1; pointX = 0; pointY = 0;
+                wrapper.style.transform = `translate(0px, 0px) scale(1)`;
+                container.style.cursor = 'grab';
+                updateZoomUI();
+            };
+        }
+        initPanZoom('orig-container', 'orig-wrapper');
+
+        // --- 파일 업로드 ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+
+        fileInput.addEventListener('change', handleFiles);
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault(); dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) { fileInput.files = e.dataTransfer.files; handleFiles(); }
+        });
+
+        function handleFiles() {
+            const file = fileInput.files[0];
+            if (!file) return;
+            if (!file.type.match('image.*')) { showToast("이미지만 업로드 가능합니다.", true); return; }
+
+            let fn = file.name;
+            let lastDot = fn.lastIndexOf('.');
+            originalFileName = lastDot > 0 ? fn.substring(0, lastDot) : fn;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('original-preview').src = e.target.result;
+                document.getElementById('imageOriginal').src = e.target.result;
+
+                document.getElementById('orig-container').style.display = 'flex';
+                document.getElementById('upload-placeholder').style.display = 'none';
+                document.getElementById('scan-btn').disabled = false;
+                document.getElementById('left-zoom').style.display = 'block';
+
+                if (cachedWarpedMat) { cachedWarpedMat.delete(); cachedWarpedMat = null; }
+                resetResultArea(); imageLoaded = true;
+                if (document.getElementById('orig-wrapper').resetPanZoom) document.getElementById('orig-wrapper').resetPanZoom();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function resetResultArea() {
+            if (cropper) { cropper.destroy(); cropper = null; }
+            savedCropData = null;
+            croppedDataUrl = null;
+
+            document.getElementById('result-container').style.display = 'none';
+            document.getElementById('result-empty').style.display = 'block';
+            document.getElementById('right-zoom').style.display = 'none';
+
+            document.getElementById('crop-btn').style.display = 'none';
+            document.getElementById('cancel-crop-btn').style.display = 'none';
+
+            // 👇 이 줄을 추가하세요
+            document.getElementById('copy-btn').style.display = 'none';
+
+            document.getElementById('download-btn').style.display = 'none';
+
+            const btn = document.getElementById('crop-btn');
+            btn.innerHTML = '✂️ 자르기'; btn.classList.remove('active');
+        }
+
+        document.querySelectorAll('input[name="filterMode"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                if (imageLoaded && document.getElementById('result-container').style.display === 'block') {
+                    processImage(false);
+                }
+            });
+        });
+
+        // --- 이미지 펴기 / 필터 엔진 ---
+        function processImage(forceWarp = true) {
+            if (!cvReady || !imageLoaded || isProcessing) return;
+            isProcessing = true;
+
+            document.getElementById('loading-msg').innerText = forceWarp ? "문서 모서리를 분석중입니다..." : "필터를 적용중입니다...";
+            document.getElementById('loading-overlay').style.display = 'flex';
+
+            setTimeout(() => {
+                try {
+                    // (1) 모서리 펴기
+                    if (forceWarp || !cachedWarpedMat) {
+                        if (cachedWarpedMat) { cachedWarpedMat.delete(); cachedWarpedMat = null; }
+                        let src = cv.imread(document.getElementById('imageOriginal'));
+                        let dst = new cv.Mat(), gray = new cv.Mat();
+
+                        let ratio = 600.0 / Math.max(src.cols, src.rows);
+                        let smallImg = new cv.Mat();
+                        cv.resize(src, smallImg, new cv.Size(Math.round(src.cols * ratio), Math.round(src.rows * ratio)), 0, 0, cv.INTER_AREA);
+
+                        cv.cvtColor(smallImg, gray, cv.COLOR_RGBA2GRAY, 0);
+                        cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+
+                        let edged = new cv.Mat();
+                        cv.Canny(gray, edged, 75, 200);
+                        let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+                        cv.dilate(edged, edged, kernel, new cv.Point(-1, -1), 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
+
+                        let contours = new cv.MatVector(), hierarchy = new cv.Mat();
+                        cv.findContours(edged, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+                        let maxArea = 0, bestApprox = null;
+                        for (let i = 0; i < contours.size(); ++i) {
+                            let cnt = contours.get(i), area = cv.contourArea(cnt);
+                            if (area > smallImg.cols * smallImg.rows * 0.05) {
+                                let approx = new cv.Mat();
+                                cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
+                                if (approx.rows === 4 && area > maxArea) {
+                                    maxArea = area;
+                                    if (bestApprox) bestApprox.delete();
+                                    bestApprox = approx;
+                                } else { approx.delete(); }
+                            }
+                            cnt.delete();
+                        }
+
+                        if (bestApprox) {
+                            let pts = [];
+                            for (let i = 0; i < 4; i++) pts.push({ x: bestApprox.data32S[i * 2] / ratio, y: bestApprox.data32S[i * 2 + 1] / ratio });
+                            pts.sort((a, b) => (a.x + a.y) - (b.x + b.y));
+                            let tl = pts[0], br = pts[3], remain = [pts[1], pts[2]].sort((a, b) => (a.y - a.x) - (b.y - b.x));
+                            let tr = remain[0], bl = remain[1];
+
+                            let wA = Math.hypot(br.x - bl.x, br.y - bl.y), wB = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+                            let hA = Math.hypot(tr.x - br.x, tr.y - br.y), hB = Math.hypot(tl.x - bl.x, tl.y - bl.y);
+                            let rw = Math.max(parseInt(wA), parseInt(wB)), rh = Math.max(parseInt(hA), parseInt(hB));
+
+                            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
+                            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, rw, 0, rw, rh, 0, rh]);
+
+                            let M = cv.getPerspectiveTransform(srcTri, dstTri);
+                            cv.warpPerspective(src, dst, M, new cv.Size(rw, rh));
+                            cachedWarpedMat = dst.clone();
+
+                            srcTri.delete(); dstTri.delete(); M.delete(); dst.delete();
+                            if (forceWarp) showToast("문서를 폈습니다.");
+                        } else {
+                            cachedWarpedMat = src.clone();
+                            if (forceWarp) showToast("모서리를 찾지 못해 필터만 적용합니다.", true);
+                        }
+                        src.delete(); gray.delete(); smallImg.delete(); edged.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
+                        if (bestApprox) bestApprox.delete();
+                    }
+
+                    // (2) 필터 적용
+                    let finalResult = new cv.Mat();
+                    const filterMode = document.querySelector('input[name="filterMode"]:checked').value;
+                    if (filterMode === 'bw') {
+                        cv.cvtColor(cachedWarpedMat, finalResult, cv.COLOR_RGBA2GRAY, 0);
+                        cv.adaptiveThreshold(finalResult, finalResult, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 21, 10);
+                    } else if (filterMode === 'gray') {
+                        cv.cvtColor(cachedWarpedMat, finalResult, cv.COLOR_RGBA2GRAY, 0);
+                    } else if (filterMode === 'magic') {
+                        cachedWarpedMat.convertTo(finalResult, -1, 1.2, 10);
+                    } else {
+                        cachedWarpedMat.copyTo(finalResult);
+                    }
+
+                    let canvasTemp = document.createElement('canvas');
+                    cv.imshow(canvasTemp, finalResult);
+                    finalResult.delete();
+
+                    scannedBaseDataUrl = canvasTemp.toDataURL('image/png');
+                    canvasTemp = null;
+
+                    // 필터를 바꾸거나 새로 펼치면 자르기 상태 초기화
+                    savedCropData = null;
+                    croppedDataUrl = null;
+
+                    document.getElementById('result-empty').style.display = 'none';
+                    document.getElementById('result-container').style.display = 'block';
+
+                    const cropImg = document.getElementById('imageForCrop');
+
+                    const finishProcessing = () => {
+                        const cropBtn = document.getElementById('crop-btn');
+                        cropBtn.style.display = 'block';
+                        cropBtn.innerHTML = '✂️ 자르기';
+                        cropBtn.classList.remove('active');
+                        document.getElementById('cancel-crop-btn').style.display = 'none';
+                        document.getElementById('copy-btn').style.display = 'block';
+                        document.getElementById('download-btn').style.display = 'block';
+
+                        document.getElementById('loading-overlay').style.display = 'none';
+                        isProcessing = false;
+                    };
+
+                    // 무조건 Cropper를 파괴 후 재생성하여 이벤트 꼬임 방지
+                    if (cropper) { cropper.destroy(); }
+
+                    cropImg.src = scannedBaseDataUrl;
+                    cropImg.style.display = 'block';
+
+                    cropper = new Cropper(cropImg, {
+                        viewMode: 1,
+                        autoCrop: false,
+                        background: false,
+                        zoomable: true,
+                        dragMode: 'move',
+                        transition: false,
+                        ready: function () {
+                            const containerData = cropper.getContainerData();
+                            const imgData = cropper.getImageData();
+                            const absoluteScale = imgData.width / imgData.naturalWidth;
+
+                            document.getElementById('right-zoom').innerText = Math.round(absoluteScale * 100) + '%';
+                            document.getElementById('right-zoom').style.display = 'block';
+                            document.getElementById('result-wrapper').style.setProperty('--zoom-scale', absoluteScale);
+
+                            if (forceWarp) {
+                                // 1. 85%로 축소
+                                const targetScale = absoluteScale * 0.85;
+                                cropper.zoomTo(targetScale);
+
+                                // 2. 축소 후 컨테이너와 캔버스의 너비/높이를 계산하여 정확히 정중앙으로 이동
+                                setTimeout(() => {
+                                    const cData = cropper.getCanvasData();
+                                    cropper.setCanvasData({
+                                        left: (containerData.width - cData.width) / 2,
+                                        top: (containerData.height - cData.height) / 2-30
+                                    });
+                                }, 10);
+                            }
+                            finishProcessing();
+                        },
+                        zoom: cropperZoomHandler
+                    });
+
+                } catch (err) {
+                    console.error(err); showToast("처리 중 오류가 발생했습니다.", true);
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    isProcessing = false;
+                }
+            }, 50);
+        }
+
+        // --- 자르기 (위치 및 배율 완벽 유지 로직) ---
+        function toggleCrop() {
+            const cropBtn = document.getElementById('crop-btn');
+            const cancelBtn = document.getElementById('cancel-crop-btn');
+            const saveBtn = document.getElementById('download-btn');
+            const cropImg = document.getElementById('imageForCrop');
+            if (!cropper) return;
+
+            if (!cropBtn.classList.contains('active')) {
+                // UI 즉시 업데이트 (이벤트 지연 없이 버튼 먼저 표출)
+                cropBtn.innerHTML = '✔️ 완료';
+                cropBtn.classList.add('active');
+                cancelBtn.style.display = 'block';
+                saveBtn.style.display = 'none';
+
+                if (savedCropData) {
+                    // [이전에 자른 적이 있을 때] -> 원본 띄우고 영역 복원
+                    const currentCanvas = cropper.getCanvasData();
+                    const currentImg = cropper.getImageData();
+                    const absoluteScale = currentCanvas.width / currentImg.naturalWidth;
+
+                    document.getElementById('loading-overlay').style.display = 'flex';
+                    document.getElementById('loading-msg').innerText = "자르기 준비 중...";
+
+                    // 안전하게 객체 자체를 재생성
+                    cropper.destroy();
+                    cropImg.src = scannedBaseDataUrl;
+
+                    cropper = new Cropper(cropImg, {
+                        viewMode: 1,
+                        autoCrop: true,
+                        background: false,
+                        zoomable: true,
+                        dragMode: 'crop',
+                        transition: false,
+                        ready: function () {
+                            document.getElementById('loading-overlay').style.display = 'none';
+
+                            const newImg = cropper.getImageData();
+                            let newLeft = currentCanvas.left - (savedCropData.x * absoluteScale);
+                            let newTop = currentCanvas.top - (savedCropData.y * absoluteScale);
+
+                            cropper.setCanvasData({
+                                left: newLeft,
+                                top: newTop,
+                                width: newImg.naturalWidth * absoluteScale,
+                                height: newImg.naturalHeight * absoluteScale
+                            });
+
+                            document.getElementById('right-zoom').innerText = Math.round(absoluteScale * 100) + '%';
+
+                            // 기존 자르기 영역 복원
+                            cropper.setData(savedCropData);
+                        },
+                        zoom: cropperZoomHandler
+                    });
+                } else {
+                    // [처음 자르기를 누른 경우]
+                    cropper.setDragMode('crop');
+                    cropper.crop();
+                    const cData = cropper.getCanvasData();
+                    cropper.setCropBoxData({ left: cData.left, top: cData.top, width: cData.width, height: cData.height });
+                    showToast("모서리를 조절하거나, 박스 안쪽을 잡아 이동시키고 완료를 누르세요.");
+                }
+            } else {
+                // [자르기 완료 적용]
+                cropBtn.innerHTML = '✂️ 자르기'; // "다시 자르기" 말고 "자르기"로 통일
+                cropBtn.classList.remove('active');
+                cancelBtn.style.display = 'none';
+                saveBtn.style.display = 'block';
+
+                savedCropData = cropper.getData();
+                const croppedCanvas = cropper.getCroppedCanvas();
+                if (!croppedCanvas) return;
+
+                croppedDataUrl = croppedCanvas.toDataURL('image/png'); // 잘려진 최종 이미지 기억
+                const oldCropBoxData = cropper.getCropBoxData();
+
+                document.getElementById('loading-overlay').style.display = 'flex';
+                document.getElementById('loading-msg').innerText = "적용 중...";
+
+                cropper.destroy();
+                cropImg.src = croppedDataUrl;
+
+                cropper = new Cropper(cropImg, {
+                    viewMode: 1,
+                    autoCrop: false,
+                    background: false,
+                    zoomable: true,
+                    dragMode: 'move',
+                    transition: false,
+                    ready: function () {
+                        document.getElementById('loading-overlay').style.display = 'none';
+
+                        cropper.setCanvasData({
+                            left: oldCropBoxData.left,
+                            top: oldCropBoxData.top,
+                            width: oldCropBoxData.width,
+                            height: oldCropBoxData.height
+                        });
+
+                        const newAbsoluteScale = oldCropBoxData.width / cropper.getImageData().naturalWidth;
+                        document.getElementById('right-zoom').innerText = Math.round(newAbsoluteScale * 100) + '%';
+                        document.getElementById('result-wrapper').style.setProperty('--zoom-scale', newAbsoluteScale);
+                    },
+                    zoom: cropperZoomHandler
+                });
+            }
+        }
+
+        // --- 취소 함수 ---
+        function cancelCrop() {
+            if (!cropper) return;
+            const cropBtn = document.getElementById('crop-btn');
+            const cropImg = document.getElementById('imageForCrop');
+
+            cropBtn.innerHTML = '✂️ 자르기';
+            cropBtn.classList.remove('active');
+            document.getElementById('cancel-crop-btn').style.display = 'none';
+            document.getElementById('download-btn').style.display = 'block';
+
+            if (savedCropData && croppedDataUrl) {
+                // 이전에 자른 내역이 있을 때 취소 -> 다시 잘려진 이미지 상태로 복귀
+                document.getElementById('loading-overlay').style.display = 'flex';
+                document.getElementById('loading-msg').innerText = "취소 중...";
+
+                const currentCanvas = cropper.getCanvasData();
+                const currentImg = cropper.getImageData();
+                const absoluteScale = currentCanvas.width / currentImg.naturalWidth;
+
+                cropper.destroy();
+                cropImg.src = croppedDataUrl;
+
+                cropper = new Cropper(cropImg, {
+                    viewMode: 1,
+                    autoCrop: false,
+                    background: false,
+                    zoomable: true,
+                    dragMode: 'move',
+                    transition: false,
+                    ready: function () {
+                        document.getElementById('loading-overlay').style.display = 'none';
+
+                        const newImg = cropper.getImageData();
+                        cropper.setCanvasData({
+                            left: currentCanvas.left + (savedCropData.x * absoluteScale),
+                            top: currentCanvas.top + (savedCropData.y * absoluteScale),
+                            width: newImg.naturalWidth * absoluteScale,
+                            height: newImg.naturalHeight * absoluteScale
+                        });
+
+                        document.getElementById('right-zoom').innerText = Math.round(absoluteScale * 100) + '%';
+                    },
+                    zoom: cropperZoomHandler
+                });
+            } else {
+                // 처음 자르기 취소
+                cropper.clear();
+                cropper.setDragMode('move');
+                savedCropData = null;
+            }
+        }
+
+        // --- 저장 함수 ---
+        function downloadImage() {
+            const cropBtn = document.getElementById('crop-btn');
+            if (cropBtn.classList.contains('active')) { showToast("자르기 완료 버튼(✔️)을 먼저 눌러주세요.", true); return; }
+
+            const canvas = cropper.getCroppedCanvas();
+            if (!canvas) return;
+            const dataURL = canvas.toDataURL('image/png');
+            const saveFileName = `${originalFileName}_펴기.png`;
+
+            if (window.parent && typeof window.parent.pywebview !== 'undefined') {
+                callPythonAPI('save_scanned_image', { image_data: dataURL, default_name: saveFileName })
+                    .then(res => {
+                        if (res) {
+                            if (res.success) showToast(res.message);
+                            else if (!res.cancelled) showToast(res.message, true);
+                        }
+                    }).catch(err => { showToast("저장 중 오류가 발생했습니다.", true); });
+            } else {
+                const link = document.createElement('a');
+                link.href = dataURL; link.download = saveFileName; link.click();
+                showToast("이미지가 저장되었습니다.");
+            }
+        }
+
+        // --- 복사 함수 ---
+        function copyImage() {
+            if (!cropper) return;
+
+            // cropper.getCroppedCanvas()는 자르기 박스가 활성화되어 있으면 해당 영역을, 
+            // 그렇지 않으면 전체 캔버스를 가져옵니다. (사용자 요구사항과 완벽히 일치)
+            const canvas = cropper.getCroppedCanvas();
+            if (!canvas) return;
+
+            // 1. pywebview(EXE) 환경일 경우 Python 백엔드로 Base64 데이터를 넘겨서 복사
+            // (보안 정책 때문에 JS 클립보드 API가 막혀 있을 경우를 대비한 Python 연결부)
+            if (window.parent && typeof window.parent.pywebview !== 'undefined') {
+                const dataURL = canvas.toDataURL('image/png');
+                callPythonAPI('copy_to_clipboard', { image_data: dataURL })
+                    .then(res => {
+                        if (res && res.success) showToast("이미지가 클립보드에 복사되었습니다.");
+                        else showToast("복사에 실패했습니다.", true);
+                    }).catch(err => {
+                        showToast("복사 중 오류가 발생했습니다.", true);
+                    });
+                return; // Python API로 넘겼으면 아래 JS API는 실행하지 않음
+            }
+
+            // 2. 일반 웹 환경일 경우 브라우저 표준 Clipboard API 사용
+            canvas.toBlob(function (blob) {
+                try {
+                    const item = new ClipboardItem({ "image/png": blob });
+                    navigator.clipboard.write([item]).then(() => {
+                        showToast("이미지가 클립보드에 복사되었습니다.");
+                    }).catch(err => {
+                        console.error(err);
+                        showToast("복사 권한이 없거나 실패했습니다.", true);
+                    });
+                } catch (e) {
+                    console.error(e);
+                    showToast("이 환경에서는 클립보드 이미지 복사를 지원하지 않습니다.", true);
+                }
+            }, 'image/png');
+        }
+    </script>
+</body>
+</html>

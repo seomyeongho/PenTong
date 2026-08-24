@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PenTong - 엑셀 취합</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            user-select: none;
+            background-color: white;
+        }
+
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+
+        /* 테이블 헤더 고정 */
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        /* 텍스트 선택 허용 */
+        .select-text {
+            user-select: text !important;
+            cursor: text;
+        }
+
+        /* 드래그 앤 드롭 커서 */
+        .drag-handle {
+            cursor: grab;
+        }
+
+            .drag-handle:active {
+                cursor: grabbing;
+            }
+    </style>
+</head>
+<body class="h-full flex flex-col overflow-hidden relative">
+
+    <div class="shrink-0 p-4 pb-2 border-b border-gray-100 flex justify-between items-center bg-white z-20">
+        <h2 class="text-2xl font-bold text-gray-800 tracking-tight flex items-center gap-2">
+            <span class="text-green-600">📊</span> 엑셀 파일 취합하기
+        </h2>
+        <div class="flex gap-2 items-center">
+            <button onclick="showHelpModal()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded shadow-sm flex items-center gap-1 transition font-bold text-sm border border-gray-200">
+                <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                도움말
+            </button>
+            <div class="w-px h-6 bg-gray-300 mx-1"></div>
+
+            <button onclick="addFiles()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow-sm flex items-center gap-2 transition font-bold text-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                파일 추가
+            </button>
+            <button onclick="initiateMerge()" id="mergeBtn" class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-5 py-2 rounded shadow-sm transition font-bold text-sm flex items-center gap-2">
+                <span>취합 시작</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="shrink-0 px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-gray-600">📌 시트 일괄 지정:</span>
+            <select id="batchSheetSelect" onchange="applyBatchSheet(this.value)" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-green-500 w-48">
+                <option value="">파일을 추가하면 목록이 뜹니다</option>
+            </select>
+            <span class="text-[10px] text-gray-400 ml-1">* 해당 시트가 없는 파일은 선택이 해제됩니다.</span>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="clearList()" class="text-xs text-red-500 hover:text-red-700 underline">목록 비우기</button>
+            <span class="text-xs text-gray-400">|</span>
+            <span class="text-xs text-gray-500">총 <strong id="fileCount" class="text-green-600">0</strong>개</span>
+        </div>
+    </div>
+
+    <main class="flex-1 min-h-0 overflow-hidden flex flex-col bg-white relative">
+        <div class="bg-gray-100 border-b border-gray-200 grid grid-cols-12 text-xs font-bold text-gray-500 uppercase tracking-wide py-2 px-2 sticky-header">
+            <div class="col-span-1 text-center">No.</div>
+            <div class="col-span-6 pl-2">파일 정보</div>
+            <div class="col-span-3 pl-2">취합할 시트 선택</div>
+            <div class="col-span-2 text-center">관리</div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-0" id="fileListContainer">
+            <ul id="fileList" class="divide-y divide-gray-100"></ul>
+
+            <div id="empty-state" class="h-full flex flex-col items-center justify-center text-gray-400 min-h-[200px]">
+                <div class="w-16 h-16 mb-4 rounded-full bg-white flex items-center justify-center border-2 border-dashed border-gray-300">
+                    <svg class="w-8 h-8 text-green-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                </div>
+                <p class="text-sm font-bold text-gray-500">엑셀 파일을 추가해주세요</p>
+                <p class="text-xs text-gray-400 mt-1">.xlsx, .xls 파일 지원</p>
+            </div>
+        </div>
+    </main>
+
+    <div id="dragOverlay" class="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm bg-green-500 bg-opacity-10 border-4 border-dashed border-green-500 m-4 rounded-2xl pointer-events-none hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-xl text-center">
+            <div class="w-20 h-20 mx-auto bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">여기에 엑셀 파일들을 놓으세요</h2>
+            <p class="text-gray-500">여러 개의 .xlsx, .xls 파일을 한 번에 추가할 수 있습니다.</p>
+        </div>
+    </div>
+    
+
+    <div id="helpModal" class="fixed inset-0 z-[80] hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-40 transition-opacity" onclick="closeHelpModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none p-4">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl transform transition-all pointer-events-auto flex flex-col max-h-[90vh]">
+                <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-lg shrink-0">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        엑셀 파일 취합기 사용 방법
+                    </h3>
+                    <button onclick="closeHelpModal()" class="text-gray-400 hover:text-gray-600 transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <div class="p-6 overflow-y-auto text-sm text-gray-700 space-y-5 select-text leading-relaxed">
+                    <div class="bg-green-50 border border-green-200 rounded p-3 text-green-800 font-medium">
+                        💡 여러 엑셀 파일의 <strong>특정 시트 데이터를 모아 하나의 엑셀 문서로 세로(위아래)로 길게 이어 붙이는</strong> 기능입니다. 양식이 동일한 자료를 모을 때 유용합니다.
+                    </div>
+
+                    <div>
+                        <h4 class="font-bold text-base text-gray-900 mb-2 flex items-center gap-1"><span class="text-green-600">1.</span> 파일 추가 및 순서 변경</h4>
+                        <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                            <li>우측 상단의 <strong>[파일 추가]</strong> 버튼을 눌러 엑셀 파일을 불러옵니다.</li>
+                            <li>목록에 추가된 파일의 <strong>이름 영역을 마우스로 잡고 위아래로 드래그</strong>하면 취합되는 순서를 바꿀 수 있습니다.</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h4 class="font-bold text-base text-gray-900 mb-2 flex items-center gap-1"><span class="text-green-600">2.</span> 취합할 시트 선택 (개별/일괄)</h4>
+                        <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                            <li><strong>개별 선택:</strong> 목록 우측의 드롭다운 목록에서 각 파일마다 원하는 시트를 고를 수 있습니다.</li>
+                            <li><strong>일괄 지정:</strong> 상단 컨트롤 바의 <strong>[📌 시트 일괄 지정]</strong>에서 시트를 선택하면, 100개의 파일이라도 같은 이름의 시트를 한 번에 찾아 선택합니다.</li>
+                            <li>해당 시트가 없는 파일은 <strong><span class="text-red-500">빨간색 경고</span></strong>가 뜨며 안전하게 취합에서 자동으로 제외됩니다. 수동으로 다른 시트를 골라 다시 포함시킬 수도 있습니다.</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h4 class="font-bold text-base text-gray-900 mb-2 flex items-center gap-1"><span class="text-green-600">3.</span> 미리보기 및 취합 실행</h4>
+                        <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                            <li>파일 목록 우측의 <strong>[파일 열기 버튼(돋보기 모양)]</strong>을 누르면, 엑셀 프로그램이 실행되어 해당 파일의 내용을 미리 확인할 수 있습니다.</li>
+                            <li>설정이 끝난 뒤 우측 상단의 <strong>[취합 시작]</strong> 버튼을 누르면, 백그라운드에서 데이터를 모아 <strong>새로운 엑셀 창</strong>에 뿌려줍니다. (결과는 자동 저장되지 않으므로 확인 후 직접 저장해 주세요.)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end rounded-b-lg shrink-0">
+                    <button onclick="closeHelpModal()" class="px-6 py-2 bg-gray-600 text-white text-sm font-bold rounded shadow-sm hover:bg-gray-700 transition focus:outline-none">닫기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="customModal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-40 transition-opacity" onclick="closeModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="bg-white rounded-lg shadow-xl w-96 transform transition-all pointer-events-auto p-5 text-center flex flex-col max-h-[90vh]">
+                <div id="modalIcon" class="mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-blue-100 mb-3 shrink-0"></div>
+                <h3 id="modalTitle" class="text-base leading-6 font-bold text-gray-900 mb-2 select-text">알림</h3>
+                <div class="mt-1 bg-gray-50 p-3 rounded text-left overflow-y-auto min-h-[50px]">
+                    <p id="modalMessage" class="text-sm text-gray-600 break-words select-text font-mono">내용</p>
+                </div>
+                <div class="mt-4 shrink-0">
+                    <button onclick="closeModal()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-sm font-medium text-white hover:bg-green-700 focus:outline-none">확인</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="fixed inset-0 z-[70] hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-40 transition-opacity" onclick="closeConfirmModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="bg-white rounded-lg shadow-xl w-96 transform transition-all pointer-events-auto p-5 text-center flex flex-col max-h-[90vh]">
+                <div class="mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-yellow-100 mb-3 shrink-0">
+                    <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <h3 id="confirmModalTitle" class="text-base leading-6 font-bold text-gray-900 mb-2 select-text">확인</h3>
+                <div class="mt-1 bg-gray-50 p-3 rounded text-left overflow-y-auto min-h-[50px]">
+                    <p id="confirmModalMessage" class="text-sm text-gray-600 break-words select-text font-mono">내용</p>
+                </div>
+                <div class="mt-4 shrink-0 flex gap-2">
+                    <button onclick="closeConfirmModal()" class="w-1/2 inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none">취소</button>
+                    <button id="confirmOkBtn" class="w-1/2 inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-sm font-medium text-white hover:bg-red-700 focus:outline-none">확인</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm mx-4">
+            <div class="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-t-green-600 mx-auto mb-4"></div>
+            <h2 class="text-lg font-bold text-gray-800 mb-1">데이터 처리 중...</h2>
+            <p class="text-xs text-gray-500">잠시만 기다려주세요.</p>
+        </div>
+    </div>
+
+    <input type="file" id="browserFileInput" multiple class="hidden" accept=".xlsx,.xls">
+
+    <script>
+        function getApi() {
+            if (window.pywebview) return window.pywebview;
+            if (window.parent && window.parent.pywebview) return window.parent.pywebview;
+            return null;
+        }
+
+        const fileListEl = document.getElementById('fileList');
+        const emptyState = document.getElementById('empty-state');
+        const fileCountEl = document.getElementById('fileCount');
+        const mergeBtn = document.getElementById('mergeBtn');
+        const loadingEl = document.getElementById('loading');
+        const browserFileInput = document.getElementById('browserFileInput');
+        const batchSheetSelect = document.getElementById('batchSheetSelect');
+
+        let filesData = [];
+        let allUniqueSheets = new Set();
+
+        // --- Help Modal ---
+        function showHelpModal() { document.getElementById('helpModal').classList.remove('hidden'); }
+        function closeHelpModal() { document.getElementById('helpModal').classList.add('hidden'); }
+
+        // --- Data Handling ---
+        async function addFiles() {
+            const pyApi = getApi();
+            if (pyApi) {
+                try {
+                    const selectedFiles = await pyApi.api.select_excel_files();
+                    if (selectedFiles && selectedFiles.length > 0) {
+                        await processNewFiles(selectedFiles);
+                    }
+                } catch (e) { showModal("오류", "파일 선택 에러: " + e, true); }
+            } else { browserFileInput.click(); }
+        }
+
+        async function processNewFiles(pathList) {
+            loadingEl.classList.remove('hidden');
+            const pyApi = getApi();
+
+            for (const path of pathList) {
+                if (filesData.some(f => f.path === path)) continue;
+
+                let sheets = [];
+                if (pyApi) {
+                    const res = await pyApi.api.get_excel_sheets(path);
+                    if (res.success) sheets = res.sheets;
+                    else {
+                        console.error(res.message);
+                        continue;
+                    }
+                } else {
+                    sheets = ["Sheet1", "Sheet2", "Data"];
+                }
+
+                sheets.forEach(s => allUniqueSheets.add(s));
+
+                filesData.push({
+                    path: path,
+                    sheets: sheets,
+                    selectedSheet: sheets.length > 0 ? sheets[0] : ""
+                });
+            }
+            loadingEl.classList.add('hidden');
+            updateBatchSelectOptions();
+            renderList();
+        }
+
+        // --- UI Rendering ---
+        function updateBatchSelectOptions() {
+            const sortedSheets = Array.from(allUniqueSheets).sort();
+            batchSheetSelect.innerHTML = '<option value="">-- 일괄 변경할 시트 선택 --</option>';
+
+            if (sortedSheets.length > 0) {
+                sortedSheets.forEach(sheet => {
+                    const option = document.createElement('option');
+                    option.value = sheet;
+                    option.innerText = sheet;
+                    batchSheetSelect.appendChild(option);
+                });
+            } else {
+                batchSheetSelect.innerHTML = '<option value="">시트 정보 없음</option>';
+            }
+        }
+
+        function applyBatchSheet(sheetName) {
+            if (!sheetName) return;
+
+            let matchedCount = 0;
+            filesData.forEach(file => {
+                if (file.sheets.includes(sheetName)) {
+                    file.selectedSheet = sheetName;
+                    matchedCount++;
+                } else {
+                    file.selectedSheet = "";
+                }
+            });
+
+            renderList();
+            batchSheetSelect.value = "";
+        }
+
+        function renderList() {
+            fileListEl.innerHTML = '';
+
+            if (filesData.length === 0) {
+                emptyState.classList.remove('hidden');
+                mergeBtn.disabled = true;
+            } else {
+                emptyState.classList.add('hidden');
+                mergeBtn.disabled = false;
+            }
+
+            filesData.forEach((file, index) => {
+                const fileName = file.path.split(/[\\/]/).pop();
+                const dirName = file.path.slice(0, -fileName.length);
+
+                const li = document.createElement('li');
+                li.className = 'grid grid-cols-12 items-center p-2 hover:bg-gray-50 transition group bg-white';
+                li.dataset.index = index;
+
+                let optionsHtml = '<option value="">-- 선택 안 함 (취합 제외) --</option>';
+                if (file.sheets.length > 0) {
+                    file.sheets.forEach(sheet => {
+                        const selected = (sheet === file.selectedSheet) ? 'selected' : '';
+                        optionsHtml += `<option value="${sheet}" ${selected}>${sheet}</option>`;
+                    });
+                }
+
+                let selectClass = "w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:border-green-500 bg-white shadow-sm";
+                let warningText = "";
+
+                if (!file.selectedSheet) {
+                    selectClass = "w-full text-xs border border-red-300 rounded px-2 py-1.5 focus:outline-none focus:border-red-500 bg-red-50 text-red-600 font-bold shadow-sm";
+                    warningText = `<div class="text-[10px] text-red-500 font-bold mt-1 flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                취합 제외됨 (해당 시트 없음)
+                            </div>`;
+                }
+
+                li.innerHTML = `
+                            <div class="col-span-1 text-center text-xs font-mono text-gray-400 flex justify-center items-center h-full">
+                                ${index + 1}
+                            </div>
+
+                            <div class="col-span-6 pl-2 pr-4 overflow-hidden drag-handle hover:bg-green-50 rounded transition py-1" title="드래그하여 순서 변경">
+                                <div class="font-bold text-sm text-gray-700 truncate" title="${fileName}">${fileName}</div>
+                                <div class="text-[10px] text-gray-400 truncate font-mono" title="${file.path}">${dirName}</div>
+                            </div>
+
+                            <div class="col-span-3 pl-2">
+                                <select onchange="updateFileSheet(${index}, this.value)" class="${selectClass}" title="취합할 시트 선택">
+                                    ${optionsHtml}
+                                </select>
+                                ${warningText}
+                            </div>
+
+                            <div class="col-span-2 text-center flex justify-center gap-2 items-start pt-1">
+                                <button onclick="openFile(${index})" class="text-gray-400 hover:text-blue-600 transition p-1" title="파일 열기">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                </button>
+                                <button onclick="removeFile(${index})" class="text-gray-400 hover:text-red-600 transition p-1" title="목록에서 삭제">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            </div>
+                        `;
+                fileListEl.appendChild(li);
+            });
+
+            fileCountEl.innerText = filesData.length;
+        }
+
+        // --- Actions ---
+        window.updateFileSheet = function (index, value) {
+            filesData[index].selectedSheet = value;
+            renderList();
+        };
+
+        window.removeFile = function (index) {
+            filesData.splice(index, 1);
+            if (filesData.length === 0) allUniqueSheets.clear();
+            updateBatchSelectOptions();
+            renderList();
+        };
+
+        window.clearList = function () {
+            if (filesData.length > 0) {
+                showConfirm("목록 초기화", "목록을 모두 지우시겠습니까?", function () {
+                    filesData = [];
+                    allUniqueSheets.clear();
+                    updateBatchSelectOptions();
+                    renderList();
+                });
+            } else {
+                filesData = [];
+                allUniqueSheets.clear();
+                updateBatchSelectOptions();
+                renderList();
+            }
+        };
+
+        async function openFile(index) {
+            const path = filesData[index].path;
+            const pyApi = getApi();
+            if (pyApi) {
+                await pyApi.api.open_excel_file(path);
+            } else {
+                showModal("미리보기", `파일 열기 시도:\n${path}`);
+            }
+        }
+
+        async function initiateMerge() {
+            const validData = filesData.filter(f => f.selectedSheet && f.selectedSheet !== "");
+
+            if (validData.length === 0) {
+                showModal("알림", "취합할 파일이 없거나 시트가 선택되지 않았습니다.", true);
+                return;
+            }
+
+            const pyApi = getApi();
+            if (pyApi) {
+                loadingEl.classList.remove('hidden');
+
+                const mergeData = validData.map(f => ({
+                    path: f.path,
+                    sheets: [f.selectedSheet]
+                }));
+
+                setTimeout(async () => {
+                    try {
+                        const result = await pyApi.api.merge_excel_files(mergeData);
+                        loadingEl.classList.add('hidden');
+
+                        if (result.success) {
+                            showModal("완료", "새 엑셀 창이 열렸습니다.\n데이터를 확인하세요.");
+                        } else {
+                            showModal("실패", `오류: ${result.message}`, true);
+                        }
+                    } catch (error) {
+                        loadingEl.classList.add('hidden');
+                        showModal("시스템 오류", String(error), true);
+                    }
+                }, 100);
+            } else {
+                loadingEl.classList.remove('hidden');
+                setTimeout(() => {
+                    loadingEl.classList.add('hidden');
+                    showModal("미리보기", "[주의] PenTong.py를 실행해야 실제 병합이 됩니다.");
+                }, 1000);
+            }
+        }
+
+        // SortableJS
+        new Sortable(fileListEl, {
+            animation: 150,
+            ghostClass: 'ghost',
+            handle: '.drag-handle',
+            onEnd: function (evt) {
+                const item = filesData.splice(evt.oldIndex, 1)[0];
+                filesData.splice(evt.newIndex, 0, item);
+                renderList();
+            }
+        });
+
+        browserFileInput.addEventListener('change', function (e) {
+            const selected = Array.from(e.target.files).map(f => "C:\\FakePath\\" + f.name);
+            processNewFiles(selected);
+            this.value = '';
+        });
+
+        // --- Modals Logic ---
+        function showModal(title, message, isError = false) {
+            const modal = document.getElementById('customModal');
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMessage').innerText = message;
+            const icon = document.getElementById('modalIcon');
+
+            if (isError) {
+                icon.innerHTML = `<svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+                icon.className = "mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-red-100 mb-3 shrink-0";
+            } else {
+                icon.innerHTML = `<svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+                icon.className = "mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-green-100 mb-3 shrink-0";
+            }
+            modal.classList.remove('hidden');
+        }
+        function closeModal() { document.getElementById('customModal').classList.add('hidden'); }
+
+        let confirmActionCallback = null;
+        function showConfirm(title, message, callback) {
+            document.getElementById('confirmModalTitle').innerText = title;
+            document.getElementById('confirmModalMessage').innerText = message;
+            confirmActionCallback = callback;
+            document.getElementById('confirmModal').classList.remove('hidden');
+        }
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.add('hidden');
+            confirmActionCallback = null;
+        }
+        document.getElementById('confirmOkBtn').addEventListener('click', function () {
+            if (confirmActionCallback) confirmActionCallback();
+            closeConfirmModal();
+        });
+
+        // ==========================================
+        // [추가] 드래그 앤 드롭 프론트엔드 제어
+        // ==========================================
+        const dragOverlay = document.getElementById('dragOverlay');
+
+        document.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            // 부모 창(index.html)의 투명 방패 강제 활성화
+            if (window.parent && window.parent.document) {
+                const shield = window.parent.document.getElementById('global-drop-zone');
+                if (shield) shield.classList.add('active');
+            }
+            if (dragOverlay) dragOverlay.classList.remove('hidden');
+        });
+
+        document.addEventListener('dragover', (e) => e.preventDefault());
+
+        document.addEventListener('dragleave', (e) => {
+            if (dragOverlay) dragOverlay.classList.add('hidden');
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (dragOverlay) dragOverlay.classList.add('hidden');
+        });
+
+        // 파이썬 전역 D&D 이벤트가 감지한 경로들을 이 함수로 찔러줍니다.
+        window.addDroppedFiles = function (paths) {
+            // 엑셀 파일(.xlsx, .xls)만 안전하게 필터링
+            const validPaths = paths.filter(p => {
+                const lowerP = p.toLowerCase();
+                return lowerP.endsWith('.xlsx') || lowerP.endsWith('.xls');
+            });
+
+            if (validPaths.length === 0) {
+                showModal("알림", "추가할 수 있는 엑셀(.xlsx, .xls) 파일이 없거나 유효하지 않습니다.", true);
+                return;
+            }
+
+            // 기존에 작성되어 있는 파일 로드/시트 분석 함수(processNewFiles)를 그대로 호출!
+            processNewFiles(validPaths);
+        };
+    </script>
+</body>
+</html>

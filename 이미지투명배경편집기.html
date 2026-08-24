@@ -1,0 +1,2534 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이미지 투명 배경 편집기</title>
+    <style>
+        :root {
+            --bg-base: #1e1e1e;
+            --bg-panel: #252526;
+            --bg-topbar: #333333;
+            --bg-hover: #444444;
+            --border-color: #3e3e42;
+            --primary-color: #007acc;
+            --primary-hover: #005f9e;
+            --text-main: #cccccc;
+            --text-muted: #858585;
+            --text-active: #ffffff;
+            --success-color: #198754;
+            --danger-color: #dc3545;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- 상단 메인 메뉴바 --- */
+        .header-bar {
+            height: 40px;
+            background-color: var(--bg-topbar);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .header-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-active);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-text {
+            background: none;
+            border: none;
+            color: var(--text-main);
+            font-size: 12px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+            .btn-text:hover:not(:disabled) {
+                background-color: var(--bg-hover);
+                color: var(--text-active);
+            }
+
+            .btn-text:disabled {
+                color: #555;
+                cursor: not-allowed;
+            }
+
+        /* --- 메인 작업 공간 레이아웃 --- */
+        .workspace {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 40px);
+            position: relative;
+        }
+
+        /* --- 왼쪽 세로 툴바 --- */
+        .toolbar-left {
+            width: 70px;
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 10px;
+            gap: 8px;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .tool-btn {
+            width: 56px;
+            height: 52px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            color: var(--text-main);
+            transition: all 0.2s;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+            .tool-btn svg {
+                width: 18px;
+                height: 18px;
+                fill: currentColor;
+            }
+
+            .tool-btn:hover {
+                background-color: var(--bg-hover);
+                color: var(--text-active);
+            }
+
+            .tool-btn.active {
+                background-color: rgba(0, 122, 204, 0.2);
+                border-color: var(--primary-color);
+                color: var(--primary-color);
+            }
+
+        /* --- 가운데 편집 영역 --- */
+        .editor-core {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background-color: #1a1a1a;
+        }
+
+        .options-bar {
+            height: 40px;
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            gap: 20px;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .options-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-right: 1px solid var(--border-color);
+            padding-right: 20px;
+        }
+
+            .options-group:last-child {
+                border-right: none;
+            }
+
+            .options-group input[type="range"] {
+                width: 225px;
+                accent-color: var(--primary-color);
+            }
+
+        #opt-select {
+            display: flex;
+            gap: 15px;
+            border-right: 1px solid var(--border-color);
+            padding-right: 20px;
+        }
+
+        #opt-wand {
+            display: none;
+            gap: 15px;
+            border-right: 1px solid var(--border-color);
+            padding-right: 20px;
+        }
+
+        #opt-eraser {
+            display: none;
+            gap: 15px;
+            border-right: 1px solid var(--border-color);
+            padding-right: 20px;
+        }
+
+            #opt-wand label, #opt-select label, #opt-eraser label {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 11px;
+            }
+
+            #opt-wand input[type="range"], #opt-eraser input[type="range"] {
+                width: 400px !important;
+                accent-color: var(--primary-color);
+            }
+
+        /* 캔버스 뷰포트 */
+        .canvas-viewport {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #1e1e1e;
+            background-image: linear-gradient(45deg, #2a2a2a 25%, transparent 25%, transparent 75%, #2a2a2a 75%, #2a2a2a), linear-gradient(45deg, #2a2a2a 25%, transparent 25%, transparent 75%, #2a2a2a 75%, #2a2a2a);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+
+        #canvas-preview {
+            position: absolute;
+            transform-origin: top left;
+        }
+
+        /* 하단 상태바 */
+        .status-bar {
+            height: 28px;
+            background-color: var(--primary-color);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            font-size: 11px;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .status-info {
+            display: flex;
+            gap: 20px;
+        }
+
+        /* --- 우측 내보내기 패널 --- */
+        .properties-panel {
+            width: 240px;
+            background-color: var(--bg-panel);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .panel-header {
+            padding: 12px 15px;
+            font-size: 12px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-active);
+        }
+
+        .panel-content {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .prop-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+            .prop-group label {
+                font-size: 11px;
+                color: var(--text-muted);
+            }
+
+            .prop-group select {
+                background-color: var(--bg-base);
+                color: var(--text-main);
+                border: 1px solid var(--border-color);
+                padding: 6px;
+                border-radius: 4px;
+                font-size: 12px;
+                outline: none;
+            }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            text-align: center;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+            .btn-primary:hover {
+                background-color: var(--primary-hover);
+            }
+
+        .btn-success {
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            text-align: center;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+            .btn-success:hover {
+                background-color: #146c43;
+            }
+
+        .btn-secondary {
+            background-color: var(--bg-hover);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+            .btn-secondary:hover {
+                background-color: #555;
+                color: var(--text-active);
+            }
+
+        .btn-danger {
+            background-color: #5c2025;
+            color: #ff9999;
+            border: 1px solid #dc3545;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+            .btn-danger:hover {
+                background-color: #dc3545;
+                color: white;
+            }
+
+        #file-input {
+            display: none;
+        }
+
+        /* --- 팝업 (Toast & Modal) --- */
+        .toast-notification {
+            position: fixed;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--primary-color);
+            color: white;
+            padding: 14px 28px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            z-index: 2000;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+            .toast-notification.show {
+                opacity: 1;
+                visibility: visible;
+                bottom: 40px;
+            }
+
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: 0.2s;
+            z-index: 1000;
+        }
+
+            .popup-overlay.show {
+                opacity: 1;
+                visibility: visible;
+            }
+
+        .help-popup-box {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            padding: 25px 30px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 500px;
+        }
+
+            .help-popup-box h3 {
+                margin-top: 0;
+                margin-bottom: 20px;
+                color: var(--text-active);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 16px;
+            }
+
+            .help-popup-box ul {
+                padding-left: 20px;
+                margin-bottom: 25px;
+                font-size: 13px;
+                color: var(--text-main);
+                line-height: 1.6;
+            }
+
+            .help-popup-box li {
+                margin-bottom: 10px;
+            }
+
+        .popup-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+            transition: 0.2s;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+            .popup-btn:hover {
+                filter: brightness(1.1);
+            }
+
+        /* 고해상도 수동지우개 브러시 오버레이 커서 */
+        #brush-cursor {
+            position: fixed;
+            pointer-events: none;
+            border: 1.5px solid white;
+            box-shadow: 0 0 0 1px black inset, 0 0 0 1px black;
+            border-radius: 50%;
+            display: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            box-sizing: border-box;
+        }
+
+        /* 🌟 멀티 탭 스타일 추가 */
+        .tab-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            background-color: var(--bg-base);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-muted);
+            transition: 0.2s;
+        }
+
+            .tab-item.active {
+                background-color: rgba(0, 122, 204, 0.2);
+                border-color: var(--primary-color);
+                color: var(--text-active);
+            }
+
+            .tab-item:hover:not(.active) {
+                background-color: var(--bg-hover);
+            }
+
+        .tab-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0 4px;
+        }
+
+            .tab-close-btn:hover {
+                color: var(--danger-color);
+            }
+        /* 🌟 플로팅 툴바 (화면 늘어남 완벽 방지) */
+        .floating-toolbar {
+            position: absolute;
+            top: 0;
+            bottom: auto; /* 아래로 늘어나지 않게 차단 */
+            height: fit-content; /* 내용물 크기만큼만 높이 유지 */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(35, 35, 36, 0.95);
+            border: 1px solid var(--primary-color);
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            padding: 8px 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .floating-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-right: 1px solid var(--border-color);
+            padding-right: 15px;
+            font-size: 12px;
+        }
+
+            .floating-group:last-child {
+                border-right: none;
+                padding-right: 0;
+            }
+    </style>
+</head>
+<body>
+
+    <header class="header-bar">
+        <div class="header-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--primary-color)"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5-7l-3 3.72L9 13l-3 4h12l-4-5z" /></svg>
+            이미지 편집기
+        </div>
+        <div class="header-actions">
+            <button class="btn-text" id="btn-undo" onclick="safe(undoEdit)()" disabled title="실행 취소 (Ctrl+Z)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C20.76 10.34 16.98 8 12.5 8z" /></svg> 취소
+            </button>
+            <button class="btn-text" id="btn-redo" onclick="safe(redoEdit)()" disabled title="다시 실행 (Ctrl+Y)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;"><path d="M11.5 8c2.65 0 5.05.99 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.16-3.16-1.88-5.12-1.88-3.54 0-6.55 2.31-7.6 5.5l-2.37-.78C4.24 10.34 8.02 8 11.5 8z" /></svg> 다시실행
+            </button>
+            <div style="width: 1px; height: 16px; background: var(--border-color); margin: 0 5px;"></div>
+            <span style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-main);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /></svg>
+                <input type="range" id="zoom-slider" min="0.05" max="8" step="0.05" value="1" style="width: 100px;">
+                <span id="zoom-val" style="width: 40px; text-align: right;">100%</span>
+            </span>
+            <div style="width: 1px; height: 16px; background: var(--border-color); margin: 0 5px;"></div>
+            <button class="btn-text" onclick="showHelp()">도움말</button>
+            <button class="btn-text" onclick="document.getElementById('file-input').click()">새로 열기</button>
+            <button class="btn-text" onclick="safe(readClipboard)()">붙여넣기</button>
+        </div>
+
+        <input type="file" id="file-input" accept="image/*" style="display: none;">
+    </header>
+
+    <div class="workspace">
+        <div id="brush-cursor"></div>
+
+        <aside class="toolbar-left" id="tools-panel">
+            <button class="tool-btn active" data-tool="select" title="선택 영역 지정 및 이동 (S)" onclick="setTool('select')">
+                <svg viewBox="0 0 24 24"><path d="M3 3h4v2H5v2H3V3zm14 0h4v4h-2V5h-2V3zM3 17h2v2h2v2H3v-4zm16 2h-2v2h4v-4h-2v2zM11 3h2v2h-2V3zm0 16h2v2h-2v-2zM3 11h2v2H3v-2zm16 0h2v2h-2v-2z" /></svg>
+                <span>선택</span>
+            </button>
+            <button class="tool-btn" data-tool="pan" title="화면 이동 (V / Space+드래그)" onclick="setTool('pan')">
+                <svg viewBox="0 0 24 24"><path d="M21 9V7c0-1.65-1.35-3-3-3H6C4.35 4 3 5.35 3 7v10c0 1.65 1.35 3 3 3h12c1.65 0 3-1.35 3-3v-2h2v-6h-2zM6 6h12c.55 0 1 .45 1 1v2.53a3.99 3.99 0 00-3.32-.4L8.71 11.2a1.996 1.996 0 00-1.13 2.53l.7 1.87L5 14.53V7c0-.55.45-1 1-1z" /></svg>
+                <span>화면이동</span>
+            </button>
+            <button class="tool-btn" data-tool="wand" title="클릭하여 투명하게 만들기 (W)" onclick="setTool('wand')">
+                <svg viewBox="0 0 24 24"><path d="M7.5 5.6L5 7l1.4 2.5L3 11l2.5 1.4L4.1 15 6 15.6 13.5 8 7.5 5.6zM20 18.6l-5.6-5.6-8.5 8.5 5.6 5.6L20 18.6z" /></svg>
+                <span>자동지우개</span>
+            </button>
+
+            <button class="tool-btn" data-tool="smartWand" title="대충 클릭해도 근처에서 기억된 배경색을 찾아 지웁니다" onclick="setTool('smartWand')">
+                <svg viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" /></svg>
+                <span>스마트지우개</span>
+            </button>
+            <button class="tool-btn" data-tool="eraser" title="드래그하여 수동으로 지우기 (E)" onclick="setTool('eraser')">
+                <svg viewBox="0 0 24 24"><path d="M15.14 3c-.51 0-.97.2-1.32.54l-9.06 9.06c-.73.73-.73 1.91 0 2.64l4.6 4.6c.36.36.84.54 1.32.54s.96-.18 1.32-.54l9.06-9.06c.73-.73.73-1.91 0-2.64l-4.6-4.6C16.11 3.2 15.65 3 15.14 3zm-.41 2.86l2.12 2.12-2.83 2.83-2.12-2.12 2.83-2.83zm-7.78 7.78l2.83-2.83 2.12 2.12-2.83 2.83-2.12-2.12z" /></svg>
+                <span>수동지우개</span>
+            </button>
+        </aside>
+
+        <main class="editor-core">
+            <div id="opt-select" class="floating-toolbar" style="display: flex;">
+                <div class="floating-group">
+                    <label style="display:flex; align-items:center; gap:5px;" title="선택 영역 불투명도 조절">
+                        불투명도: <input type="range" id="opacity-slider" min="0" max="100" value="100" style="width: 70px;"> <span id="opacity-val">100%</span>
+                    </label>
+                </div>
+                <div class="floating-group">
+                    <label style="cursor: pointer;"><input type="checkbox" id="chk-move-sel-only"> 영역만 이동</label>
+                    <label style="cursor: pointer;"><input type="checkbox" id="chk-fixed-size"> 크기 고정</label>
+                    <button class="btn-text" id="btn-save-size" style="background-color: var(--bg-hover); border: 1px solid #555; padding: 2px 6px;">크기 기억</button>
+                    <label style="cursor: pointer; color: var(--primary-color); font-weight: bold; margin-left: 5px;">
+                        <input type="checkbox" id="chk-auto-poly"> 자동 다각형
+                    </label>
+                    <label style="cursor: pointer; color: var(--success-color); font-weight: bold;">
+                        <input type="checkbox" id="chk-auto-copy" disabled> 자동 복사
+                    </label>
+                </div>
+                <div class="floating-group">
+                    <button class="btn-text" style="background-color: var(--bg-hover); border: 1px solid #555; padding: 2px 8px;" onclick="safe(transformSelection)('flipH')">↔ 대칭</button>
+                    <button class="btn-text" style="background-color: var(--bg-hover); border: 1px solid #555; padding: 2px 8px;" onclick="safe(transformSelection)('flipV')">↕ 대칭</button>
+                    <button class="btn-text" style="background-color: var(--bg-hover); border: 1px solid #555; padding: 2px 8px;" onclick="safe(transformSelection)('rotL')">↺ 90°</button>
+                    <button class="btn-text" style="background-color: var(--bg-hover); border: 1px solid #555; padding: 2px 8px;" onclick="safe(transformSelection)('rotR')">↻ 90°</button>
+                </div>
+                <div class="floating-group">
+                    <button class="btn-text" style="background-color: var(--primary-hover); color: white; padding: 4px 10px;" onclick="safe(autoPolygonSelect)()">다각형 선택</button>
+                    <button class="btn-text" style="background-color: var(--primary-color); color: white; padding: 4px 10px;" onclick="safe(smartFitSelection)()">스마트 맞춤</button>
+                    <button class="btn-text" style="background-color: var(--success-color); color: white; padding: 4px 10px;" onclick="safe(copyToClipboard)()">복사 (Ctrl+C)</button>
+                </div>
+            </div>
+
+            <div id="opt-dynamic" class="floating-toolbar" style="display: none; flex-direction: column; gap: 8px; padding: 12px 25px;">
+
+                <div id="grp-wand" style="display: flex; gap: 15px; justify-content: center; width: 100%;">
+                    <div class="floating-group" style="border-right: 1px solid var(--border-color); padding-right: 15px;">
+                        <label style="display:flex; align-items:center; gap:5px;">강도(색차): <input type="range" id="tolerance-slider" min="0" max="100" value="5" style="width: 225px;"> <span id="tol-val">5</span></label>
+                    </div>
+                    <div class="floating-group" style="border-right: none; padding-right: 0;">
+                        <label style="display:flex; align-items:center; gap:5px;">테두리 삭힘: <input type="range" id="softness-slider" min="0" max="50" value="50" style="width: 225px;"> <span id="soft-val">50</span></label>
+                    </div>
+                </div>
+
+                <div id="grp-eraser" style="display: flex; justify-content: center; width: 100%;">
+                    <div class="floating-group" style="border-right: none; padding-right: 0;">
+                        <label style="display:flex; align-items:center; gap:5px; color: var(--text-active);">
+                            브러시 크기: <input type="range" id="brush-slider" min="2" max="100" value="30" style="width: 375px;"> <span id="brush-val">30px</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="canvas-viewport" id="preview-container">
+                <canvas id="canvas-preview"></canvas>
+            </div>
+
+            <footer class="status-bar" id="status-bar">
+                <div class="status-info">
+                    <span id="info-dimensions">0 x 0 px</span>
+                    <span id="info-filename"></span>
+                </div>
+                <div>마우스 우클릭으로 화면 이동 | 캔버스 모서리 드래그로 크기 조절</div>
+            </footer>
+        </main>
+
+        <aside class="properties-panel" id="export-panel">
+            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+                열린 캔버스 <button class="btn-text" style="padding:2px 8px; font-size:14px;" onclick="safe(createNewBlankTab)()" title="새 빈 캔버스 추가">+</button>
+            </div>
+            <div class="panel-content" style="padding: 10px; max-height: 200px; overflow-y: auto; border-bottom: 1px solid var(--border-color);" id="tab-list-container">
+                <div style="font-size:11px; color:var(--text-muted); text-align:center;">열려있는 캔버스가 없습니다.</div>
+            </div>
+
+            <div class="panel-header" style="border-top: none;">저장 및 복사</div>
+            <div class="panel-content">
+                <div class="prop-group">
+                    <label for="export-format">이미지 형식</label>
+                    <select id="export-format">
+                        <option value="png" selected>PNG (투명 배경 유지)</option>
+                        <option value="jpeg">JPG (흰색 배경 채움)</option>
+                    </select>
+                </div>
+
+                <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+                    <button class="btn-primary" onclick="safe(downloadImage)()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg> 이미지 저장
+                    </button>
+                    <button class="btn-success" onclick="safe(copyToClipboard)()" title="단축키: Ctrl + C">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" /></svg> 클립보드 복사
+                    </button>
+                </div>
+
+                <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
+                    <button class="btn-secondary" onclick="safe(resetEdits)()">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" /></svg> 원본 초기화
+                    </button>
+
+                    <button class="btn-danger" onclick="safe(clearAll)()" title="도화지의 내용만 투명하게 지웁니다. 한 번 더 누르면 도화지 자체가 삭제됩니다.">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg> 모두 지우기
+                    </button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <div class="toast-notification" id="toast-msg"></div>
+
+    <div class="popup-overlay" id="help-popup">
+        <div class="help-popup-box">
+            <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="var(--primary-color)"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z" /></svg> 프로그램 사용 방법</h3>
+            <ul class="help-ul">
+                <li><b>이미지 불러오기:</b> 파일을 드래그하거나 '새로 열기'를 사용하세요. (파워포인트 이미지는 단축키 <b>Ctrl+V</b>로 붙여넣으세요)</li>
+                <li><b>이동 및 확대/축소:</b> 휠로 최대 800% 확대, <b>우클릭 드래그</b>로 화면 이동이 가능합니다.</li>
+                <li>
+                    <b>선택 및 편집 (S):</b>
+                    <br>- <b>선택 영역 안쪽</b>을 클릭/드래그하면 이미지가 떼어져서 이동합니다.
+                    <br>- <b>영역만 이동:</b> 체크 시 그림을 뜯어내지 않고 박스만 이동합니다.
+                    <br>- <b>크기 고정:</b> 영역을 선택하고 <b>[크기 기억]</b>을 누른 뒤 이 옵션을 켜면, 클릭할 때마다 똑같은 크기의 선택 박스가 생성됩니다.
+                    <br>- <b>자동 추출(복사):</b> 체크 시 영역을 잡고 마우스를 놓는 즉시 <b>[다각형 선택 + 복사]</b>가 자동으로 진행됩니다.
+                    <br>- <b>Delete 키</b>를 누르면 선택 영역이 삭제됩니다.
+                    <br>- 취소하려면 <b>ESC</b> 키를 누르세요.
+                </li>
+                <li>
+                    <b>지우개 마스크 보호 (W, E):</b>
+                    <br>- <b>선택 영역 안쪽</b>을 클릭하면 선택 영역 안만 지워집니다.
+                    <br>- <b>선택 영역 바깥쪽</b>을 클릭하면 선택 영역을 보호하며 바깥쪽만 지워집니다.
+                </li>
+            </ul>
+            <div style="text-align: right;"><button class="popup-btn" style="width: auto; padding: 8px 30px;" onclick="closeHelp()">닫기</button></div>
+        </div>
+    </div>
+
+    <script>
+        /* --- 🌟 시스템 에러 추적용 (Alert 강제 팝업 제거, 내부 팝업만 사용) --- */
+        let toastTimeout;
+        function showPopup(message) {
+            const toast = document.getElementById('toast-msg');
+            if (!toast) return;
+            toast.innerHTML = message.replace(/\n/g, '<br>');
+            toast.classList.add('show');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => { toast.classList.remove('show'); }, 4000);
+        }
+
+        window.addEventListener('error', function (e) {
+            showPopup(`[시스템 에러]\n${e.message}\nLine: ${e.lineno}`);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+            showPopup(`[비동기 에러]\n${e.reason}`);
+        });
+        function safe(fn) {
+            return function (...args) {
+                try { return fn.apply(this, args); }
+                catch (err) {
+                    console.error(err);
+                    showPopup(`[실행 에러]\n${err.name}: ${err.message}`);
+                }
+            };
+        }
+
+        /* --- 글로벌 엘리먼트 --- */
+        const toolsPanel = document.getElementById('tools-panel');
+        const optionsBar = document.getElementById('options-bar');
+        const previewContainer = document.getElementById('preview-container');
+        const statusBar = document.getElementById('status-bar');
+        const exportPanel = document.getElementById('export-panel');
+        const fileInput = document.getElementById('file-input');
+
+        const infoDimensions = document.getElementById('info-dimensions');
+        const infoFilename = document.getElementById('info-filename');
+        const btnUndo = document.getElementById('btn-undo');
+        const btnRedo = document.getElementById('btn-redo');
+
+        const canvasPreview = document.getElementById('canvas-preview');
+        const ctxPreview = canvasPreview.getContext('2d');
+
+        const brushCursor = document.getElementById('brush-cursor');
+
+        /* --- 핵심 데이터 --- */
+        let masterCanvas = document.createElement('canvas');
+        let masterCtx = masterCanvas.getContext('2d');
+
+        let floatingCanvas = document.createElement('canvas');
+        let floatingCtx = floatingCanvas.getContext('2d');
+
+        let originalImageObj = null;
+        let originalFileName = "image";
+        let currentTool = 'select';
+        let currentScale = 1;
+
+        let softSlider = document.getElementById('softness-slider');
+        let softValDisplay = document.getElementById('soft-val');
+        let opacitySlider = document.getElementById('opacity-slider');
+        let opacityValDisplay = document.getElementById('opacity-val');
+
+        let undoStack = [];
+        let redoStack = [];
+
+        let isDragging = false;
+        let isErasing = false;
+        let isSpacePressed = false;
+        let isMiddleClick = false;
+        let isRightClick = false;
+        let isForcePanning = false;
+        let isImageFloating = false;
+
+        let lastX = 0, lastY = 0;
+        let panStartX = 0, panStartY = 0;
+        let panStartLeft = 0, panStartTop = 0;
+
+        let selectionBox = { x: 0, y: 0, w: 0, h: 0, active: false, polygon: null, exactMask: null, maskW: 0, angle: 0 };
+        let activeSelectionHandle = null;
+        let canvasResizeState = { active: false, handle: null, w: 0, h: 0 };
+        let lastWandAction = null;
+
+        let isMoveSelectionOnly = false;
+        let isFixedSize = false;
+        let savedSelW = 0;
+        let savedSelH = 0;
+
+        let isAutoPoly = false;
+        let isAutoCopy = false;
+        let rememberedColor = null;
+
+        let eraserBrushSize = 30;
+        let smartBrushSize = 60;
+
+        let tabs = [];
+        let activeTabId = null;
+        let tabCounter = 0;
+
+        /* --- 멀티 캔버스(탭) 관리 로직 --- */
+        function saveCurrentTabState() {
+            if (!activeTabId) return;
+            const tab = tabs.find(t => t.id === activeTabId);
+            if (tab) {
+                tab.masterCanvas = masterCanvas; tab.masterCtx = masterCtx;
+                tab.floatingCanvas = floatingCanvas; tab.floatingCtx = floatingCtx;
+                tab.originalImageObj = originalImageObj; tab.originalFileName = originalFileName;
+                tab.currentScale = currentScale; tab.undoStack = undoStack; tab.redoStack = redoStack;
+                tab.isImageFloating = isImageFloating;
+                tab.selectionBox = { ...selectionBox }; tab.canvasResizeState = { ...canvasResizeState };
+                if (opacitySlider) tab.opacity = opacitySlider.value;
+            }
+        }
+
+        function switchTab(tabId) {
+            if (activeTabId === tabId) return;
+            saveCurrentTabState();
+
+            const tab = tabs.find(t => t.id === tabId);
+            if (!tab) return;
+
+            activeTabId = tabId;
+            masterCanvas = tab.masterCanvas; masterCtx = tab.masterCtx;
+            floatingCanvas = tab.floatingCanvas; floatingCtx = tab.floatingCtx;
+            originalImageObj = tab.originalImageObj; originalFileName = tab.originalFileName;
+            currentScale = tab.currentScale; undoStack = tab.undoStack; redoStack = tab.redoStack;
+            isImageFloating = tab.isImageFloating;
+            selectionBox = { ...tab.selectionBox }; canvasResizeState = { ...tab.canvasResizeState };
+
+            if (opacitySlider) {
+                opacitySlider.value = tab.opacity || 100;
+                if (opacityValDisplay) opacityValDisplay.innerText = opacitySlider.value + '%';
+            }
+
+            updateUndoRedoButtons(); renderTabList();
+
+            // 🌟 빈 캔버스 탭일 경우 화면을 비워둠
+            if (tab.isEmptyTab) {
+                canvasPreview.style.display = 'none';
+                if (infoDimensions) infoDimensions.innerText = '대기중...';
+            } else {
+                canvasPreview.style.display = 'block';
+                if (infoDimensions) infoDimensions.innerText = `${masterCanvas.width} x ${masterCanvas.height} px`;
+            }
+            if (infoFilename) infoFilename.innerText = originalFileName;
+
+            canvasPreview.style.width = (masterCanvas.width * currentScale) + 'px';
+            canvasPreview.style.height = (masterCanvas.height * currentScale) + 'px';
+            const zoomSlider = document.getElementById('zoom-slider');
+            const zoomVal = document.getElementById('zoom-val');
+            if (zoomSlider) zoomSlider.value = currentScale;
+            if (zoomVal) zoomVal.innerText = Math.round(currentScale * 100) + '%';
+
+            setTool(currentTool); centerCanvas(); renderPreview();
+        }
+
+        function closeTab(tabId, event) {
+            if (event) event.stopPropagation();
+            const tabIndex = tabs.findIndex(t => t.id === tabId);
+            if (tabIndex === -1) return;
+
+            tabs.splice(tabIndex, 1);
+
+            if (tabs.length === 0) {
+                activeTabId = null; originalImageObj = null;
+                masterCanvas = document.createElement('canvas'); masterCtx = masterCanvas.getContext('2d');
+                floatingCanvas = document.createElement('canvas'); floatingCtx = floatingCanvas.getContext('2d');
+                undoStack = []; redoStack = []; selectionBox.active = false; isImageFloating = false;
+                ctxPreview.clearRect(0, 0, canvasPreview.width, canvasPreview.height);
+
+                canvasPreview.style.display = 'none'; // 🌟 탭이 모두 닫히면 캔버스 뷰포트 숨김
+
+                if (infoDimensions) infoDimensions.innerText = '0 x 0 px';
+                if (infoFilename) infoFilename.innerText = '';
+                renderTabList(); return;
+            }
+            if (activeTabId === tabId) switchTab(tabs[Math.max(0, tabIndex - 1)].id);
+            else renderTabList();
+        }
+
+        function createNewTab(img, fileName) {
+            saveCurrentTabState();
+            tabCounter++; const newTabId = 'tab_' + tabCounter;
+
+            const newMasterCanvas = document.createElement('canvas'); const newMasterCtx = newMasterCanvas.getContext('2d');
+            newMasterCanvas.width = img.width; newMasterCanvas.height = img.height;
+            newMasterCtx.drawImage(img, 0, 0);
+
+            const newFloatingCanvas = document.createElement('canvas');
+
+            const newTab = {
+                id: newTabId, originalFileName: fileName, originalImageObj: img,
+                masterCanvas: newMasterCanvas, masterCtx: newMasterCtx,
+                floatingCanvas: newFloatingCanvas, floatingCtx: newFloatingCanvas.getContext('2d'),
+                currentScale: 1, undoStack: [], redoStack: [], isImageFloating: false,
+                selectionBox: { x: 0, y: 0, w: 0, h: 0, active: false, polygon: null, exactMask: null, maskW: 0, angle: 0 },
+                canvasResizeState: { active: false, handle: null, w: 0, h: 0 }, opacity: 100,
+                isEmptyTab: false // 🌟 활성 탭
+            };
+
+            tabs.push(newTab); switchTab(newTabId); saveState(true); fitZoomToScreen();
+        }
+
+        function renderTabList() {
+            const container = document.getElementById('tab-list-container');
+            if (!container) return;
+            if (tabs.length === 0) {
+                container.innerHTML = '<div style="font-size:11px; color:var(--text-muted); text-align:center;">열려있는 캔버스가 없습니다.</div>'; return;
+            }
+            container.innerHTML = '';
+            tabs.forEach(tab => {
+                const div = document.createElement('div');
+                div.className = `tab-item ${tab.id === activeTabId ? 'active' : ''}`;
+                div.onclick = () => safe(switchTab)(tab.id);
+
+                const titleSpan = document.createElement('span');
+                titleSpan.innerText = tab.originalFileName;
+                titleSpan.style.overflow = 'hidden'; titleSpan.style.textOverflow = 'ellipsis'; titleSpan.style.whiteSpace = 'nowrap'; titleSpan.style.maxWidth = '150px';
+
+                const closeBtn = document.createElement('button'); closeBtn.className = 'tab-close-btn';
+                closeBtn.innerHTML = '×'; closeBtn.onclick = (e) => safe(closeTab)(tab.id, e);
+
+                div.appendChild(titleSpan); div.appendChild(closeBtn); container.appendChild(div);
+            });
+        }
+
+        /* --- 신규 이벤트 리스너 --- */
+        const chkMoveSelOnly = document.getElementById('chk-move-sel-only');
+        if (chkMoveSelOnly) chkMoveSelOnly.addEventListener('change', function () { isMoveSelectionOnly = this.checked; });
+
+        const chkFixedSize = document.getElementById('chk-fixed-size');
+        if (chkFixedSize) chkFixedSize.addEventListener('change', function () {
+            isFixedSize = this.checked;
+            if (isFixedSize && (savedSelW === 0 || savedSelH === 0)) {
+                showPopup("먼저 영역을 선택하고 '크기 기억' 버튼을 눌러주세요.");
+                this.checked = false; isFixedSize = false;
+            }
+        });
+
+        const btnSaveSize = document.getElementById('btn-save-size');
+        if (btnSaveSize) btnSaveSize.addEventListener('click', function () {
+            if (selectionBox.active) {
+                normalizeSelectionBox();
+                savedSelW = Math.round(Math.abs(selectionBox.w));
+                savedSelH = Math.round(Math.abs(selectionBox.h));
+                showPopup(`크기가 기억되었습니다: ${savedSelW} x ${savedSelH} px\n'크기 고정'을 체크하고 화면을 클릭해보세요.`);
+            } else {
+                showPopup("먼저 크기를 기억할 영역을 선택해주세요.");
+            }
+        });
+
+        const chkAutoPoly = document.getElementById('chk-auto-poly');
+        const chkAutoCopy = document.getElementById('chk-auto-copy');
+        if (chkAutoPoly && chkAutoCopy) {
+            chkAutoPoly.addEventListener('change', function () {
+                isAutoPoly = this.checked;
+                chkAutoCopy.disabled = !this.checked;
+                if (!this.checked) { chkAutoCopy.checked = false; isAutoCopy = false; }
+            });
+            chkAutoCopy.addEventListener('change', function () { isAutoCopy = this.checked; });
+        }
+
+        function showHelp() { document.getElementById('help-popup').classList.add('show'); }
+        function closeHelp() { document.getElementById('help-popup').classList.remove('show'); }
+
+        /* --- 파일 처리 및 탭 연동 --- */
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => { document.body.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); }); });
+        document.body.addEventListener('drop', safe(e => handleFiles(e.dataTransfer.files, true)));
+        if (fileInput) fileInput.addEventListener('change', safe(function () { handleFiles(this.files, true); }));
+
+        window.addEventListener('load', () => window.focus());
+        document.addEventListener('click', () => window.focus());
+
+        function handlePasteEvent(e) {
+            const clipboardData = e.clipboardData || window.clipboardData;
+            if (!clipboardData) return;
+
+            const items = clipboardData.items; const files = [];
+            if (items) {
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i] && items[i].type && items[i].type.indexOf('image') !== -1) {
+                        const f = items[i].getAsFile(); if (f !== null) files.push(f);
+                    }
+                }
+            }
+
+            if (files.length > 0) {
+                e.preventDefault(); handleFiles(files, false);
+            } else {
+                const htmlData = clipboardData.getData('text/html');
+                if (htmlData) {
+                    const match = htmlData.match(/<img[^>]+src="([^">]+)"/i);
+                    if (match && match[1].startsWith('data:image/')) {
+                        e.preventDefault();
+                        fetch(match[1]).then(res => res.blob()).then(blob => {
+                            const f = new File([blob], "pasted_image.png", { type: blob.type }); handleFiles([f], false);
+                        }).catch(err => {
+                            showPopup("웹 이미지 변환에 실패했습니다. 이미지를 캡처 도구로 다시 복사해보세요.");
+                        });
+                        return;
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('paste', safe(handlePasteEvent));
+        
+
+        async function readClipboard() {
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                for (const clipboardItem of clipboardItems) {
+                    for (const type of clipboardItem.types) {
+                        if (type.startsWith('image/')) {
+                            const blob = await clipboardItem.getType(type);
+                            if (blob) { handleFiles([new File([blob], "pasted_image.png", { type })], false); return; }
+                        }
+                    }
+                }
+                showPopup("클립보드에 복사된 이미지가 없습니다.");
+            } catch (err) { showPopup("붙여넣기 권한이 차단되었습니다."); }
+        }
+
+        function handleFiles(files, forceNewTab = false) {
+            if (!files || files.length === 0) return;
+            const file = files[0];
+            if (!file || !file.type || !file.type.startsWith('image/')) { showPopup('지원되지 않는 형식이거나 손상된 데이터입니다.'); return; }
+
+            const fileName = file.name === "pasted_image.png" ? "클립보드_이미지" : (file.name.substring(0, file.name.lastIndexOf('.')) || file.name);
+
+            const reader = new FileReader();
+            reader.onload = safe(function (event) {
+                const img = new Image();
+                img.onload = safe(function () {
+                    const currentTab = tabs.find(t => t.id === activeTabId);
+
+                    // 🌟 현재 탭이 대기 상태(비워둔 상태)라면, 캔버스를 이미지 크기에 맞춰 완벽하게 새로 생성하여 덮어씀
+                    if (currentTab && currentTab.isEmptyTab) {
+                        currentTab.isEmptyTab = false;
+                        currentTab.originalImageObj = img;
+                        currentTab.originalFileName = fileName;
+                        originalImageObj = img;
+                        originalFileName = fileName;
+
+                        masterCanvas.width = img.width;
+                        masterCanvas.height = img.height;
+                        masterCtx.clearRect(0, 0, img.width, img.height);
+                        masterCtx.drawImage(img, 0, 0);
+
+                        canvasPreview.style.display = 'block'; // 🌟 숨겨놨던 캔버스를 짠! 하고 나타냄
+
+                        if (infoDimensions) infoDimensions.innerText = `${img.width} x ${img.height} px`;
+                        if (infoFilename) infoFilename.innerText = fileName;
+
+                        saveState(true);
+                        renderTabList();
+                        fitZoomToScreen();
+                        renderPreview();
+                        showPopup("이미지 원본 크기에 맞춰 캔버스가 생성되었습니다.");
+                    } else if (forceNewTab || tabs.length === 0) {
+                        createNewTab(img, fileName);
+                    } else {
+                        floatPastedImage(img, fileName);
+                    }
+                });
+                img.src = event.target.result;
+            });
+            reader.readAsDataURL(file);
+        }
+
+        function floatPastedImage(img, fileName) {
+            if (tabs.length === 0) return;
+
+            // 🌟 붙여넣기 직전, 기존에 공중에 떠 있던 선택 개체가 있다면 먼저 확실하게 도화지에 확정(commit)시킴
+            commitFloatingSelection();
+
+            setTool('select');
+
+            let needsResize = false; let newWidth = masterCanvas.width; let newHeight = masterCanvas.height;
+            if (img.width > masterCanvas.width) { newWidth = img.width; needsResize = true; }
+            if (img.height > masterCanvas.height) { newHeight = img.height; needsResize = true; }
+
+            if (needsResize) {
+                const temp = document.createElement('canvas'); temp.width = masterCanvas.width; temp.height = masterCanvas.height;
+                temp.getContext('2d').drawImage(masterCanvas, 0, 0);
+
+                masterCanvas.width = newWidth; masterCanvas.height = newHeight;
+                masterCtx.clearRect(0, 0, newWidth, newHeight); masterCtx.drawImage(temp, 0, 0);
+
+                canvasPreview.style.width = (newWidth * currentScale) + 'px'; canvasPreview.style.height = (newHeight * currentScale) + 'px';
+                if (infoDimensions) infoDimensions.innerText = `${newWidth} x ${newHeight} px`; saveState();
+            }
+
+            floatingCanvas.width = img.width; floatingCanvas.height = img.height;
+            floatingCtx.clearRect(0, 0, img.width, img.height); floatingCtx.drawImage(img, 0, 0);
+
+            const rect = canvasPreview.getBoundingClientRect(); const containerRect = previewContainer.getBoundingClientRect();
+            const centerX = (containerRect.width / 2 - rect.left) / currentScale; const centerY = (containerRect.height / 2 - rect.top) / currentScale;
+
+            let pasteX = Math.max(0, centerX - (img.width / 2)); let pasteY = Math.max(0, centerY - (img.height / 2));
+            if (pasteX + img.width > masterCanvas.width) pasteX = masterCanvas.width - img.width;
+            if (pasteY + img.height > masterCanvas.height) pasteY = masterCanvas.height - img.height;
+            if (pasteX < 0) pasteX = 0; if (pasteY < 0) pasteY = 0;
+
+            selectionBox = { x: pasteX, y: pasteY, w: img.width, h: img.height, active: true, polygon: null, exactMask: null, angle: 0 };
+            isImageFloating = true;
+            if (opacitySlider) opacitySlider.value = 100;
+            if (opacityValDisplay) opacityValDisplay.innerText = '100%';
+            renderPreview(); showPopup("이미지가 현재 캔버스에 붙여넣어졌습니다.");
+        }
+
+        /* --- 선택 및 픽셀 이동 --- */
+        function getSelectionHandle(x, y) {
+            if (!selectionBox.active) return null;
+
+            const cx = selectionBox.x + selectionBox.w / 2;
+            const cy = selectionBox.y + selectionBox.h / 2;
+            let rx_mouse = x, ry_mouse = y;
+
+            if (selectionBox.angle) {
+                const dx = x - cx; const dy = y - cy;
+                const cos = Math.cos(-selectionBox.angle);
+                const sin = Math.sin(-selectionBox.angle);
+                rx_mouse = cx + dx * cos - dy * sin;
+                ry_mouse = cy + dx * sin + dy * cos;
+            }
+
+            const hs = 10 / currentScale;
+            const rx = selectionBox.w < 0 ? selectionBox.x + selectionBox.w : selectionBox.x;
+            const ry = selectionBox.h < 0 ? selectionBox.y + selectionBox.h : selectionBox.y;
+            const rw = Math.abs(selectionBox.w); const rh = Math.abs(selectionBox.h);
+            const hit = (hx, hy) => Math.abs(rx_mouse - hx) < hs && Math.abs(ry_mouse - hy) < hs;
+
+            let rotHy = ry - 25 / currentScale;
+            if (ry < 30 / currentScale) rotHy = ry + rh + 25 / currentScale;
+            if (hit(rx + rw / 2, rotHy)) return 'rot';
+
+            if (selectionBox.polygon) {
+                let inside = false;
+                const vs = selectionBox.polygon;
+                for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+                    let xi = vs[i].x, yi = vs[i].y;
+                    let xj = vs[j].x, yj = vs[j].y;
+                    let intersect = ((yi > ry_mouse) != (yj > ry_mouse)) && (rx_mouse < (xj - xi) * (ry_mouse - yi) / (yj - yi) + xi);
+                    if (intersect) inside = !inside;
+                }
+                if (inside) return 'inside';
+                return null;
+            }
+
+            if (hit(rx, ry)) return 'tl'; if (hit(rx + rw, ry)) return 'tr';
+            if (hit(rx, ry + rh)) return 'bl'; if (hit(rx + rw, ry + rh)) return 'br';
+            if (hit(rx + rw / 2, ry)) return 't'; if (hit(rx + rw / 2, ry + rh)) return 'b';
+            if (hit(rx, ry + rh / 2)) return 'l'; if (hit(rx + rw, ry + rh / 2)) return 'r';
+            if (rx_mouse > rx && rx_mouse < rx + rw && ry_mouse > ry && ry_mouse < ry + rh) return 'inside';
+            return null;
+        }
+
+        function normalizeSelectionBox() {
+            if (selectionBox.w < 0) { selectionBox.x += selectionBox.w; selectionBox.w = Math.abs(selectionBox.w); }
+            if (selectionBox.h < 0) { selectionBox.y += selectionBox.h; selectionBox.h = Math.abs(selectionBox.h); }
+        }
+
+        function extractSelectionToFloat() {
+            if (isImageFloating || !selectionBox.active) return;
+            normalizeSelectionBox();
+            if (selectionBox.w <= 0 || selectionBox.h <= 0) return;
+
+            selectionBox.x = Math.round(selectionBox.x);
+            selectionBox.y = Math.round(selectionBox.y);
+            selectionBox.w = Math.round(selectionBox.w);
+            selectionBox.h = Math.round(selectionBox.h);
+
+            floatingCanvas.width = selectionBox.w;
+            floatingCanvas.height = selectionBox.h;
+            floatingCtx.clearRect(0, 0, selectionBox.w, selectionBox.h);
+
+            const sx = Math.max(0, selectionBox.x);
+            const sy = Math.max(0, selectionBox.y);
+            const ex = Math.min(masterCanvas.width, selectionBox.x + selectionBox.w);
+            const ey = Math.min(masterCanvas.height, selectionBox.y + selectionBox.h);
+            const drawW = ex - sx; const drawH = ey - sy;
+
+            if (drawW > 0 && drawH > 0) {
+                const dx = sx - selectionBox.x;
+                const dy = sy - selectionBox.y;
+
+                floatingCtx.drawImage(masterCanvas, sx, sy, drawW, drawH, dx, dy, drawW, drawH);
+
+                if (selectionBox.exactMask) {
+                    const fData = floatingCtx.getImageData(dx, dy, drawW, drawH);
+                    const mData = masterCtx.getImageData(sx, sy, drawW, drawH);
+
+                    for (let yy = 0; yy < drawH; yy++) {
+                        for (let xx = 0; xx < drawW; xx++) {
+                            const globalX = sx + xx;
+                            const globalY = sy + yy;
+
+                            if (globalX >= 0 && globalX < selectionBox.maskW && globalY >= 0 && globalY < masterCanvas.height) {
+                                if (!selectionBox.exactMask[globalY * selectionBox.maskW + globalX]) {
+                                    fData.data[(yy * drawW + xx) * 4 + 3] = 0;
+                                } else {
+                                    mData.data[(yy * drawW + xx) * 4 + 3] = 0;
+                                }
+                            }
+                        }
+                    }
+                    floatingCtx.putImageData(fData, dx, dy);
+                    masterCtx.putImageData(mData, sx, sy);
+                } else {
+                    masterCtx.clearRect(sx, sy, drawW, drawH);
+                }
+
+                isImageFloating = true;
+                if (opacitySlider) opacitySlider.value = 100;
+                if (opacityValDisplay) opacityValDisplay.innerText = '100%';
+            }
+        }
+
+        function commitFloatingSelection() {
+            if (isImageFloating) {
+                masterCtx.save();
+                if (opacitySlider) masterCtx.globalAlpha = parseInt(opacitySlider.value) / 100;
+                masterCtx.imageSmoothingEnabled = false;
+
+                if (selectionBox.angle) {
+                    const cx = selectionBox.x + selectionBox.w / 2;
+                    const cy = selectionBox.y + selectionBox.h / 2;
+                    masterCtx.translate(cx, cy);
+                    masterCtx.rotate(selectionBox.angle);
+                    masterCtx.translate(-cx, -cy);
+                }
+
+                masterCtx.drawImage(floatingCanvas, Math.round(selectionBox.x), Math.round(selectionBox.y));
+                masterCtx.restore();
+
+                isImageFloating = false;
+                selectionBox.angle = 0;
+                if (opacitySlider) opacitySlider.value = 100;
+                if (opacityValDisplay) opacityValDisplay.innerText = '100%';
+                saveState(); renderPreview();
+            }
+        }
+
+        function autoExpandCanvas(boxX, boxY, boxW, boxH) {
+            let needsExpand = false;
+            let shiftX = 0, shiftY = 0;
+
+            const intBoxX = Math.floor(boxX);
+            const intBoxY = Math.floor(boxY);
+            const intBoxW = Math.ceil(boxW);
+            const intBoxH = Math.ceil(boxH);
+
+            let newWidth = masterCanvas.width;
+            let newHeight = masterCanvas.height;
+
+            if (intBoxX < 0) { shiftX = Math.abs(intBoxX); newWidth += shiftX; needsExpand = true; }
+            if (intBoxY < 0) { shiftY = Math.abs(intBoxY); newHeight += shiftY; needsExpand = true; }
+            if (intBoxX + shiftX + intBoxW > newWidth) { newWidth = intBoxX + shiftX + intBoxW; needsExpand = true; }
+            if (intBoxY + shiftY + intBoxH > newHeight) { newHeight = intBoxY + shiftY + intBoxH; needsExpand = true; }
+
+            if (needsExpand) {
+                const temp = document.createElement('canvas');
+                temp.width = masterCanvas.width;
+                temp.height = masterCanvas.height;
+                temp.getContext('2d').drawImage(masterCanvas, 0, 0);
+
+                masterCanvas.width = newWidth;
+                masterCanvas.height = newHeight;
+
+                masterCtx.imageSmoothingEnabled = false;
+                masterCtx.clearRect(0, 0, newWidth, newHeight);
+                masterCtx.drawImage(temp, shiftX, shiftY);
+
+                if (shiftX > 0 || shiftY > 0) {
+                    selectionBox.x += shiftX; selectionBox.y += shiftY;
+                    panStartLeft -= shiftX * currentScale; panStartTop -= shiftY * currentScale;
+
+                    let curLeft = parseFloat(canvasPreview.style.left);
+                    if (isNaN(curLeft)) curLeft = (previewContainer.clientWidth - temp.width * currentScale) / 2;
+                    let curTop = parseFloat(canvasPreview.style.top);
+                    if (isNaN(curTop)) curTop = (previewContainer.clientHeight - temp.height * currentScale) / 2;
+
+                    canvasPreview.style.left = `${curLeft - shiftX * currentScale}px`;
+                    canvasPreview.style.top = `${curTop - shiftY * currentScale}px`;
+                }
+
+                canvasPreview.style.width = (masterCanvas.width * currentScale) + 'px';
+                canvasPreview.style.height = (masterCanvas.height * currentScale) + 'px';
+                if (infoDimensions) infoDimensions.innerText = `${masterCanvas.width} x ${masterCanvas.height} px`;
+            }
+        }
+
+        /* --- 툴, 커서 관리 --- */
+        function updateCursor(hoverHandle = null) {
+            brushCursor.style.display = 'none';
+            if (isSpacePressed || isMiddleClick || isRightClick) { previewContainer.style.cursor = isDragging ? 'grabbing' : 'grab'; return; }
+
+            if (hoverHandle === 'r' || hoverHandle === 'l') previewContainer.style.cursor = 'ew-resize';
+            else if (hoverHandle === 'b' || hoverHandle === 't') previewContainer.style.cursor = 'ns-resize';
+            else if (hoverHandle === 'br' || hoverHandle === 'tl') previewContainer.style.cursor = 'nwse-resize';
+            else if (hoverHandle === 'rot') previewContainer.style.cursor = 'crosshair';
+            else if (currentTool === 'select') {
+                previewContainer.style.cursor = (hoverHandle === 'inside') ? 'move' : 'crosshair';
+            }
+            else if (currentTool === 'pan') previewContainer.style.cursor = isDragging ? 'grabbing' : 'grab';
+            else if (currentTool === 'wand') previewContainer.style.cursor = 'crosshair';
+            else if (currentTool === 'smartWand') {
+                if (rememberedColor) {
+                    previewContainer.style.cursor = 'none'; brushCursor.style.display = 'block';
+                    const visualSize = Math.max(4, Math.round(smartBrushSize * currentScale));
+                    brushCursor.style.width = visualSize + 'px'; brushCursor.style.height = visualSize + 'px';
+                } else {
+                    previewContainer.style.cursor = 'crosshair';
+                }
+            }
+            else if (currentTool === 'eraser') {
+                previewContainer.style.cursor = 'none'; brushCursor.style.display = 'block';
+                const visualSize = Math.max(4, Math.round(eraserBrushSize * currentScale));
+                brushCursor.style.width = visualSize + 'px'; brushCursor.style.height = visualSize + 'px';
+            } else previewContainer.style.cursor = 'default';
+        }
+
+        function setTool(toolName) {
+            if (!originalImageObj) return;
+            commitFloatingSelection();
+            currentTool = toolName;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            const actBtn = document.querySelector(`.tool-btn[data-tool="${toolName}"]`);
+            if (actBtn) actBtn.classList.add('active');
+
+            const pSelect = document.getElementById('opt-select');
+            const pDynamic = document.getElementById('opt-dynamic');
+            const gWand = document.getElementById('grp-wand');
+            const gEraser = document.getElementById('grp-eraser');
+
+            if (pSelect) pSelect.style.display = toolName === 'select' ? 'flex' : 'none';
+
+            // 🌟 도구에 맞춰 슬라이더 값 동기화 및 패널 제어
+            if (pDynamic) {
+                const bSlider = document.getElementById('brush-slider');
+                const bVal = document.getElementById('brush-val');
+
+                if (toolName === 'wand') {
+                    pDynamic.style.display = 'flex';
+                    gWand.style.display = 'flex';
+                    gEraser.style.display = 'none';
+                } else if (toolName === 'eraser') {
+                    pDynamic.style.display = 'flex';
+                    gWand.style.display = 'none';
+                    gEraser.style.display = 'flex';
+                    if (bSlider) bSlider.value = eraserBrushSize;
+                    if (bVal) bVal.innerText = eraserBrushSize + 'px';
+                } else if (toolName === 'smartWand') {
+                    pDynamic.style.display = 'flex';
+                    gWand.style.display = 'flex';
+                    gEraser.style.display = 'flex';
+                    if (bSlider) bSlider.value = smartBrushSize;
+                    if (bVal) bVal.innerText = smartBrushSize + 'px';
+                } else {
+                    pDynamic.style.display = 'none';
+                }
+            }
+            updateCursor(); renderPreview();
+        }
+
+        /* --- 줌 (포인터 중심) --- */
+        const zoomSlider = document.getElementById('zoom-slider');
+        const zoomVal = document.getElementById('zoom-val');
+
+        function applyZoom(scaleValue, focalX = null, focalY = null) {
+            const newScale = parseFloat(scaleValue).toFixed(2);
+            if (currentScale === newScale) return;
+
+            const scaleRatio = newScale / currentScale;
+            const containerRect = previewContainer.getBoundingClientRect();
+
+            let currentLeft = parseFloat(canvasPreview.style.left);
+            let currentTop = parseFloat(canvasPreview.style.top);
+            if (isNaN(currentLeft)) currentLeft = (previewContainer.clientWidth - masterCanvas.width * currentScale) / 2;
+            if (isNaN(currentTop)) currentTop = (previewContainer.clientHeight - masterCanvas.height * currentScale) / 2;
+
+            let mouseX = previewContainer.clientWidth / 2;
+            let mouseY = previewContainer.clientHeight / 2;
+
+            if (focalX !== null && focalY !== null) {
+                mouseX = focalX - containerRect.left;
+                mouseY = focalY - containerRect.top;
+            }
+
+            const newLeft = mouseX - (mouseX - currentLeft) * scaleRatio;
+            const newTop = mouseY - (mouseY - currentTop) * scaleRatio;
+
+            currentScale = newScale;
+            if (zoomSlider) zoomSlider.value = currentScale;
+            if (zoomVal) zoomVal.innerText = Math.round(currentScale * 100) + '%';
+
+            canvasPreview.style.width = (masterCanvas.width * currentScale) + 'px';
+            canvasPreview.style.height = (masterCanvas.height * currentScale) + 'px';
+            canvasPreview.style.left = newLeft + 'px';
+            canvasPreview.style.top = newTop + 'px';
+
+            updateCursor();
+        }
+
+        function centerCanvas() {
+            const cw = masterCanvas.width * currentScale; const ch = masterCanvas.height * currentScale;
+            const pw = previewContainer.clientWidth; const ph = previewContainer.clientHeight;
+            canvasPreview.style.left = `${(pw - cw) / 2}px`; canvasPreview.style.top = `${(ph - ch) / 2}px`;
+        }
+
+        function fitZoomToScreen() {
+            const pw = previewContainer.clientWidth - 80; const ph = previewContainer.clientHeight - 80;
+            const scale = Math.min(pw / masterCanvas.width, ph / masterCanvas.height);
+            applyZoom(scale < 0.1 ? 0.1 : (scale > 1 ? 1 : scale));
+            centerCanvas();
+        }
+
+        if (zoomSlider) {
+            zoomSlider.addEventListener('input', safe(function () {
+                const rect = previewContainer.getBoundingClientRect();
+                applyZoom(this.value, rect.left + rect.width / 2, rect.top + rect.height / 2);
+            }));
+        }
+
+        previewContainer.addEventListener('wheel', safe(function (e) {
+            if (!originalImageObj) return; e.preventDefault();
+            let newScale = parseFloat(currentScale);
+            if (e.deltaY < 0) newScale = Math.min(8, newScale + 0.05); else newScale = Math.max(0.05, newScale - 0.05);
+            if (newScale !== parseFloat(currentScale)) applyZoom(newScale, e.clientX, e.clientY);
+        }), { passive: false });
+
+        /* --- 캔버스 모서리 드래그 감지 --- */
+        function getResizeHandle(x, y) {
+            const hs = 12 / currentScale;
+            const w = masterCanvas.width, h = masterCanvas.height;
+            const hit = (hx, hy) => Math.abs(x - hx) < hs && Math.abs(y - hy) < hs;
+            if (hit(w, h)) return 'br';
+            if (Math.abs(x - w) < hs && y > 0 && y < h) return 'r';
+            if (Math.abs(y - h) < hs && x > 0 && x < w) return 'b';
+            return null;
+        }
+
+        previewContainer.addEventListener('mousemove', safe(function (e) {
+            if (!originalImageObj) return;
+            const { x, y } = getMousePos(e);
+            if (!isDragging && !isErasing && !canvasResizeState.active) {
+                if (currentTool === 'select' && selectionBox.active) {
+                    const handle = getSelectionHandle(x, y);
+                    if (handle === 'tl' || handle === 'br') previewContainer.style.cursor = 'nwse-resize';
+                    else if (handle === 'tr' || handle === 'bl') previewContainer.style.cursor = 'nesw-resize';
+                    else if (handle === 't' || handle === 'b') previewContainer.style.cursor = 'ns-resize';
+                    else if (handle === 'l' || handle === 'r') previewContainer.style.cursor = 'ew-resize';
+                    else if (handle === 'inside') previewContainer.style.cursor = 'move';
+                    else updateCursor(getResizeHandle(x, y));
+                } else updateCursor(getResizeHandle(x, y));
+            }
+        }));
+
+        /* --- Undo / Redo --- */
+        function updateUndoRedoButtons() { if (btnUndo) btnUndo.disabled = undoStack.length <= 1; if (btnRedo) btnRedo.disabled = redoStack.length === 0; }
+        function saveState(isInitial = false) {
+            if (!isInitial) redoStack = [];
+            undoStack.push({ dataUrl: masterCanvas.toDataURL('image/png'), width: masterCanvas.width, height: masterCanvas.height });
+            if (undoStack.length > 20) undoStack.shift();
+            updateUndoRedoButtons();
+        }
+        function restoreState(stateObj) {
+            const img = new Image();
+            img.onload = () => {
+                masterCanvas.width = stateObj.width; masterCanvas.height = stateObj.height;
+                masterCtx.clearRect(0, 0, stateObj.width, stateObj.height);
+                masterCtx.drawImage(img, 0, 0);
+                if (infoDimensions) infoDimensions.innerText = `${stateObj.width} x ${stateObj.height} px`;
+                canvasPreview.style.width = (masterCanvas.width * currentScale) + 'px';
+                canvasPreview.style.height = (masterCanvas.height * currentScale) + 'px';
+                renderPreview();
+            };
+            img.src = stateObj.dataUrl;
+        }
+        function undoEdit() {
+            if (undoStack.length <= 1) return; commitFloatingSelection();
+            redoStack.push(undoStack.pop()); restoreState(undoStack[undoStack.length - 1]);
+            lastWandAction = null; updateUndoRedoButtons();
+        }
+        function redoEdit() {
+            if (redoStack.length === 0) return; commitFloatingSelection();
+            const state = redoStack.pop(); undoStack.push(state); restoreState(state);
+            lastWandAction = null; updateUndoRedoButtons();
+        }
+        function resetEdits() {
+            if (!originalImageObj) return; commitFloatingSelection();
+            masterCanvas.width = originalImageObj.width; masterCanvas.height = originalImageObj.height;
+            masterCtx.clearRect(0, 0, masterCanvas.width, masterCanvas.height); masterCtx.drawImage(originalImageObj, 0, 0);
+            undoStack = []; redoStack = []; saveState(true);
+            if (infoDimensions) infoDimensions.innerText = `${masterCanvas.width} x ${masterCanvas.height} px`;
+            selectionBox.active = false; lastWandAction = null; fitZoomToScreen(); renderPreview();
+        }
+
+        function clearAll() {
+            if (!originalImageObj || !activeTabId) return;
+            commitFloatingSelection();
+
+            let isEmpty = true;
+            if (masterCanvas.width > 0 && masterCanvas.height > 0) {
+                const data = masterCtx.getImageData(0, 0, masterCanvas.width, masterCanvas.height).data;
+                for (let i = 3; i < data.length; i += 4) {
+                    if (data[i] > 0) { isEmpty = false; break; }
+                }
+            }
+
+            if (!isEmpty) {
+                masterCtx.clearRect(0, 0, masterCanvas.width, masterCanvas.height);
+                saveState(); selectionBox.active = false; renderPreview();
+                showPopup("도화지 내용이 모두 지워졌습니다.\n(실행 취소 가능) 한 번 더 누르면 현재 탭이 삭제됩니다.");
+            } else {
+                closeTab(activeTabId);
+                showPopup("도화지(탭)가 완전히 삭제되었습니다.");
+            }
+        }
+
+        /* --- 마법봉 --- */
+        function floodFillErase(startX, startY, toleranceRaw, softnessRaw = 2, isUpdate = false) {
+            const width = masterCanvas.width; const height = masterCanvas.height;
+            const imageData = masterCtx.getImageData(0, 0, width, height); const data = imageData.data;
+            const startIndex = (startY * width + startX) * 4;
+            const startR = data[startIndex]; const startG = data[startIndex + 1]; const startB = data[startIndex + 2]; const startA = data[startIndex + 3];
+
+            if (startA === 0) return;
+
+            if (!isUpdate) {
+                if (currentTool === 'wand') {
+                    rememberedColor = { r: startR, g: startG, b: startB };
+                } else if (currentTool === 'smartWand' && !rememberedColor) {
+                    rememberedColor = { r: startR, g: startG, b: startB };
+                }
+            }
+
+            const maxDist = 441.67;
+            const baseTolerance = (toleranceRaw / 100) * maxDist; const softFeather = (softnessRaw / 100) * maxDist;
+            const hardBorderThreshold = baseTolerance + softFeather;
+
+            let isInsideSelection = false;
+            let sx = 0, sy = 0, ex = width, ey = height;
+            if (selectionBox.active) {
+                sx = Math.max(0, Math.min(selectionBox.x, selectionBox.x + selectionBox.w));
+                sy = Math.max(0, Math.min(selectionBox.y, selectionBox.y + selectionBox.h));
+                ex = Math.min(width, Math.max(selectionBox.x, selectionBox.x + selectionBox.w));
+                ey = Math.min(height, Math.max(selectionBox.y, selectionBox.y + selectionBox.h));
+
+                if (startX >= sx && startX < ex && startY >= sy && startY < ey) {
+                    isInsideSelection = true;
+                }
+            }
+
+            const visited = new Uint8Array(width * height); const stack = [[startX, startY]];
+            visited[startY * width + startX] = 1;
+
+            while (stack.length > 0) {
+                const [x, y] = stack.pop(); const idx = (y * width + x) * 4;
+                data[idx + 3] = 0;
+
+                const neighbors = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+                for (const [nx, ny] of neighbors) {
+                    if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+
+                        if (selectionBox.active) {
+                            const inSel = (nx >= sx && nx < ex && ny >= sy && ny < ey);
+                            if (isInsideSelection && !inSel) continue;
+                            if (!isInsideSelection && inSel) continue;
+                        }
+
+                        const nIdx = ny * width + nx;
+                        if (!visited[nIdx]) {
+                            visited[nIdx] = 1; const dIdx = nIdx * 4;
+                            if (data[dIdx + 3] === 0) continue;
+                            const r = data[dIdx]; const g = data[dIdx + 1]; const b = data[dIdx + 2];
+                            const dist = Math.sqrt((r - startR) ** 2 + (g - startG) ** 2 + (b - startB) ** 2);
+
+                            if (dist <= baseTolerance) stack.push([nx, ny]);
+                            else if (dist <= hardBorderThreshold && softFeather > 0) {
+                                let newAlpha = ((dist - baseTolerance) / softFeather) * 255;
+                                if (newAlpha < data[dIdx + 3]) data[dIdx + 3] = newAlpha;
+                            }
+                        }
+                    }
+                }
+            }
+            masterCtx.putImageData(imageData, 0, 0);
+            if (!isUpdate) saveState();
+            renderPreview();
+        }
+
+        function findNearbyRememberedColor(startX, startY, targetColor, toleranceRaw) {
+            const width = masterCanvas.width; const height = masterCanvas.height;
+            const data = masterCtx.getImageData(0, 0, width, height).data;
+            const maxDist = 441.67;
+            const baseTolerance = (toleranceRaw / 100) * maxDist;
+
+            // 🌟 스마트 지우개 전용 브러시 크기 사용
+            const radius = Math.max(5, smartBrushSize / 2);
+
+            let closestDist = Infinity;
+            let bestPixel = null;
+
+            for (let y = Math.max(0, Math.floor(startY - radius)); y <= Math.min(height - 1, Math.ceil(startY + radius)); y++) {
+                for (let x = Math.max(0, Math.floor(startX - radius)); x <= Math.min(width - 1, Math.ceil(startX + radius)); x++) {
+                    const dx = x - startX; const dy = y - startY;
+                    if (dx * dx + dy * dy <= radius * radius) {
+                        const idx = (y * width + x) * 4;
+                        if (data[idx + 3] > 0) {
+                            const r = data[idx]; const g = data[idx + 1]; const b = data[idx + 2];
+                            const colorDist = Math.sqrt((r - targetColor.r) ** 2 + (g - targetColor.g) ** 2 + (b - targetColor.b) ** 2);
+
+                            if (colorDist <= baseTolerance) {
+                                const physDist = dx * dx + dy * dy;
+                                if (physDist < closestDist) {
+                                    closestDist = physDist;
+                                    bestPixel = { x, y };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return bestPixel;
+        }
+
+        const tolSlider = document.getElementById('tolerance-slider');
+        if (tolSlider) {
+            tolSlider.addEventListener('input', safe(function () {
+                document.getElementById('tol-val').innerText = this.value;
+                if (lastWandAction) {
+                    masterCtx.putImageData(lastWandAction.imgData, 0, 0);
+                    floodFillErase(lastWandAction.x, lastWandAction.y, parseInt(this.value), parseInt(softSlider.value), true);
+                    undoStack[undoStack.length - 1].dataUrl = masterCanvas.toDataURL('image/png');
+                }
+            }));
+        }
+
+        if (softSlider) {
+            softSlider.addEventListener('input', safe(function () {
+                softValDisplay.innerText = this.value;
+                if (lastWandAction) {
+                    masterCtx.putImageData(lastWandAction.imgData, 0, 0);
+                    floodFillErase(lastWandAction.x, lastWandAction.y, parseInt(document.getElementById('tolerance-slider').value), parseInt(this.value), true);
+                    undoStack[undoStack.length - 1].dataUrl = masterCanvas.toDataURL('image/png');
+                }
+            }));
+        }
+
+        const bSlider = document.getElementById('brush-slider');
+        if (bSlider) {
+            bSlider.addEventListener('input', safe(function () {
+                document.getElementById('brush-val').innerText = this.value + 'px';
+                if (currentTool === 'eraser') {
+                    eraserBrushSize = parseInt(this.value);
+                    updateCursor();
+                } else if (currentTool === 'smartWand') {
+                    smartBrushSize = parseInt(this.value);
+                    updateCursor();
+                }
+            }));
+        }
+
+        if (opacitySlider) {
+            opacitySlider.addEventListener('input', safe(function () {
+                opacityValDisplay.innerText = this.value + '%';
+                if (selectionBox.active && !isImageFloating) extractSelectionToFloat();
+                renderPreview();
+            }));
+        }
+
+        /* --- 인터랙션 로직 --- */
+        function getMousePos(e) {
+            const rect = canvasPreview.getBoundingClientRect();
+            const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+            const clientY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+            const x = (clientX - rect.left) / currentScale;
+            const y = (clientY - rect.top) / currentScale;
+            return { x, y, clientX, clientY };
+        }
+
+        function startAction(e) {
+            if (!originalImageObj) return;
+            if (e.type === 'mousedown') {
+                if (e.button === 1) isMiddleClick = true; else if (e.button === 2) isRightClick = true; else if (e.button !== 0) return;
+            }
+            if (document.activeElement && document.activeElement.tagName !== 'BODY') document.activeElement.blur();
+            const { x, y, clientX, clientY } = getMousePos(e);
+
+            const handle = getResizeHandle(x, y);
+            if (handle && !isSpacePressed && !isMiddleClick && !isRightClick) {
+                canvasResizeState = { active: true, handle: handle, w: masterCanvas.width, h: masterCanvas.height };
+                e.preventDefault(); lastWandAction = null; return;
+            }
+            if (isSpacePressed || isMiddleClick || isRightClick || currentTool === 'pan') {
+                isDragging = true; isForcePanning = true;
+                panStartX = clientX; panStartY = clientY;
+                let curLeft = parseFloat(canvasPreview.style.left);
+                panStartLeft = isNaN(curLeft) ? ((previewContainer.clientWidth - masterCanvas.width * currentScale) / 2) : curLeft;
+                let curTop = parseFloat(canvasPreview.style.top);
+                panStartTop = isNaN(curTop) ? ((previewContainer.clientHeight - masterCanvas.height * currentScale) / 2) : curTop;
+                updateCursor(); e.preventDefault(); return;
+            }
+
+            if (x >= 0 && x <= masterCanvas.width && y >= 0 && y <= masterCanvas.height) {
+                if (currentTool === 'select') {
+                    activeSelectionHandle = getSelectionHandle(x, y);
+
+                    if (activeSelectionHandle === 'inside') {
+                        if (isMoveSelectionOnly) {
+                            isDragging = true; lastX = x; lastY = y;
+                            selectionBox.polygon = null; selectionBox.exactMask = null;
+                        }
+                        else if (isImageFloating && (e.ctrlKey || e.metaKey)) {
+                            masterCtx.save();
+                            if (opacitySlider) masterCtx.globalAlpha = parseInt(opacitySlider.value) / 100;
+                            if (selectionBox.angle) {
+                                const cx = selectionBox.x + selectionBox.w / 2; const cy = selectionBox.y + selectionBox.h / 2;
+                                masterCtx.translate(cx, cy); masterCtx.rotate(selectionBox.angle); masterCtx.translate(-cx, -cy);
+                            }
+                            masterCtx.drawImage(floatingCanvas, Math.round(selectionBox.x), Math.round(selectionBox.y));
+                            masterCtx.restore(); saveState();
+                        }
+                        else if (!isImageFloating && selectionBox.active) {
+                            if (e.ctrlKey || e.metaKey) {
+                                normalizeSelectionBox();
+                                floatingCanvas.width = Math.round(selectionBox.w); floatingCanvas.height = Math.round(selectionBox.h);
+                                floatingCtx.clearRect(0, 0, floatingCanvas.width, floatingCanvas.height);
+                                const sx = Math.floor(Math.max(0, selectionBox.x)); const sy = Math.floor(Math.max(0, selectionBox.y));
+                                const ex = Math.ceil(Math.min(masterCanvas.width, selectionBox.x + selectionBox.w)); const ey = Math.ceil(Math.min(masterCanvas.height, selectionBox.y + selectionBox.h));
+                                const drawW = ex - sx; const drawH = ey - sy;
+                                if (drawW > 0 && drawH > 0) {
+                                    const dx = Math.floor(sx - selectionBox.x); const dy = Math.floor(sy - selectionBox.y);
+                                    floatingCtx.drawImage(masterCanvas, sx, sy, drawW, drawH, dx, dy, drawW, drawH);
+                                    if (selectionBox.exactMask) {
+                                        const fData = floatingCtx.getImageData(dx, dy, drawW, drawH);
+                                        for (let yy = 0; yy < drawH; yy++) {
+                                            for (let xx = 0; xx < drawW; xx++) {
+                                                const globalX = sx + xx; const globalY = sy + yy;
+                                                if (globalX >= 0 && globalX < selectionBox.maskW && globalY >= 0 && globalY < masterCanvas.height) {
+                                                    if (!selectionBox.exactMask[globalY * selectionBox.maskW + globalX]) fData.data[(yy * drawW + xx) * 4 + 3] = 0;
+                                                }
+                                            }
+                                        }
+                                        floatingCtx.putImageData(fData, dx, dy);
+                                    }
+                                    isImageFloating = true;
+                                }
+                            } else { extractSelectionToFloat(); }
+                        }
+                        isDragging = true; lastX = x; lastY = y;
+                    }
+                    else if (activeSelectionHandle) {
+                        if (activeSelectionHandle === 'rot' && !isImageFloating) extractSelectionToFloat();
+                        else if (isImageFloating && activeSelectionHandle !== 'inside' && activeSelectionHandle !== 'rot') commitFloatingSelection();
+                        isDragging = true; lastX = x; lastY = y;
+                    }
+                    else {
+                        commitFloatingSelection();
+                        if (isFixedSize && savedSelW > 0 && savedSelH > 0) {
+                            selectionBox = { x: x - savedSelW / 2, y: y - savedSelH / 2, w: savedSelW, h: savedSelH, active: true, polygon: null, exactMask: null, angle: 0 };
+                            isDragging = true; lastX = x; lastY = y; activeSelectionHandle = 'inside';
+                        } else {
+                            selectionBox = { x, y, w: 0, h: 0, active: true, polygon: null, exactMask: null, angle: 0 };
+                            isDragging = true; lastX = x; lastY = y; activeSelectionHandle = 'new';
+                        }
+                    }
+                } else if (currentTool === 'eraser') {
+                    commitFloatingSelection(); isErasing = true; lastWandAction = null;
+                    const bS = document.getElementById('brush-slider');
+                    const brushSize = bS ? parseInt(bS.value) : 30;
+                    masterCtx.save();
+                    if (selectionBox.active) {
+                        const sx = Math.min(selectionBox.x, selectionBox.x + selectionBox.w); const sy = Math.min(selectionBox.y, selectionBox.y + selectionBox.h);
+                        const sw = Math.abs(selectionBox.w); const sh = Math.abs(selectionBox.h);
+                        const isInside = (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh);
+                        masterCtx.beginPath();
+                        if (isInside) { masterCtx.rect(sx, sy, sw, sh); masterCtx.clip(); }
+                        else { masterCtx.rect(0, 0, masterCanvas.width, masterCanvas.height); masterCtx.rect(sx, sy, sw, sh); masterCtx.clip('evenodd'); }
+                    }
+                    masterCtx.globalCompositeOperation = 'destination-out';
+                    masterCtx.lineCap = 'round'; masterCtx.lineJoin = 'round'; masterCtx.lineWidth = brushSize;
+                    masterCtx.beginPath(); masterCtx.moveTo(x, y); masterCtx.lineTo(x, y); masterCtx.stroke();
+                    renderPreview();
+                } else if (currentTool === 'wand' || currentTool === 'smartWand') {
+                    if (currentTool === 'smartWand' && !rememberedColor) {
+                        commitFloatingSelection();
+                        lastWandAction = { tool: 'wand', x: Math.floor(x), y: Math.floor(y), imgData: masterCtx.getImageData(0, 0, masterCanvas.width, masterCanvas.height) };
+                    } else {
+                        commitFloatingSelection();
+                        lastWandAction = { tool: currentTool, x: Math.floor(x), y: Math.floor(y), imgData: masterCtx.getImageData(0, 0, masterCanvas.width, masterCanvas.height) };
+                    }
+                }
+            } else {
+                commitFloatingSelection();
+                if (currentTool === 'select' && !getSelectionHandle(x, y)) { selectionBox.active = false; renderPreview(); }
+                lastWandAction = null; isDragging = true; isForcePanning = true;
+                panStartX = clientX; panStartY = clientY;
+                let curLeft = parseFloat(canvasPreview.style.left); panStartLeft = isNaN(curLeft) ? ((previewContainer.clientWidth - masterCanvas.width * currentScale) / 2) : curLeft;
+                let curTop = parseFloat(canvasPreview.style.top); panStartTop = isNaN(curTop) ? ((previewContainer.clientHeight - masterCanvas.height * currentScale) / 2) : curTop;
+                previewContainer.style.cursor = 'grabbing';
+            }
+            if (e.type === 'mousedown') e.preventDefault();
+        }
+
+        function doAction(e) {
+            const { x, y, clientX, clientY } = getMousePos(e);
+
+            if (currentTool === 'eraser' || (currentTool === 'smartWand' && rememberedColor)) {
+                brushCursor.style.left = clientX + 'px';
+                brushCursor.style.top = clientY + 'px';
+            }
+
+            if (canvasResizeState.active) {
+                if (canvasResizeState.handle === 'r' || canvasResizeState.handle === 'br') canvasResizeState.w = Math.max(10, x);
+                if (canvasResizeState.handle === 'b' || canvasResizeState.handle === 'br') canvasResizeState.h = Math.max(10, y);
+                renderPreview(); if (e.type === 'touchmove') e.preventDefault(); return;
+            }
+
+            if (isDragging) {
+                if (isForcePanning) {
+                    canvasPreview.style.left = `${panStartLeft + (clientX - panStartX)}px`; canvasPreview.style.top = `${panStartTop + (clientY - panStartY)}px`;
+                } else if (currentTool === 'select') {
+                    if (activeSelectionHandle === 'new') {
+                        selectionBox.w = x - selectionBox.x; selectionBox.h = y - selectionBox.y;
+                    } else if (activeSelectionHandle === 'inside') {
+                        const mx = x - lastX; const my = y - lastY;
+                        selectionBox.x += mx; selectionBox.y += my;
+                        if (selectionBox.polygon) { selectionBox.polygon.forEach(p => { p.x += mx; p.y += my; }); }
+                        lastX = x; lastY = y;
+                        if (isImageFloating && !isMoveSelectionOnly) autoExpandCanvas(selectionBox.x, selectionBox.y, selectionBox.w, selectionBox.h);
+                    }
+                    else if (activeSelectionHandle === 'rot') {
+                        const cx = selectionBox.x + selectionBox.w / 2;
+                        const cy = selectionBox.y + selectionBox.h / 2;
+                        let angle = Math.atan2(y - cy, x - cx) + Math.PI / 2;
+                        const ry = selectionBox.h < 0 ? selectionBox.y + selectionBox.h : selectionBox.y;
+                        if (ry < 30 / currentScale) angle += Math.PI;
+                        selectionBox.angle = angle;
+                    }
+                    else if (activeSelectionHandle) {
+                        const dx = x - lastX; const dy = y - lastY; lastX = x; lastY = y;
+                        if (activeSelectionHandle.includes('t')) { selectionBox.y += dy; selectionBox.h -= dy; }
+                        if (activeSelectionHandle.includes('b')) { selectionBox.h += dy; }
+                        if (activeSelectionHandle.includes('l')) { selectionBox.x += dx; selectionBox.w -= dx; }
+                        if (activeSelectionHandle.includes('r')) { selectionBox.w += dx; }
+                    }
+                    renderPreview();
+                }
+                if (e.type === 'touchmove') e.preventDefault(); return;
+            }
+
+            if (isErasing) { masterCtx.lineTo(x, y); masterCtx.stroke(); renderPreview(); if (e.type === 'touchmove') e.preventDefault(); }
+        }
+
+        function endAction(e) {
+            if (e.type === 'mouseup') {
+                if (e.button === 1) isMiddleClick = false;
+                if (e.button === 2) isRightClick = false;
+            }
+
+            if (canvasResizeState.active) {
+                canvasResizeState.active = false;
+                const temp = document.createElement('canvas'); temp.width = masterCanvas.width; temp.height = masterCanvas.height;
+                temp.getContext('2d').drawImage(masterCanvas, 0, 0);
+
+                masterCanvas.width = Math.round(canvasResizeState.w); masterCanvas.height = Math.round(canvasResizeState.h);
+                masterCtx.clearRect(0, 0, masterCanvas.width, masterCanvas.height); masterCtx.drawImage(temp, 0, 0);
+                if (infoDimensions) infoDimensions.innerText = `${masterCanvas.width} x ${masterCanvas.height} px`;
+                canvasPreview.style.width = (masterCanvas.width * currentScale) + 'px';
+                canvasPreview.style.height = (masterCanvas.height * currentScale) + 'px';
+                saveState(); renderPreview(); updateCursor(); return;
+            }
+
+            if (isErasing) {
+                isErasing = false;
+                masterCtx.restore();
+                masterCtx.globalCompositeOperation = 'source-over';
+                saveState();
+                return;
+            }
+
+            if (isDragging) {
+                isDragging = false; isForcePanning = false;
+                if (currentTool === 'select') {
+                    normalizeSelectionBox();
+                    if (Math.abs(selectionBox.w) < 5 && Math.abs(selectionBox.h) < 5 && activeSelectionHandle === 'new') {
+                        selectionBox.active = false;
+                    }
+
+                    if (selectionBox.active && activeSelectionHandle === 'new' && isAutoPoly) {
+                        autoPolygonSelect();
+                        if (selectionBox.polygon && isAutoCopy) {
+                            setTimeout(copyToClipboard, 50);
+                        }
+                    }
+                    activeSelectionHandle = null; renderPreview();
+                }
+                updateCursor(); return;
+            }
+
+            if ((currentTool === 'wand' || currentTool === 'smartWand') && !isSpacePressed && !isMiddleClick && !isRightClick && lastWandAction) {
+                const tol = parseInt(document.getElementById('tolerance-slider').value);
+                const soft = parseInt(softSlider.value);
+
+                if (lastWandAction.tool === 'smartWand') {
+                    if (!rememberedColor) {
+                        showPopup("먼저 배경을 한 번 클릭하여 색상을 기억시켜주세요.");
+                    } else {
+                        const target = findNearbyRememberedColor(lastWandAction.x, lastWandAction.y, rememberedColor, tol);
+                        if (target) {
+                            floodFillErase(target.x, target.y, tol, soft);
+                        } else {
+                            showPopup("원형 커서 범위 내에서 동일한 배경색을 찾지 못했습니다.");
+                        }
+                    }
+                } else {
+                    floodFillErase(lastWandAction.x, lastWandAction.y, tol, soft);
+
+                    if (currentTool === 'smartWand' && rememberedColor) {
+                        updateCursor();
+                        const clientX = e.type.includes('mouse') ? e.clientX : (e.changedTouches ? e.changedTouches[0].clientX : window.innerWidth / 2);
+                        const clientY = e.type.includes('mouse') ? e.clientY : (e.changedTouches ? e.changedTouches[0].clientY : window.innerHeight / 2);
+                        brushCursor.style.left = clientX + 'px';
+                        brushCursor.style.top = clientY + 'px';
+                        showPopup("색상을 기억했습니다! 이제 구멍 주변을 툭툭 클릭하세요.");
+                    }
+                }
+                lastWandAction = null;
+            }
+        }
+
+        previewContainer.addEventListener('mousedown', safe(startAction));
+        window.addEventListener('mousemove', safe(doAction));
+        window.addEventListener('mouseup', safe(endAction));
+        previewContainer.addEventListener('contextmenu', e => e.preventDefault());
+        previewContainer.addEventListener('touchstart', safe(startAction), { passive: false });
+        window.addEventListener('touchmove', safe(doAction), { passive: false });
+        window.addEventListener('touchend', safe(endAction));
+
+        /* --- 단축키 제어 --- */
+        document.addEventListener('keydown', safe((e) => {
+            if (e.target.tagName === 'INPUT' && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
+            if (!originalImageObj) return;
+
+            if (e.key === 'Delete' || e.key === 'Del') {
+                if (selectionBox.active) {
+                    if (isImageFloating) {
+                        isImageFloating = false;
+                        selectionBox.active = false;
+                        selectionBox.polygon = null;
+                        selectionBox.exactMask = null;
+                        if (opacitySlider) opacitySlider.value = 100;
+                        if (opacityValDisplay) opacityValDisplay.innerText = '100%';
+                    } else {
+                        normalizeSelectionBox();
+                        if (selectionBox.exactMask) {
+                            const sx = Math.floor(Math.max(0, selectionBox.x));
+                            const sy = Math.floor(Math.max(0, selectionBox.y));
+                            const sw = Math.ceil(selectionBox.w);
+                            const sh = Math.ceil(selectionBox.h);
+
+                            if (sw > 0 && sh > 0) {
+                                const mData = masterCtx.getImageData(sx, sy, sw, sh);
+                                for (let yy = 0; yy < sh; yy++) {
+                                    for (let xx = 0; xx < sw; xx++) {
+                                        const globalX = sx + xx;
+                                        const globalY = sy + yy;
+                                        if (globalX >= 0 && globalX < selectionBox.maskW && globalY >= 0 && globalY < masterCanvas.height) {
+                                            if (selectionBox.exactMask[globalY * selectionBox.maskW + globalX]) {
+                                                mData.data[(yy * sw + xx) * 4 + 3] = 0;
+                                            }
+                                        }
+                                    }
+                                }
+                                masterCtx.putImageData(mData, sx, sy);
+                            }
+                        } else {
+                            masterCtx.clearRect(selectionBox.x, selectionBox.y, selectionBox.w, selectionBox.h);
+                        }
+                        selectionBox.active = false;
+                        selectionBox.polygon = null;
+                        selectionBox.exactMask = null;
+                    }
+                    saveState(); renderPreview();
+                }
+                e.preventDefault(); return;
+            }
+
+            if (e.key === 'Escape' || e.key === 'Esc') {
+                if (document.activeElement) document.activeElement.blur();
+
+                if (currentTool === 'smartWand') {
+                    rememberedColor = null;
+                    showPopup("기억된 배경색이 초기화되었습니다.");
+                    updateCursor();
+                }
+
+                commitFloatingSelection();
+                selectionBox.active = false;
+                selectionBox.polygon = null;
+                selectionBox.exactMask = null;
+                activeSelectionHandle = null;
+                renderPreview();
+                e.preventDefault(); return;
+            }
+
+            if (e.code === 'Space' && !isSpacePressed) { isSpacePressed = true; updateCursor(); e.preventDefault(); }
+
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); copyToClipboard(); }
+
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); undoEdit(); }
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redoEdit(); }
+
+            if (!e.ctrlKey && !e.metaKey && !isSpacePressed) {
+                if (e.key === 's' || e.key === 'S') setTool('select');
+                if (e.key === 'v' || e.key === 'V') setTool('pan');
+                if (e.key === 'w' || e.key === 'W') setTool('wand');
+                if (e.key === 'e' || e.key === 'E') setTool('eraser');
+            }
+        }));
+
+        document.addEventListener('keyup', safe((e) => {
+            if (e.target.tagName === 'INPUT' && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
+            if (e.code === 'Space') { isSpacePressed = false; updateCursor(); e.preventDefault(); }
+        }));
+
+        /* --- 렌더링 엔진 --- */
+        function renderPreview() {
+            if (!originalImageObj) return;
+            canvasPreview.width = masterCanvas.width; canvasPreview.height = masterCanvas.height;
+            ctxPreview.imageSmoothingEnabled = false;
+            ctxPreview.clearRect(0, 0, canvasPreview.width, canvasPreview.height);
+
+            ctxPreview.drawImage(masterCanvas, 0, 0);
+
+            if (isImageFloating) {
+                ctxPreview.save();
+                if (opacitySlider) ctxPreview.globalAlpha = parseInt(opacitySlider.value) / 100;
+                if (selectionBox.angle) {
+                    const cx = selectionBox.x + selectionBox.w / 2;
+                    const cy = selectionBox.y + selectionBox.h / 2;
+                    ctxPreview.translate(cx, cy);
+                    ctxPreview.rotate(selectionBox.angle);
+                    ctxPreview.translate(-cx, -cy);
+                }
+                ctxPreview.drawImage(floatingCanvas, Math.round(selectionBox.x), Math.round(selectionBox.y));
+                ctxPreview.restore();
+            }
+
+            ctxPreview.strokeStyle = 'var(--primary-color)'; ctxPreview.lineWidth = 1 / currentScale;
+            ctxPreview.strokeRect(0, 0, masterCanvas.width, masterCanvas.height);
+
+            const w = canvasResizeState.active ? canvasResizeState.w : masterCanvas.width;
+            const h = canvasResizeState.active ? canvasResizeState.h : masterCanvas.height;
+            if (canvasResizeState.active) { ctxPreview.setLineDash([5 / currentScale, 5 / currentScale]); ctxPreview.strokeRect(0, 0, w, h); ctxPreview.setLineDash([]); }
+
+            if (selectionBox.active) {
+                ctxPreview.save();
+
+                if (selectionBox.angle) {
+                    const cx = selectionBox.x + selectionBox.w / 2;
+                    const cy = selectionBox.y + selectionBox.h / 2;
+                    ctxPreview.translate(cx, cy);
+                    ctxPreview.rotate(selectionBox.angle);
+                    ctxPreview.translate(-cx, -cy);
+                }
+
+                ctxPreview.fillStyle = 'rgba(0, 122, 204, 0.2)'; ctxPreview.strokeStyle = '#007acc'; ctxPreview.lineWidth = 1.5 / currentScale;
+                ctxPreview.setLineDash([5 / currentScale, 5 / currentScale]);
+
+                const rx = selectionBox.w < 0 ? selectionBox.x + selectionBox.w : selectionBox.x;
+                const ry = selectionBox.h < 0 ? selectionBox.y + selectionBox.h : selectionBox.y;
+                const rw = Math.abs(selectionBox.w); const rh = Math.abs(selectionBox.h);
+
+                let rotHy = ry - 25 / currentScale;
+                let rotLineStartY = ry;
+                if (ry < 30 / currentScale) {
+                    rotHy = ry + rh + 25 / currentScale;
+                    rotLineStartY = ry + rh;
+                }
+
+                if (selectionBox.polygon) {
+                    ctxPreview.beginPath(); ctxPreview.moveTo(selectionBox.polygon[0].x, selectionBox.polygon[0].y);
+                    for (let i = 1; i < selectionBox.polygon.length; i++) ctxPreview.lineTo(selectionBox.polygon[i].x, selectionBox.polygon[i].y);
+                    ctxPreview.closePath(); ctxPreview.fill(); ctxPreview.stroke();
+
+                    ctxPreview.beginPath(); ctxPreview.moveTo(rx + rw / 2, rotLineStartY); ctxPreview.lineTo(rx + rw / 2, rotHy); ctxPreview.stroke();
+                    ctxPreview.beginPath(); ctxPreview.arc(rx + rw / 2, rotHy, 5 / currentScale, 0, Math.PI * 2); ctxPreview.fill(); ctxPreview.stroke();
+                } else {
+                    ctxPreview.fillRect(rx, ry, rw, rh); ctxPreview.strokeRect(rx, ry, rw, rh);
+
+                    const hsSel = 4 / currentScale; ctxPreview.fillStyle = '#ffffff'; ctxPreview.lineWidth = 1 / currentScale;
+                    const drawSelH = (hx, hy) => { ctxPreview.fillRect(hx - hsSel, hy - hsSel, hsSel * 2, hsSel * 2); ctxPreview.strokeRect(hx - hsSel, hy - hsSel, hsSel * 2, hsSel * 2); };
+
+                    drawSelH(rx, ry); drawSelH(rx + rw, ry); drawSelH(rx, ry + rh); drawSelH(rx + rw, ry + rh);
+                    drawSelH(rx + rw / 2, ry); drawSelH(rx + rw / 2, ry + rh); drawSelH(rx, ry + rh / 2); drawSelH(rx + rw, ry + rh / 2);
+
+                    ctxPreview.beginPath(); ctxPreview.moveTo(rx + rw / 2, rotLineStartY); ctxPreview.lineTo(rx + rw / 2, rotHy); ctxPreview.stroke();
+                    ctxPreview.beginPath(); ctxPreview.arc(rx + rw / 2, rotHy, 5 / currentScale, 0, Math.PI * 2); ctxPreview.fill(); ctxPreview.stroke();
+                }
+                ctxPreview.setLineDash([]);
+                ctxPreview.restore();
+            }
+        }
+
+        /* --- 내보내기 & 복사 --- */
+        function getExportCanvas() {
+            let sx = 0, sy = 0, sw = masterCanvas.width, sh = masterCanvas.height;
+
+            if (selectionBox.active) {
+                sx = Math.floor(Math.min(selectionBox.x, selectionBox.x + selectionBox.w)); sy = Math.floor(Math.min(selectionBox.y, selectionBox.y + selectionBox.h));
+                sw = Math.ceil(Math.abs(selectionBox.w)); sh = Math.ceil(Math.abs(selectionBox.h));
+                const x1 = Math.max(0, sx), y1 = Math.max(0, sy); const x2 = Math.min(masterCanvas.width, sx + sw), y2 = Math.min(masterCanvas.height, sy + sh);
+                sx = x1; sy = y1; sw = x2 - x1; sh = y2 - y1;
+            }
+
+            if (sw <= 0 || sh <= 0) { sx = 0; sy = 0; sw = masterCanvas.width; sh = masterCanvas.height; }
+
+            const expCanvas = document.createElement('canvas'); expCanvas.width = sw; expCanvas.height = sh;
+            const expCtx = expCanvas.getContext('2d');
+
+            const format = document.getElementById('export-format').value;
+            if (format === 'jpeg') { expCtx.fillStyle = '#ffffff'; expCtx.fillRect(0, 0, sw, sh); }
+
+            expCtx.drawImage(masterCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+            if (selectionBox.active && !isImageFloating && selectionBox.exactMask) {
+                const eData = expCtx.getImageData(0, 0, sw, sh);
+                for (let yy = 0; yy < sh; yy++) {
+                    for (let xx = 0; xx < sw; xx++) {
+                        const globalX = sx + xx; const globalY = sy + yy;
+                        if (globalX >= 0 && globalX < selectionBox.maskW && globalY >= 0 && globalY < masterCanvas.height) {
+                            if (!selectionBox.exactMask[globalY * selectionBox.maskW + globalX]) eData.data[(yy * sw + xx) * 4 + 3] = 0;
+                        }
+                    }
+                }
+                expCtx.putImageData(eData, 0, 0);
+            }
+
+            if (isImageFloating) {
+                expCtx.save();
+                if (opacitySlider) expCtx.globalAlpha = parseInt(opacitySlider.value) / 100;
+                const drawX = Math.round(selectionBox.x - sx);
+                const drawY = Math.round(selectionBox.y - sy);
+
+                if (selectionBox.angle) {
+                    const cx = drawX + selectionBox.w / 2;
+                    const cy = drawY + selectionBox.h / 2;
+                    expCtx.translate(cx, cy);
+                    expCtx.rotate(selectionBox.angle);
+                    expCtx.translate(-cx, -cy);
+                }
+
+                expCtx.drawImage(floatingCanvas, drawX, drawY);
+                expCtx.restore();
+            }
+            return expCanvas;
+        }
+
+        async function copyToClipboard() {
+            if (!originalImageObj) { showPopup("먼저 이미지를 가져오세요."); return; }
+            try {
+                const expCanvas = getExportCanvas();
+                expCanvas.toBlob(async (blob) => {
+                    if (!blob) { showPopup("이미지 변환 중 오류가 발생했습니다."); return; }
+                    try {
+                        const item = new ClipboardItem({ "image/png": blob });
+                        await navigator.clipboard.write([item]);
+                        const msg = selectionBox.active ? "선택 영역이 복사되었습니다." : "전체 이미지가 복사되었습니다.";
+                        showPopup(`${msg}\n원하는 곳에 붙여넣기(Ctrl+V) 해보세요.`);
+                    } catch (err) {
+                        showPopup("클립보드 복사에 실패했습니다.\n웹뷰(WebView) 보안 설정이나 권한 문제일 수 있습니다.");
+                    }
+                }, 'image/png', 1.0);
+            } catch (error) {
+                showPopup("이미지 복사 중 내부 오류가 발생했습니다.");
+            }
+        }
+
+        async function downloadImage() {
+            if (!originalImageObj) { showPopup("먼저 이미지를 가져오세요."); return; }
+            try {
+                const format = document.getElementById('export-format').value;
+                const expCanvas = getExportCanvas();
+                const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+                const ext = format === 'png' ? '.png' : '.jpg';
+                const fileName = `${originalFileName}_투명화${ext}`;
+
+                if (window.showSaveFilePicker) {
+                    try {
+                        const handle = await window.showSaveFilePicker({ suggestedName: fileName, types: [{ description: format === 'png' ? 'PNG 이미지' : 'JPG 이미지', accept: { [mimeType]: [ext] } }] });
+                        const blob = await new Promise(res => expCanvas.toBlob(res, mimeType, 1.0));
+                        const writable = await handle.createWritable(); await writable.write(blob); await writable.close();
+                        showPopup(`${handle.name} 파일이 성공적으로 저장되었습니다.`); return;
+                    } catch (err) { if (err.name === 'AbortError') return; }
+                }
+
+                const dataUrl = expCanvas.toDataURL(mimeType, 1.0);
+                const a = document.createElement('a'); a.href = dataUrl; a.download = fileName;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                showPopup(`${fileName} 파일이 저장되었습니다.`);
+            } catch (error) { showPopup("저장 중 오류가 발생했습니다."); }
+        }
+
+        function smartFitSelection() {
+            if (!selectionBox.active) { showPopup("먼저 영역을 선택해 주세요."); return; }
+
+            normalizeSelectionBox();
+            if (selectionBox.w === 0 || selectionBox.h === 0) {
+                selectionBox.active = false; showPopup("선택 영역의 크기가 0입니다."); renderPreview(); return;
+            }
+
+            if (isImageFloating) {
+                const imgData = floatingCtx.getImageData(0, 0, floatingCanvas.width, floatingCanvas.height);
+                let minX = floatingCanvas.width, minY = floatingCanvas.height, maxX = 0, maxY = 0;
+                let hasVisible = false;
+
+                for (let y = 0; y < floatingCanvas.height; y++) {
+                    for (let x = 0; x < floatingCanvas.width; x++) {
+                        const alpha = imgData.data[(y * floatingCanvas.width + x) * 4 + 3];
+                        if (alpha > 0) {
+                            if (x < minX) minX = x; if (x > maxX) maxX = x;
+                            if (y < minY) minY = y; if (y > maxY) maxY = y;
+                            hasVisible = true;
+                        }
+                    }
+                }
+
+                if (!hasVisible) { showPopup("선택 영역에 이미지가 없습니다."); return; }
+
+                const newW = maxX - minX + 1; const newH = maxY - minY + 1;
+                const tempCanvas = document.createElement('canvas'); tempCanvas.width = newW; tempCanvas.height = newH;
+                tempCanvas.getContext('2d').putImageData(imgData, -minX, -minY);
+
+                floatingCanvas.width = newW; floatingCanvas.height = newH;
+                floatingCtx.clearRect(0, 0, newW, newH); floatingCtx.drawImage(tempCanvas, 0, 0);
+
+                selectionBox.x += minX; selectionBox.y += minY; selectionBox.w = newW; selectionBox.h = newH;
+            } else {
+                let sx = Math.max(0, Math.floor(selectionBox.x)); let sy = Math.max(0, Math.floor(selectionBox.y));
+                let ex = Math.min(masterCanvas.width - 1, Math.floor(selectionBox.x + selectionBox.w) - 1);
+                let ey = Math.min(masterCanvas.height - 1, Math.floor(selectionBox.y + selectionBox.h) - 1);
+
+                if (sx > ex || sy > ey) { selectionBox.active = false; renderPreview(); return; }
+
+                const w = masterCanvas.width; const h = masterCanvas.height;
+                const imgData = masterCtx.getImageData(0, 0, w, h); const data = imgData.data;
+
+                let expanded = true;
+                while (expanded) {
+                    expanded = false;
+                    if (sy > 0) { for (let x = sx; x <= ex; x++) { if (data[(sy * w + x) * 4 + 3] > 0) { sy--; expanded = true; break; } } }
+                    if (ey < h - 1) { for (let x = sx; x <= ex; x++) { if (data[(ey * w + x) * 4 + 3] > 0) { ey++; expanded = true; break; } } }
+                    if (sx > 0) { for (let y = sy; y <= ey; y++) { if (data[(y * w + sx) * 4 + 3] > 0) { sx--; expanded = true; break; } } }
+                    if (ex < w - 1) { for (let y = sy; y <= ey; y++) { if (data[(y * w + ex) * 4 + 3] > 0) { ex++; expanded = true; break; } } }
+                }
+
+                let minX = ex, minY = ey, maxX = sx, maxY = sy; let hasVisible = false;
+
+                for (let y = sy; y <= ey; y++) {
+                    for (let x = sx; x <= ex; x++) {
+                        const alpha = data[(y * w + x) * 4 + 3];
+                        if (alpha > 0) {
+                            if (x < minX) minX = x; if (x > maxX) maxX = x;
+                            if (y < minY) minY = y; if (y > maxY) maxY = y;
+                            hasVisible = true;
+                        }
+                    }
+                }
+
+                if (!hasVisible) { showPopup("선택 영역에 이미지가 없습니다."); selectionBox.active = false; renderPreview(); return; }
+
+                selectionBox.x = minX; selectionBox.y = minY; selectionBox.w = maxX - minX + 1; selectionBox.h = maxY - minY + 1;
+            }
+
+            renderPreview(); showPopup("스마트 맞춤 완료: 이미지 윤곽에 맞춰 조절되었습니다.");
+        }
+
+        function autoPolygonSelect() {
+            if (!selectionBox.active) { showPopup("먼저 개체들을 포함하도록 넉넉하게 영역을 선택해 주세요."); return; }
+            if (isImageFloating) { showPopup("이미 분리되어 공중에 뜬 개체입니다."); return; }
+
+            normalizeSelectionBox();
+            const sx = Math.max(0, Math.floor(selectionBox.x));
+            const sy = Math.max(0, Math.floor(selectionBox.y));
+            const ex = Math.min(masterCanvas.width - 1, Math.floor(selectionBox.x + selectionBox.w));
+            const ey = Math.min(masterCanvas.height - 1, Math.floor(selectionBox.y + selectionBox.h));
+
+            const w = masterCanvas.width; const h = masterCanvas.height;
+            const imgData = masterCtx.getImageData(0, 0, w, h); const data = imgData.data;
+
+            const visited = new Uint8Array(w * h); const queue = [];
+
+            for (let y = sy; y <= ey; y++) {
+                for (let x = sx; x <= ex; x++) {
+                    const idx = y * w + x;
+                    if (data[idx * 4 + 3] > 0) { queue.push({ x, y }); visited[idx] = 1; }
+                }
+            }
+
+            if (queue.length === 0) { showPopup("선택 영역에 이미지가 없습니다."); return; }
+
+            const points = []; let head = 0; const step = 5;
+            let gMinX = w, gMinY = h, gMaxX = 0, gMaxY = 0;
+
+            while (head < queue.length) {
+                const p = queue[head++];
+
+                if (p.x < gMinX) gMinX = p.x; if (p.x > gMaxX) gMaxX = p.x;
+                if (p.y < gMinY) gMinY = p.y; if (p.y > gMaxY) gMaxY = p.y;
+
+                if (p.x % step === 0 && p.y % step === 0) points.push(p);
+
+                const neighbors = [[p.x + 1, p.y], [p.x - 1, p.y], [p.x, p.y + 1], [p.x, p.y - 1]];
+                for (const [nx, ny] of neighbors) {
+                    if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                        const idx = ny * w + nx;
+                        if (!visited[idx]) {
+                            visited[idx] = 1;
+                            if (data[idx * 4 + 3] > 0) queue.push({ x: nx, y: ny });
+                        }
+                    }
+                }
+            }
+
+            if ((gMinX <= 0 && gMinY <= 0 && gMaxX >= w - 1 && gMaxY >= h - 1) || queue.length >= w * h * 0.95) {
+                showPopup("투명한 배경이 없어 캔버스 전체가 탐색되었습니다.\n자동 선택을 취소하고 현재 선택 영역을 유지합니다.");
+                return;
+            }
+
+            if (points.length < 3) { showPopup("다각형을 구성할 수 있는 이미지가 부족합니다."); return; }
+
+            points.sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y);
+            const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+            const lower = [];
+            for (let i = 0; i < points.length; i++) {
+                while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], points[i]) <= 0) lower.pop();
+                lower.push(points[i]);
+            }
+            const upper = [];
+            for (let i = points.length - 1; i >= 0; i--) {
+                while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], points[i]) <= 0) upper.pop();
+                upper.push(points[i]);
+            }
+            upper.pop(); lower.pop();
+            const hull = lower.concat(upper);
+
+            if (hull.length < 3) return;
+
+            let minX = 9999, minY = 9999, maxX = 0, maxY = 0;
+            hull.forEach(p => {
+                if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+                if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+            });
+
+            const cxHull = (minX + maxX) / 2; const cyHull = (minY + maxY) / 2; const pad = 5;
+            hull.forEach(p => {
+                const dx = p.x - cxHull; const dy = p.y - cyHull;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 0) { p.x += (dx / dist) * pad; p.y += (dy / dist) * pad; }
+            });
+
+            minX = 9999; minY = 9999; maxX = 0; maxY = 0;
+            hull.forEach(p => {
+                if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+                if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+            });
+
+            selectionBox.x = Math.floor(minX); selectionBox.y = Math.floor(minY);
+            selectionBox.w = Math.ceil(maxX - minX); selectionBox.h = Math.ceil(maxY - minY);
+            selectionBox.polygon = hull;
+
+            selectionBox.exactMask = visited;
+            selectionBox.maskW = w;
+
+            renderPreview();
+            showPopup("선택된 영역에 포함된 모든 덩어리를 파악하여 하나의 다각형으로 묶었습니다.");
+        }
+
+        function transformSelection(type) {
+            if (!originalImageObj) { showPopup("이미지를 먼저 열어주세요."); return; }
+
+            if (!selectionBox.active) {
+                selectionBox = { x: 0, y: 0, w: masterCanvas.width, h: masterCanvas.height, active: true, polygon: null, exactMask: null, maskW: 0, angle: 0 };
+                extractSelectionToFloat();
+            } else if (!isImageFloating) {
+                extractSelectionToFloat();
+            }
+
+            if (floatingCanvas.width <= 0 || floatingCanvas.height <= 0) {
+                showPopup("변형할 이미지가 없습니다. 영역을 다시 넉넉하게 선택해주세요.");
+                selectionBox.active = false;
+                renderPreview();
+                return;
+            }
+
+            const tempCanvas = document.createElement('canvas');
+            const newW = Math.round((type === 'rotL' || type === 'rotR') ? floatingCanvas.height : floatingCanvas.width);
+            const newH = Math.round((type === 'rotL' || type === 'rotR') ? floatingCanvas.width : floatingCanvas.height);
+
+            tempCanvas.width = newW;
+            tempCanvas.height = newH;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.imageSmoothingEnabled = false;
+
+            tempCtx.save();
+            if (type === 'flipH') {
+                tempCtx.translate(newW, 0); tempCtx.scale(-1, 1);
+            } else if (type === 'flipV') {
+                tempCtx.translate(0, newH); tempCtx.scale(1, -1);
+            } else if (type === 'rotL') {
+                tempCtx.translate(0, newH); tempCtx.rotate(-Math.PI / 2);
+            } else if (type === 'rotR') {
+                tempCtx.translate(newW, 0); tempCtx.rotate(Math.PI / 2);
+            }
+
+            tempCtx.globalCompositeOperation = 'copy';
+            tempCtx.drawImage(floatingCanvas, 0, 0);
+            tempCtx.restore();
+
+            floatingCanvas.width = newW;
+            floatingCanvas.height = newH;
+            floatingCtx.imageSmoothingEnabled = false;
+            floatingCtx.globalCompositeOperation = 'copy';
+            floatingCtx.drawImage(tempCanvas, 0, 0);
+
+            if (type === 'rotL' || type === 'rotR') {
+                const cx = selectionBox.x + selectionBox.w / 2;
+                const cy = selectionBox.y + selectionBox.h / 2;
+                selectionBox.w = newW;
+                selectionBox.h = newH;
+                selectionBox.x = cx - newW / 2;
+                selectionBox.y = cy - newH / 2;
+            }
+
+            selectionBox.polygon = null;
+            selectionBox.exactMask = null;
+            renderPreview();
+        }
+
+        function createNewBlankTab() {
+            saveCurrentTabState();
+            tabCounter++; const newTabId = 'tab_' + tabCounter;
+
+            const newMasterCanvas = document.createElement('canvas');
+            const newMasterCtx = newMasterCanvas.getContext('2d');
+            newMasterCanvas.width = 1; newMasterCanvas.height = 1; // 화면에 보이지 않을 최소 크기
+
+            const newFloatingCanvas = document.createElement('canvas');
+
+            const newTab = {
+                id: newTabId, originalFileName: "대기중...", originalImageObj: null,
+                masterCanvas: newMasterCanvas, masterCtx: newMasterCtx,
+                floatingCanvas: newFloatingCanvas, floatingCtx: newFloatingCanvas.getContext('2d'),
+                currentScale: 1, undoStack: [], redoStack: [], isImageFloating: false,
+                selectionBox: { x: 0, y: 0, w: 0, h: 0, active: false, polygon: null, exactMask: null, maskW: 0, angle: 0 },
+                canvasResizeState: { active: false, handle: null, w: 0, h: 0 }, opacity: 100,
+                isEmptyTab: true // 🌟 대기 상태를 나타내는 플래그 추가
+            };
+
+            tabs.push(newTab); switchTab(newTabId);
+            showPopup("빈 탭이 추가되었습니다.\n이미지를 붙여넣거나 불러오세요.");
+        }
+
+    </script>
+
+
+
+
+</body>
+</html>

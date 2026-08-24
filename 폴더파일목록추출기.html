@@ -1,0 +1,714 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>폴더/파일 목록 추출기</title>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-shrink: 0;
+        }
+
+        h2 {
+            margin: 0;
+            color: #217346;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 20px;
+        }
+
+        .control-panel {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            margin-bottom: 15px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            border-left: 4px solid #217346;
+            flex-shrink: 0;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: 0.2s;
+        }
+
+        .btn-primary {
+            background-color: #217346;
+            color: white;
+        }
+
+            .btn-primary:hover {
+                background-color: #1a5c38;
+            }
+
+        .btn-excel {
+            background-color: #1d6f42;
+            color: white;
+        }
+
+            .btn-excel:hover {
+                background-color: #155531;
+            }
+
+        .btn-copy {
+            background-color: #f1f3f4;
+            color: #333;
+            border: 1px solid #ccc;
+        }
+
+            .btn-copy:hover {
+                background-color: #e2e6ea;
+            }
+
+        .options {
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+            color: #555;
+            align-items: center;
+        }
+
+            .options label {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                cursor: pointer;
+            }
+
+        .divider {
+            width: 1px;
+            height: 16px;
+            background-color: #ddd;
+            margin: 0 5px;
+        }
+
+        .info-text {
+            font-size: 13px;
+            color: #666;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            overflow: hidden;
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead {
+            background-color: #f1f3f4;
+            position: sticky;
+            top: 0;
+        }
+
+        th {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 2px solid #ddd;
+            color: #555;
+            font-weight: bold;
+            user-select: none;
+        }
+
+            th.sortable {
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }
+
+                th.sortable:hover {
+                    background-color: #e2e6ea;
+                    color: #217346;
+                }
+
+                th.sortable span {
+                    font-size: 10px;
+                    color: #888;
+                    margin-left: 4px;
+                }
+
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #eee;
+            word-break: break-all;
+        }
+
+        tbody tr:hover {
+            background-color: #f5f8f6;
+        }
+
+        .col-no {
+            width: 50px;
+            text-align: center;
+        }
+
+        .col-ext {
+            width: 90px;
+            text-align: center;
+        }
+
+        .col-size {
+            width: 90px;
+            text-align: right;
+        }
+
+        .col-date {
+            width: 140px;
+            text-align: center;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+
+        #loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #217346;
+            font-weight: bold;
+        }
+
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 12px 20px;
+            position: fixed;
+            z-index: 9999;
+            left: 50%;
+            bottom: 20px;
+            transform: translateX(-50%);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s;
+        }
+
+            .toast.show {
+                visibility: visible;
+                opacity: 1;
+                bottom: 40px;
+            }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 25px 30px;
+            border-radius: 10px;
+            width: 350px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        }
+
+            .modal-content h3 {
+                margin-top: 0;
+                color: #217346;
+                font-size: 18px;
+                margin-bottom: 15px;
+                text-align: center;
+            }
+
+            .modal-content p {
+                color: #444;
+                font-size: 14px;
+                margin-bottom: 25px;
+                line-height: 1.5;
+                word-break: keep-all;
+                text-align: center;
+            }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+            .modal-buttons .btn {
+                width: 100px;
+            }
+
+        /* 통계 모달용 특화 CSS */
+        #statsModal .modal-content {
+            width: 750px;
+            max-width: 90%;
+            max-height: 85vh;
+            padding: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 10px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .stats-card {
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+            .stats-card h4 {
+                margin: 0 0 10px 0;
+                color: #155531;
+                font-size: 14px;
+                border-bottom: 1px solid #ddd;
+                padding-bottom: 6px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+        .stats-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 12px;
+        }
+
+            .stats-list li {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 5px;
+                border-bottom: 1px dashed #eee;
+                padding-bottom: 4px;
+            }
+
+                .stats-list li span:first-child {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    max-width: 65%;
+                }
+
+                .stats-list li span:last-child {
+                    font-weight: bold;
+                    color: #444;
+                }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>📁 폴더/파일 목록 추출기</h2>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-copy" onclick="showStatistics()" id="statsBtn">📈 통계 보기</button>
+            <button class="btn btn-copy" onclick="copyToClipboard()" id="copyBtn">📋 클립보드 복사</button>
+            <button class="btn btn-excel" onclick="exportToExcel()" id="excelBtn">📊 엑셀로 저장</button>
+        </div>
+    </div>
+
+    <div class="control-panel">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+            <button class="btn btn-primary" onclick="selectFolder()">📂 대상 위치 변경...</button>
+        </div>
+
+        <div class="options">
+            <label><input type="radio" name="optMode" value="file" checked onchange="reScan()"> 파일 목록</label>
+            <label><input type="radio" name="optMode" value="folder" onchange="reScan()"> 폴더 목록</label>
+            <div class="divider"></div>
+            <label><input type="checkbox" id="chkSubfolder" checked onchange="reScan()"> 하위 포함</label>
+            <label><input type="checkbox" id="chkHidden" checked onchange="reScan()"> 숨김 제외</label>
+        </div>
+
+        <div class="info-text">
+            <div id="pathDisplay" style="font-weight:bold; color:#217346; margin-bottom:4px;">선택된 위치: 없음</div>
+            <div id="statusText">위치를 선택하여 탐색을 시작하세요.</div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div id="loading">데이터를 추출하고 있습니다. 잠시만 기다려주세요...</div>
+        <div style="overflow-y: auto; flex: 1;">
+            <table id="resultTable">
+                <thead>
+                    <tr>
+                        <th class="col-no">연번</th>
+                        <th class="sortable" onclick="sortTable('name')">이름 <span></span></th>
+                        <th class="col-ext sortable" onclick="sortTable('ext')">확장자/종류 <span></span></th>
+                        <th class="col-size sortable" onclick="sortTable('size_bytes')">크기 <span></span></th>
+                        <th class="col-date sortable" onclick="sortTable('modified')">수정일자 <span></span></th>
+                        <th class="sortable" onclick="sortTable('path')">위치(폴더) <span></span></th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="6" class="empty-state">표시할 데이터가 없습니다.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="toastPopup" class="toast"></div>
+
+    <div id="customModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modalTitle">알림</h3>
+            <p id="modalMessage">메시지 내용</p>
+            <div class="modal-buttons">
+                <button id="modalBtnCancel" class="btn btn-copy" style="display:none;">취소</button>
+                <button id="modalBtnConfirm" class="btn btn-primary">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="statsModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-bottom:20px;">📊 데이터 통계 분석</h3>
+            <div class="stats-grid" id="statsGrid">
+            </div>
+            <div class="modal-buttons" style="margin-top:15px;">
+                <button class="btn btn-primary" onclick="document.getElementById('statsModal').style.display='none'">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DISPLAY_LIMIT = 1000;
+        let extractedData = [];
+        let currentFolderPath = ""; // 선택된 경로 유지
+        let currentSortCol = '';
+        let currentSortAsc = true;
+
+        // --- 팝업 제어 ---
+        function showToast(message) {
+            const toast = document.getElementById("toastPopup");
+            toast.innerText = message;
+            toast.classList.add("show");
+            setTimeout(() => { toast.classList.remove("show"); }, 3000);
+        }
+
+        function showModal(title, message, isConfirm = false, onConfirm = null) {
+            document.getElementById("modalTitle").innerText = title;
+            document.getElementById("modalMessage").innerHTML = message.replace(/\n/g, '<br>');
+            const modal = document.getElementById("customModal");
+            const btnCancel = document.getElementById("modalBtnCancel");
+            const btnConfirm = document.getElementById("modalBtnConfirm");
+            btnCancel.style.display = isConfirm ? "block" : "none";
+
+            btnConfirm.onclick = () => { modal.style.display = "none"; if (onConfirm) onConfirm(); };
+            btnCancel.onclick = () => { modal.style.display = "none"; };
+            modal.style.display = "flex";
+        }
+
+        // --- 파이썬 호출 브릿지 ---
+        function callPywebview(method, payload = null) {
+            return new Promise((resolve, reject) => {
+                const id = Date.now() + Math.random().toString(36).substr(2, 9);
+                const handler = function (event) {
+                    if (event.data && event.data.id === id) {
+                        window.removeEventListener('message', handler);
+                        if (event.data.status === 'success') resolve(event.data.response);
+                        else reject(event.data.error);
+                    }
+                };
+                window.addEventListener('message', handler);
+                window.parent.postMessage({ type: 'pywebview-call', id: id, method: method, payload: payload }, '*');
+            });
+        }
+
+        // --- 정렬 로직 ---
+        function sortTable(col) {
+            if (extractedData.length === 0) return;
+
+            if (currentSortCol === col) currentSortAsc = !currentSortAsc;
+            else { currentSortCol = col; currentSortAsc = true; }
+
+            extractedData.sort((a, b) => {
+                let valA = a[col];
+                let valB = b[col];
+
+                if (col === 'size_bytes') {
+                    valA = valA || 0; valB = valB || 0;
+                } else {
+                    valA = String(valA || '').toLowerCase();
+                    valB = String(valB || '').toLowerCase();
+                }
+
+                if (valA < valB) return currentSortAsc ? -1 : 1;
+                if (valA > valB) return currentSortAsc ? 1 : -1;
+                return 0;
+            });
+
+            document.querySelectorAll('th.sortable span').forEach(span => span.innerText = '');
+            const activeTh = document.querySelector(`th[onclick="sortTable('${col}')"] span`);
+            if (activeTh) activeTh.innerText = currentSortAsc ? ' ▲' : ' ▼';
+
+            renderTable(extractedData);
+        }
+
+        // --- 데이터 탐색 ---
+        function reScan() {
+            if (currentFolderPath) {
+                selectFolder(currentFolderPath);
+            }
+        }
+
+        async function selectFolder(existingPath = null) {
+            const extractMode = document.querySelector('input[name="optMode"]:checked').value;
+            const payload = {
+                include_subfolders: document.getElementById('chkSubfolder').checked,
+                exclude_hidden: document.getElementById('chkHidden').checked,
+                extract_mode: extractMode,
+                folder_path: existingPath // 경로가 있으면 파이썬이 다이얼로그 생략
+            };
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('tableBody').style.display = 'none';
+            document.getElementById('statusText').innerText = "탐색 중...";
+
+            currentSortCol = '';
+            document.querySelectorAll('th.sortable span').forEach(span => span.innerText = '');
+
+            try {
+                const res = await callPywebview('scan_folder_for_extractor', payload);
+                if (res.success) {
+                    extractedData = res.data;
+                    currentFolderPath = res.folder; // 경로 저장
+
+                    document.getElementById('pathDisplay').innerText = "선택된 위치: " + currentFolderPath;
+
+                    renderTable(extractedData);
+
+                    let statusHtml = `<b>${extractedData.length.toLocaleString()}</b>개의 데이터`;
+                    if (res.is_limited) {
+                        statusHtml += ` <span style="color: #e53935;">(2만개 제한 도달)</span>`;
+                        showModal("경고", "데이터가 너무 많아 20,000개까지만 탐색했습니다.\n범위를 좁히거나 하위 포함 옵션을 해제해 주세요.");
+                    } else if (extractedData.length > DISPLAY_LIMIT) {
+                        statusHtml += ` <span style="color: #f57f17;">(화면 표시: ${DISPLAY_LIMIT.toLocaleString()}개)</span>`;
+                        showToast(`데이터가 많아 화면에는 ${DISPLAY_LIMIT}개만 표시합니다.`);
+                    } else {
+                        showToast("탐색이 완료되었습니다.");
+                    }
+                    document.getElementById('statusText').innerHTML = statusHtml;
+
+                } else if (res.message) {
+                    showModal("안내", res.message);
+                    document.getElementById('statusText').innerText = "대기 중...";
+                }
+            } catch (err) {
+                showModal("오류", "탐색 중 오류가 발생했습니다:\n" + err);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('tableBody').style.display = 'table-row-group';
+            }
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">조건에 맞는 데이터가 없습니다.</td></tr>';
+                return;
+            }
+
+            const displayData = data.slice(0, DISPLAY_LIMIT);
+
+            displayData.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                        <td class="col-no">${index + 1}</td>
+                        <td>${item.name}</td>
+                        <td class="col-ext">${item.ext}</td>
+                        <td class="col-size">${item.size}</td>
+                        <td class="col-date">${item.modified}</td>
+                        <td style="font-size:11px; color:#777;">${item.path}</td>
+                    `;
+                tbody.appendChild(tr);
+            });
+
+            if (data.length > DISPLAY_LIMIT) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="6" class="empty-state" style="background-color: #fff8e1; color: #f57f17; padding: 15px;">
+                         ... 생략됨 (총 ${data.length.toLocaleString()}개 중 ${DISPLAY_LIMIT.toLocaleString()}개 표시 중) ...<br>
+                         <span style="font-size: 12px; color: #888;">엑셀 저장 시 전체 데이터가 저장됩니다.</span>
+                     </td>`;
+                tbody.appendChild(tr);
+            }
+        }
+
+        // --- 바이트 용량 텍스트 변환기 ---
+        function formatBytes(bytes) {
+            if (bytes === 0 || !bytes) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // --- 통계 처리 ---
+        function showStatistics() {
+            if (extractedData.length === 0) {
+                showModal("알림", "추출된 데이터가 없습니다.");
+                return;
+            }
+
+            const isFolderMode = document.querySelector('input[name="optMode"]:checked').value === 'folder';
+            const grid = document.getElementById('statsGrid');
+            grid.innerHTML = ''; // 초기화
+
+            if (isFolderMode) {
+                // [폴더 모드 통계]
+                const top10Recent = [...extractedData].sort((a, b) => (b.modified || "").localeCompare(a.modified || "")).slice(0, 10);
+
+                let html = `
+                    <div class="stats-card">
+                        <h4>🕒 가장 최근 수정한 폴더 Top 10</h4>
+                        <ul class="stats-list">
+                            ${top10Recent.map(item => `<li><span title="${item.path}/${item.name}">${item.name}</span> <span>${item.modified}</span></li>`).join('')}
+                        </ul>
+                    </div>
+                    <div class="stats-card" style="display:flex; align-items:center; justify-content:center; color:#888;">
+                        <p>폴더 모드에서는 용량 및 확장자 분석이 지원되지 않습니다.</p>
+                    </div>`;
+                grid.innerHTML = html;
+
+            } else {
+                // [파일 모드 통계]
+                const extCount = {};
+                const folderSizes = {};
+
+                extractedData.forEach(item => {
+                    // 확장자 집계
+                    const ext = item.ext || "(확장자 없음)";
+                    extCount[ext] = (extCount[ext] || 0) + 1;
+
+                    // 폴더별 용량 집계 (상위 폴더 기준)
+                    const size = item.size_bytes || 0;
+                    folderSizes[item.path] = (folderSizes[item.path] || 0) + size;
+                });
+
+                const sortedExts = Object.entries(extCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
+                const top10Size = [...extractedData].sort((a, b) => (b.size_bytes || 0) - (a.size_bytes || 0)).slice(0, 10);
+                const top10Recent = [...extractedData].sort((a, b) => (b.modified || "").localeCompare(a.modified || "")).slice(0, 10);
+                const top10Folders = Object.entries(folderSizes).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+                grid.innerHTML = `
+                        <div class="stats-card">
+                            <h4>🧩 확장자별 파일 수 Top 10</h4>
+                            <ul class="stats-list">
+                                ${sortedExts.map(ext => `<li><span>${ext[0]}</span> <span>${ext[1].toLocaleString()}개</span></li>`).join('')}
+                            </ul>
+                        </div>
+                        <div class="stats-card">
+                            <h4>💾 가장 용량이 큰 파일 Top 10</h4>
+                            <ul class="stats-list">
+                                ${top10Size.map(item => `<li><span title="${item.name}">${item.name}</span> <span>${formatBytes(item.size_bytes)}</span></li>`).join('')}
+                            </ul>
+                        </div>
+                        <div class="stats-card">
+                            <h4>🕒 최근 수정한 파일 Top 10</h4>
+                            <ul class="stats-list">
+                                ${top10Recent.map(item => `<li><span title="${item.name}">${item.name}</span> <span>${item.modified.split(' ')[0]}</span></li>`).join('')}
+                            </ul>
+                        </div>
+                        <div class="stats-card">
+                            <h4>📁 가장 용량이 큰 폴더 Top 10</h4>
+                            <ul class="stats-list">
+                                ${top10Folders.map(folder => `<li><span title="${folder[0]}">${folder[0].split('\\').pop() || folder[0]}</span> <span>${formatBytes(folder[1])}</span></li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+            }
+
+            document.getElementById('statsModal').style.display = 'flex';
+        }
+
+        async function exportToExcel() {
+            if (extractedData.length === 0) {
+                showModal("알림", "추출된 데이터가 없습니다.");
+                return;
+            }
+            showModal("엑셀 저장", "추출된 목록을 엑셀로 저장하시겠습니까?", true, async () => {
+                try {
+                    const res = await callPywebview('export_folder_list_to_excel', { data: extractedData });
+                    if (res.success) showToast("✅ 엑셀 파일이 성공적으로 저장되었습니다.");
+                    else if (res.message) showModal("저장 취소", res.message);
+                } catch (err) {
+                    showModal("오류", "엑셀 저장 중 오류가 발생했습니다:\n" + err);
+                }
+            });
+        }
+
+        function copyToClipboard() {
+            if (extractedData.length === 0) {
+                showModal("알림", "복사할 데이터가 없습니다.");
+                return;
+            }
+            let tsv = "연번\t이름\t확장자/종류\t크기\t수정일자\t위치(폴더)\n";
+            extractedData.forEach((item, idx) => {
+                tsv += `${idx + 1}\t${item.name}\t${item.ext}\t${item.size}\t${item.modified}\t${item.path}\n`;
+            });
+
+            const textarea = document.createElement('textarea');
+            textarea.value = tsv;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            showToast("✅ 현재 정렬된 표 데이터가 클립보드에 복사되었습니다.");
+        }
+    </script>
+</body>
+</html>

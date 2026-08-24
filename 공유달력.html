@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>부서 공유 달력</title>
+    <style>
+        :root {
+            --primary-color: #217346;
+            --secondary-color: #e8f5e9;
+            --text-color: #333;
+            --border-color: #ddd;
+            --my-schedule-bg: #dcedc8;
+            --my-schedule-text: #33691e;
+            --other-schedule-bg: #e3f2fd;
+            --other-schedule-text: #0d47a1;
+        }
+
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+            color: var(--text-color);
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 헤더 영역 */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .month-nav {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .btn {
+            background-color: white;
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background-color: #f0f0f0;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #1e6b41;
+        }
+
+        /* 달력 그리드 */
+        .calendar-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        .weekdays {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            background-color: #f0f0f0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .weekday {
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .days {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .day {
+            border-right: 1px solid #eee;
+            border-bottom: 1px solid #eee;
+            padding: 5px;
+            min-height: 100px;
+            position: relative;
+            background-color: white;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .day:hover {
+            background-color: #fafafa;
+        }
+
+        .day.today {
+            background-color: #fdfdf0;
+        }
+
+        .day-number {
+            font-size: 14px;
+            font-weight: bold;
+            color: #777;
+            margin-bottom: 5px;
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            border-radius: 50%;
+        }
+
+        .day.today .day-number {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        /* 일정 아이템 */
+        .schedule-item {
+            font-size: 11px;
+            margin-bottom: 2px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .schedule-my {
+            background-color: var(--my-schedule-bg);
+            color: var(--my-schedule-text);
+            border-left: 3px solid var(--my-schedule-text);
+        }
+
+        .schedule-other {
+            background-color: var(--other-schedule-bg);
+            color: var(--other-schedule-text);
+            border-left: 3px solid var(--other-schedule-text);
+        }
+
+        /* 모달 팝업 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 300px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .modal h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        /* 로딩/안내 */
+        .info-bar {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="month-nav">
+            <button class="btn" onclick="changeMonth(-1)">&lt; 이전</button>
+            <h2 id="currentMonth">2024년 2월</h2>
+            <button class="btn" onclick="changeMonth(1)">다음 &gt;</button>
+        </div>
+        <div>
+            <button class="btn btn-primary" onclick="loadSchedules()">새로고침</button>
+        </div>
+    </header>
+
+    <div class="calendar-container">
+        <div class="weekdays">
+            <div class="weekday" style="color: #e53935;">일</div>
+            <div class="weekday">월</div>
+            <div class="weekday">화</div>
+            <div class="weekday">수</div>
+            <div class="weekday">목</div>
+            <div class="weekday">금</div>
+            <div class="weekday" style="color: #1e88e5;">토</div>
+        </div>
+        <div class="days" id="calendarDays">
+            <!-- 자바스크립트로 날짜 생성 -->
+        </div>
+    </div>
+
+    <div class="info-bar">
+        ※ 같은 네트워크(Wi-Fi)에 있는 같은 부서 사람들과 일정이 실시간 공유됩니다.
+    </div>
+
+    <!-- 일정 등록 모달 -->
+    <div id="scheduleModal" class="modal">
+        <div class="modal-content">
+            <h3>일정 등록</h3>
+            <p id="selectedDateText" style="font-size: 13px; color: #666; margin-bottom: 5px;"></p>
+            <input type="text" id="scheduleInput" placeholder="일정 내용 입력 (예: 회의, 휴가)" onkeyup="if(event.keyCode==13) confirmAdd()">
+            <div class="modal-buttons">
+                <button class="btn" onclick="closeModal()">취소</button>
+                <button class="btn btn-primary" onclick="confirmAdd()">등록</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 커스텀 알림 모달 -->
+    <div id="alertModal" class="modal">
+        <div class="modal-content" style="text-align: center; width: 250px;">
+            <p id="alertMessage" style="margin: 20px 0;">메시지</p>
+            <button class="btn btn-primary" onclick="document.getElementById('alertModal').style.display='none'" style="width: 100%;">확인</button>
+        </div>
+    </div>
+
+    <script>
+        let currentDate = new Date();
+        let selectedDateStr = "";
+
+        // [중요] Python API 객체 찾기 (iframe 대응)
+        function getApi() {
+            if (window.pywebview) return window.pywebview.api;
+            if (window.parent && window.parent.pywebview) return window.parent.pywebview.api;
+            return null;
+        }
+
+        // 초기 로드
+        window.onload = function() {
+            renderCalendar();
+            loadSchedules();
+            
+            // [중요] 부모 창에 refreshCalendar 함수 노출 (Python이 호출할 수 있도록)
+            if (window.parent) {
+                window.parent.refreshCalendar = refreshCalendar;
+            }
+        };
+
+        // 외부(Python)에서 호출하는 함수
+        function refreshCalendar() {
+            console.log("일정 갱신 요청 수신");
+            loadSchedules();
+        }
+
+        // 달력 그리기
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+
+            document.getElementById('currentMonth').innerText = `${year}년 ${month + 1}월`;
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            
+            const startDayOfWeek = firstDay.getDay(); // 0(일) ~ 6(토)
+            const totalDays = lastDay.getDate();
+
+            const daysContainer = document.getElementById('calendarDays');
+            daysContainer.innerHTML = "";
+
+            // 지난달 빈칸 채우기
+            for (let i = 0; i < startDayOfWeek; i++) {
+                const emptyCell = document.createElement('div');
+                emptyCell.className = 'day';
+                emptyCell.style.backgroundColor = '#fafafa';
+                daysContainer.appendChild(emptyCell);
+            }
+
+            // 날짜 생성
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            for (let i = 1; i <= totalDays; i++) {
+                const dayCell = document.createElement('div');
+                dayCell.className = 'day';
+                
+                // 날짜 포맷 (YYYY-MM-DD)
+                const monthStr = String(month + 1).padStart(2, '0');
+                const dayStr = String(i).padStart(2, '0');
+                const dateStr = `${year}-${monthStr}-${dayStr}`;
+
+                if (dateStr === todayStr) dayCell.classList.add('today');
+
+                dayCell.innerHTML = `<div class="day-number">${i}</div><div class="schedule-list" id="sched-${dateStr}"></div>`;
+                
+                // 클릭 시 일정 등록 모달
+                dayCell.onclick = function() {
+                    openModal(dateStr);
+                };
+
+                daysContainer.appendChild(dayCell);
+            }
+        }
+
+        function changeMonth(delta) {
+            currentDate.setMonth(currentDate.getMonth() + delta);
+            renderCalendar();
+            loadSchedules();
+        }
+
+        // 모달 관련 함수
+        function openModal(dateStr) {
+            selectedDateStr = dateStr;
+            document.getElementById('selectedDateText').innerText = dateStr;
+            document.getElementById('scheduleInput').value = "";
+            document.getElementById('scheduleModal').style.display = 'flex';
+            document.getElementById('scheduleInput').focus();
+        }
+
+        function closeModal() {
+            document.getElementById('scheduleModal').style.display = 'none';
+        }
+
+        function showAlert(msg) {
+            document.getElementById('alertMessage').innerText = msg;
+            document.getElementById('alertModal').style.display = 'flex';
+        }
+
+        // 일정 등록
+        function confirmAdd() {
+            const content = document.getElementById('scheduleInput').value.trim();
+            if (!content) {
+                showAlert("내용을 입력해주세요.");
+                return;
+            }
+
+            const api = getApi();
+            if (api) {
+                api.add_schedule(selectedDateStr, content).then(res => {
+                    if(res.status === 'success') {
+                        closeModal();
+                        loadSchedules(); // 화면 갱신
+                    } else {
+                        showAlert("저장 실패: " + res.message);
+                    }
+                }).catch(err => {
+                    showAlert("API 호출 오류: " + err);
+                });
+            } else {
+                showAlert("시스템 통신 오류: Python 연결을 찾을 수 없습니다.");
+            }
+        }
+
+        // 일정 불러오기
+        function loadSchedules() {
+            const api = getApi();
+            if (!api) {
+                console.log("API not found, skipping loadSchedules");
+                return;
+            }
+
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const ym = `${year}-${month}`;
+
+            api.get_schedules(ym).then(res => {
+                if (res.status === 'success') {
+                    // 화면 초기화 (일정만 지움)
+                    const lists = document.querySelectorAll('.schedule-list');
+                    lists.forEach(el => el.innerHTML = "");
+
+                    // 데이터 뿌리기
+                    res.data.forEach(item => {
+                        const targetDiv = document.getElementById(`sched-${item.date}`);
+                        if (targetDiv) {
+                            const div = document.createElement('div');
+                            div.className = item.is_mine ? 'schedule-item schedule-my' : 'schedule-item schedule-other';
+                            
+                            // 내 일정이면 내용만, 남의 일정이면 이름+내용
+                            if (item.is_mine) {
+                                div.innerText = item.content;
+                            } else {
+                                div.innerText = `[${item.user_name}] ${item.content}`;
+                                div.title = `${item.user_name} (${item.affiliation})`;
+                            }
+                            
+                            targetDiv.appendChild(div);
+                        }
+                    });
+                }
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스마트 계산기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        .btn-press:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<!-- 수정: 외부 여백 축소 (py-10 -> py-6) -->
+<body class="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-2 py-6">
+
+    <div class="w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100 flex flex-col h-auto relative">
+        
+        <!-- 헤더: 패딩 축소 (py-4 -> py-3) -->
+        <div class="bg-indigo-600 px-5 py-3 text-white flex justify-between items-center shrink-0 shadow-md z-10">
+            <h1 class="font-bold text-base"><i class="fas fa-calculator mr-2"></i>스마트 계산기</h1>
+            <div class="flex items-center space-x-2">
+                <span id="mode-badge" class="text-[10px] bg-indigo-500 px-2 py-1 rounded-full text-white font-medium shadow-sm transition-colors border border-indigo-400">자동 계산 ON</span>
+            </div>
+        </div>
+
+        <!-- 디스플레이 영역: 패딩 축소 (p-6 -> p-4), 간격 축소 (space-y-4 -> space-y-2) -->
+        <div class="bg-gray-50 flex flex-col p-4 space-y-2">
+            
+            <!-- 1. 수식 입력 영역 -->
+            <div class="flex flex-col space-y-1">
+                <label class="text-xs text-gray-600 font-bold flex items-center ml-1">
+                    <i class="far fa-keyboard mr-2 text-indigo-500"></i>수식 입력
+                </label>
+                <!-- 수정: 글자 크기 축소 (text-2xl -> text-lg), 초기 높이 축소 (min-h-[100px] -> min-h-[60px]), 패딩 축소 -->
+                <textarea 
+                    id="display-input" 
+                    class="w-full text-right text-gray-800 text-lg font-medium bg-white border-2 border-gray-200 rounded-lg p-3 outline-none resize-none min-h-[60px] overflow-hidden leading-relaxed focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm"
+                    placeholder="불필요한 텍스트가 있어도 계산 가능&#13;&#10;예: 사과 2000원 * 5개"
+                    oninput="handleInput()"></textarea>
+            </div>
+
+            <!-- 2. 변환 수식 미리보기 -->
+            <div class="flex flex-col space-y-1">
+                <div class="flex justify-end items-center">
+                    <span class="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                        <i class="fas fa-magic mr-1"></i>숫자 변환
+                    </span>
+                </div>
+                <!-- 수정: 높이 축소 (min-h-[60px] -> min-h-[40px]), 패딩 축소 -->
+                <div class="w-full bg-white rounded-lg p-2 border border-gray-200 min-h-[40px] flex items-center justify-end shadow-sm">
+                    <div id="display-clean" class="text-sm text-gray-500 font-mono text-right break-all leading-relaxed w-full">= </div>
+                </div>
+            </div>
+
+            <!-- 3. 결과 표시 영역 -->
+            <div class="flex flex-col justify-end pt-2 border-t border-gray-200 mt-1">
+                <span class="text-[10px] text-gray-400 font-medium text-right mb-1">최종 결과</span>
+                <!-- 수정: 글자 크기 축소 (text-6xl -> text-4xl) -->
+                <div id="display-result" class="text-4xl font-bold text-gray-800 text-right break-all leading-tight">0</div>
+            </div>
+        </div>
+
+        <!-- 키패드 영역: 패딩 축소 (p-5 -> p-3), 간격 축소 (gap-3 -> gap-2) -->
+        <div class="p-3 bg-white grid grid-cols-4 gap-2 shrink-0 border-t border-gray-100 shadow-[0_-5px_15px_rgba(0,0,0,0.02)] z-10">
+            <!-- 버튼 공통 수정: py-3.5 -> py-2.5, 폰트 크기 조정 -->
+            <!-- Row 1 -->
+            <button onclick="clearDisplay()" class="btn-press py-2.5 rounded-lg bg-red-50 text-red-500 font-bold hover:bg-red-100 transition text-base border border-red-100">AC</button>
+            <button onclick="deleteLastChar()" class="btn-press py-2.5 rounded-lg bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition text-base border border-gray-200"><i class="fas fa-backspace"></i></button>
+            <button onclick="appendValue('(')" class="btn-press py-2.5 rounded-lg bg-gray-100 text-indigo-600 font-bold hover:bg-gray-200 transition text-base border border-gray-200">(</button>
+            <button onclick="appendValue(')')" class="btn-press py-2.5 rounded-lg bg-gray-100 text-indigo-600 font-bold hover:bg-gray-200 transition text-base border border-gray-200">)</button>
+
+            <!-- Row 2 -->
+            <button onclick="appendValue('%')" class="btn-press py-2.5 rounded-lg bg-gray-100 text-indigo-600 font-bold hover:bg-gray-200 transition text-base border border-gray-200">%</button>
+            <button onclick="appendValue('^')" class="btn-press py-2.5 rounded-lg bg-gray-100 text-indigo-600 font-bold hover:bg-gray-200 transition text-base border border-gray-200" title="거듭제곱">^</button>
+            <button onclick="appendValue('00')" class="btn-press py-2.5 rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 transition text-base border border-gray-200">00</button>
+            <button onclick="appendValue('/')" class="btn-press py-2.5 rounded-lg bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100 text-lg transition border border-indigo-100">÷</button>
+
+            <!-- Row 3 -->
+            <button onclick="appendValue('7')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">7</button>
+            <button onclick="appendValue('8')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">8</button>
+            <button onclick="appendValue('9')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">9</button>
+            <button onclick="appendValue('*')" class="btn-press py-2.5 rounded-lg bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100 text-lg transition border border-indigo-100">×</button>
+
+            <!-- Row 4 -->
+            <button onclick="appendValue('4')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">4</button>
+            <button onclick="appendValue('5')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">5</button>
+            <button onclick="appendValue('6')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">6</button>
+            <button onclick="appendValue('-')" class="btn-press py-2.5 rounded-lg bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100 text-lg transition border border-indigo-100">-</button>
+
+            <!-- Row 5 -->
+            <button onclick="appendValue('1')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">1</button>
+            <button onclick="appendValue('2')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">2</button>
+            <button onclick="appendValue('3')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">3</button>
+            <button onclick="appendValue('+')" class="btn-press py-2.5 rounded-lg bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100 text-lg transition border border-indigo-100">+</button>
+
+            <!-- Row 6 -->
+            <button onclick="appendValue('0')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">0</button>
+            <button onclick="appendValue('.')" class="btn-press py-2.5 rounded-lg bg-white border-2 border-gray-100 text-gray-800 font-bold hover:bg-gray-50 text-xl transition shadow-sm">.</button>
+            <button onclick="calculate(false)" class="btn-press col-span-2 py-2.5 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 text-xl transition shadow-md shadow-indigo-200 border border-indigo-600">=</button>
+        </div>
+    </div>
+
+    <script>
+        const displayInput = document.getElementById('display-input');
+        const displayClean = document.getElementById('display-clean');
+        const displayResult = document.getElementById('display-result');
+        const modeBadge = document.getElementById('mode-badge');
+
+        let isAutoCalcEnabled = true; 
+        const SLOW_CALC_THRESHOLD = 15;
+
+        window.onload = () => {
+            displayInput.focus();
+            autoResize(displayInput);
+        }
+
+        function appendValue(val) {
+            displayInput.value += val;
+            handleInput();
+            displayInput.focus();
+        }
+
+        function clearDisplay() {
+            displayInput.value = '';
+            displayClean.innerText = '= ';
+            displayResult.innerText = '0';
+            resetResultStyle();
+            isAutoCalcEnabled = true;
+            updateBadgeUI();
+            displayInput.focus();
+            autoResize(displayInput);
+        }
+
+        function resetResultStyle() {
+            displayResult.className = "text-4xl font-bold text-gray-800 text-right break-all leading-tight";
+            displayClean.className = "text-sm text-gray-500 font-mono text-right break-all leading-relaxed w-full";
+        }
+
+        function deleteLastChar() {
+            displayInput.value = displayInput.value.slice(0, -1);
+            handleInput();
+            displayInput.focus();
+        }
+
+        function getCleanFormula(rawInput) {
+            let clean = rawInput.replace(/,/g, '');
+            clean = clean.replace(/[xX]/g, '*');
+            clean = clean.replace(/\^/g, '**');
+            clean = clean.replace(/([0-9.]+)%/g, '($1/100)');
+            clean = clean.replace(/[^0-9+\-*/().\s]/g, '');
+            return clean;
+        }
+
+        function updateCleanPreview() {
+            const raw = displayInput.value;
+            if (!raw.trim()) {
+                displayClean.innerText = '= ';
+                return null;
+            }
+            const clean = getCleanFormula(raw);
+            displayClean.innerText = '= ' + clean;
+            return clean;
+        }
+
+        function handleInput() {
+            autoResize(displayInput);
+            const clean = updateCleanPreview();
+            
+            if (isAutoCalcEnabled && clean) {
+                calculate(true); 
+            }
+        }
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
+
+        function calculate(isAuto) {
+            const raw = displayInput.value;
+            if (!raw.trim()) {
+                resetResultStyle();
+                return;
+            }
+
+            const clean = getCleanFormula(raw);
+            
+            if (!isAuto) {
+                displayClean.innerText = '= ' + clean;
+            }
+
+            if (clean.includes('//')) {
+                if (!isAuto) showErrorMessage("연산자 중복 (//)");
+                return;
+            }
+
+            try {
+                const startTime = performance.now();
+                const result = new Function('return ' + clean)();
+                const endTime = performance.now();
+
+                if (isAuto && (endTime - startTime) > SLOW_CALC_THRESHOLD) {
+                    isAutoCalcEnabled = false;
+                    updateBadgeUI();
+                }
+
+                if (!isFinite(result) || isNaN(result)) {
+                    throw new Error("계산 불가");
+                }
+
+                resetResultStyle();
+                displayResult.innerText = Number(result).toLocaleString('ko-KR', { maximumFractionDigits: 10 });
+                
+                if (!isAuto) {
+                    displayResult.classList.remove('text-gray-800');
+                    displayResult.classList.add('text-indigo-600', 'scale-105', 'transition-transform');
+                    setTimeout(() => {
+                        displayResult.classList.remove('text-indigo-600', 'scale-105');
+                        displayResult.classList.add('text-gray-800');
+                    }, 200);
+                }
+
+            } catch (error) {
+                if (!isAuto) {
+                    let msg = error.message;
+                    if (msg.includes("Unexpected token") || msg.includes("Invalid")) msg = "수식 오류";
+                    showErrorMessage(msg);
+                }
+            }
+        }
+
+        function showErrorMessage(msg) {
+            displayResult.className = "text-2xl font-bold text-red-500 text-right break-all leading-tight";
+            displayResult.innerText = "오류: " + msg;
+            
+            displayClean.innerText = "수식 확인 필요";
+            displayClean.className = "text-sm text-red-400 font-mono text-right break-all leading-relaxed w-full";
+        }
+
+        function updateBadgeUI() {
+            if (isAutoCalcEnabled) {
+                modeBadge.innerText = "자동 계산 ON";
+                modeBadge.className = "text-[10px] bg-indigo-500 px-2 py-1 rounded-full text-white font-medium shadow-sm transition-colors border border-indigo-400";
+            } else {
+                modeBadge.innerText = "수동 계산 ('=' 필요)";
+                modeBadge.className = "text-[10px] bg-gray-400 px-2 py-1 rounded-full text-white font-medium shadow-sm transition-colors border border-gray-400";
+            }
+        }
+
+        displayInput.addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                calculate(false);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>다층 퍼셉트론(MLP)의 이해: 협동하는 인공지능</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        /* 기본 슬라이더 스타일 */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #d1d5db;
+            border-radius: 2px;
+        }
+
+        /* 가중치 조절용 컴팩트 슬라이더 스타일 */
+        .weight-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #e5e7eb;
+            border-radius: 2px;
+            outline: none;
+            margin-top: 2px;
+        }
+        .weight-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #6b7280;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            transition: background 0.2s;
+        }
+        .weight-slider::-webkit-slider-thumb:hover {
+            background: #4b5563;
+        }
+
+        .math-box {
+            background-color: #ffffff;
+            border-left: 4px solid #3b82f6;
+            transition: all 0.2s ease;
+        }
+        .math-box:hover {
+            transform: translateY(-1px);
+        }
+
+        /* 캔버스 컨테이너 */
+        #canvasContainer {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            max-width: 200px; /* 세로 공간을 위해 캔버스 최대 크기 살짝 축소 */
+            margin: 0 auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: crosshair;
+        }
+
+        /* SVG 선 애니메이션 및 배지 */
+        .svg-line {
+            stroke-linecap: round;
+            transition: stroke 0.3s, stroke-width 0.3s, opacity 0.3s;
+        }
+        .bias-badge {
+            position: absolute;
+            bottom: -8px;
+            right: -12px;
+            background: white;
+            border: 2px solid #ef4444;
+            border-radius: 999px;
+            padding: 1px 6px;
+            font-size: 11px;
+            font-weight: 900;
+            color: #ef4444;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body class="p-2 md:p-3 text-gray-800 flex flex-col min-h-screen"> <!-- 여백 축소 -->
+
+    <div class="max-w-[1400px] w-full mx-auto flex flex-col gap-2 flex-grow"> <!-- gap 축소 -->
+        
+        <!-- Header (초소형화) -->
+        <header class="bg-white rounded-xl shadow-sm py-2 px-4 flex items-center justify-between shrink-0">
+            <div>
+                <h1 class="text-lg font-bold text-gray-900 leading-tight">다층 퍼셉트론(MLP)의 이해: 협동하는 인공지능</h1>
+            </div>
+            <div class="flex space-x-2 shrink-0">
+                <button onclick="showInfo('sigmoidPopup')" class="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-md text-xs font-bold hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-100 flex items-center">
+                    ❓ 시그모이드란?
+                </button>
+                <button onclick="showInfo('mainPopup')" class="bg-blue-50 text-blue-600 px-3 py-1 rounded-md text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm border border-blue-100">
+                    💡 상황 설명
+                </button>
+            </div>
+        </header>
+
+        <!-- Top Section: 1열 배치 (Inputs, Graph, Network Vis) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-2 shrink-0">
+            
+            <!-- Left: Inputs (Col Span 3) -->
+            <div class="lg:col-span-3 bg-white rounded-xl shadow-sm p-3 flex flex-col justify-center gap-2">
+                <h2 class="text-sm font-bold text-gray-800">1. 지원자 역량 (입력)</h2>
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 space-y-4">
+                    <div>
+                        <label class="flex justify-between text-xs font-bold text-gray-700 mb-1">
+                            <span>🔥 열정 (X₁)</span>
+                            <span id="valPassion" class="text-blue-600 font-black">5.0</span>
+                        </label>
+                        <input type="range" id="sliderPassion" min="0" max="10" step="0.1" value="5">
+                    </div>
+                    <div>
+                        <label class="flex justify-between text-xs font-bold text-gray-700 mb-1">
+                            <span>💻 기술력 (X₂)</span>
+                            <span id="valSkill" class="text-blue-600 font-black">5.0</span>
+                        </label>
+                        <input type="range" id="sliderSkill" min="0" max="10" step="0.1" value="5">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Middle: Decision Space Graph (Col Span 3) -->
+            <div class="lg:col-span-3 bg-white rounded-xl shadow-sm p-3 flex flex-col items-center">
+                <div class="w-full flex justify-between items-end mb-1">
+                    <h2 class="text-sm font-bold text-gray-800">2. 합격 기준 곡선</h2>
+                    <span class="text-[10px] text-gray-500 font-semibold bg-gray-100 px-1.5 py-0.5 rounded">클릭 가능</span>
+                </div>
+                
+                <div id="canvasContainer" class="mt-auto mb-auto">
+                    <canvas id="boundaryCanvas" width="250" height="250"></canvas>
+                    <div class="absolute bottom-1 left-1 text-[9px] text-gray-800 font-bold bg-white/80 px-1 rounded shadow-sm">열정(X₁) →</div>
+                    <div class="absolute top-1 left-1 text-[9px] text-gray-800 font-bold bg-white/80 px-1 rounded shadow-sm transform -rotate-90 origin-bottom-left" style="top: 50%; left: -10px;">기술(X₂) →</div>
+                </div>
+            </div>
+
+            <!-- Right: Network Visualization (Col Span 6) -->
+            <div class="lg:col-span-6 bg-white rounded-xl shadow-sm p-3 flex flex-col">
+                <h2 class="text-sm font-bold mb-2 text-gray-800">3. 🧠 인공신경망 데이터 흐름 (노드와 글자 크기 확대)</h2>
+                
+                <div class="relative bg-slate-50 rounded-lg border border-slate-200 h-[240px] w-full overflow-hidden shrink-0">
+                    <!-- SVG Lines -->
+                    <svg class="absolute inset-0 w-full h-full pointer-events-none z-0">
+                        <line id="edge_w1_1" x1="15%" y1="25%" x2="50%" y2="25%" class="svg-line" />
+                        <line id="edge_w2_1" x1="15%" y1="25%" x2="50%" y2="75%" class="svg-line" />
+                        <line id="edge_w1_2" x1="15%" y1="75%" x2="50%" y2="25%" class="svg-line" />
+                        <line id="edge_w2_2" x1="15%" y1="75%" x2="50%" y2="75%" class="svg-line" />
+                        <line id="edge_w_out_1" x1="50%" y1="25%" x2="85%" y2="50%" class="svg-line" />
+                        <line id="edge_w_out_2" x1="50%" y1="75%" x2="85%" y2="50%" class="svg-line" />
+                    </svg>
+
+                    <!-- HTML Labels for Weights -->
+                    <div id="lbl_w1_1" class="absolute text-[11px] font-bold px-1 rounded shadow-sm border border-gray-100 bg-white/95" style="top: 25%; left: 32.5%; transform: translate(-50%, -50%);">W₁: 5.0</div>
+                    <div id="lbl_w1_2" class="absolute text-[11px] font-bold px-1 rounded shadow-sm border border-gray-100 bg-white/95" style="top: 38%; left: 32.5%; transform: translate(-50%, -50%);">W₂: 2.0</div>
+                    <div id="lbl_w2_1" class="absolute text-[11px] font-bold px-1 rounded shadow-sm border border-gray-100 bg-white/95" style="top: 62%; left: 32.5%; transform: translate(-50%, -50%);">W₃: 1.0</div>
+                    <div id="lbl_w2_2" class="absolute text-[11px] font-bold px-1 rounded shadow-sm border border-gray-100 bg-white/95" style="top: 75%; left: 32.5%; transform: translate(-50%, -50%);">W₄: 6.0</div>
+                    
+                    <div id="lbl_w_out_1" class="absolute text-[11px] font-bold px-1 rounded shadow-sm border border-gray-100 bg-white/95" style="top: 37.5%; left: 67.5%; transform: translate(-50%, -50%);">W₅: 5.0</div>
+                    <div id="lbl_w_out_2" class="absolute text-[11px] font-bold px-1 rounded shadow-sm border border-gray-100 bg-white/95" style="top: 62.5%; left: 67.5%; transform: translate(-50%, -50%);">W₆: 5.0</div>
+
+                    <!-- Input Layer Nodes (원 및 글자 확대) -->
+                    <div class="absolute top-[25%] left-[15%] transform -translate-x-1/2 -translate-y-1/2 text-center z-10">
+                        <div class="bg-white border-[5px] border-blue-400 w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-md">
+                            <span class="text-xs text-gray-500 font-bold">X₁ (열정)</span>
+                            <span class="text-2xl font-black text-blue-600 leading-none mt-1" id="node_x1">5.0</span>
+                        </div>
+                    </div>
+                    <div class="absolute top-[75%] left-[15%] transform -translate-x-1/2 -translate-y-1/2 text-center z-10">
+                        <div class="bg-white border-[5px] border-blue-400 w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-md">
+                            <span class="text-xs text-gray-500 font-bold">X₂ (기술)</span>
+                            <span class="text-2xl font-black text-blue-600 leading-none mt-1" id="node_x2">5.0</span>
+                        </div>
+                    </div>
+
+                    <!-- Hidden Layer Nodes (원 및 글자 확대) -->
+                    <div class="absolute top-[25%] left-[50%] transform -translate-x-1/2 -translate-y-1/2 text-center z-10">
+                        <div class="relative bg-white border-[5px] border-purple-400 w-24 h-24 rounded-full flex flex-col items-center justify-center shadow-md transition-colors duration-300" id="node_h1_bg">
+                            <span class="text-xs text-gray-500 font-bold leading-tight">면접관A (H₁)</span>
+                            <span class="text-xl font-black text-purple-700 leading-none mt-1" id="node_h1">0.00</span>
+                            <div class="bias-badge" id="lbl_b1">B₁: -4.0</div>
+                        </div>
+                    </div>
+                    <div class="absolute top-[75%] left-[50%] transform -translate-x-1/2 -translate-y-1/2 text-center z-10">
+                        <div class="relative bg-white border-[5px] border-purple-400 w-24 h-24 rounded-full flex flex-col items-center justify-center shadow-md transition-colors duration-300" id="node_h2_bg">
+                            <span class="text-xs text-gray-500 font-bold leading-tight">면접관B (H₂)</span>
+                            <span class="text-xl font-black text-purple-700 leading-none mt-1" id="node_h2">0.00</span>
+                            <div class="bias-badge" id="lbl_b2">B₂: -4.0</div>
+                        </div>
+                    </div>
+
+                    <!-- Output Layer Node (원 및 글자 대폭 확대) -->
+                    <div class="absolute top-[50%] left-[85%] transform -translate-x-1/2 -translate-y-1/2 text-center z-10">
+                        <div class="relative bg-white border-[6px] border-green-500 w-[110px] h-[110px] rounded-full flex flex-col items-center justify-center shadow-lg transition-transform" id="node_y_bg">
+                            <span class="text-xs text-gray-500 font-bold">최종 팀장 (Y)</span>
+                            <span class="text-3xl font-black text-green-600 leading-none mt-1" id="node_y">0.00</span>
+                            <div class="bias-badge border-green-500 text-green-600 !text-xs !bottom-[-10px]" id="lbl_b_out">B₃: -6.0</div>
+                        </div>
+                        <p class="mt-2 text-[15px] font-bold bg-white/90 px-3 py-0.5 rounded-full shadow-md" id="finalResultText">대기중</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Section: Editable Math & Sliders (3 Columns) - 최대한 여백 축소 -->
+        <div class="bg-white rounded-xl shadow-sm p-3 flex-grow flex flex-col">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="font-bold text-gray-800 text-sm flex items-center">
+                    🎚️ 가중치와 편향 조절 및 수식 전개
+                </h3>
+                <div class="flex space-x-1.5">
+                    <button onclick="setPreset('basic')" class="text-[10px] bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded font-bold transition shadow-sm">기본(곡선)</button>
+                    <button onclick="setPreset('passion')" class="text-[10px] bg-red-100 text-red-700 hover:bg-red-200 px-2 py-1 rounded font-bold transition shadow-sm">열정만 중시</button>
+                    <button onclick="setPreset('and')" class="text-[10px] bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-1 rounded font-bold transition shadow-sm">둘 다 완벽(AND)</button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 h-full">
+                
+                <!-- Node A (H1) -->
+                <div class="math-box p-2 rounded-xl bg-gray-50 border-l-4 border-purple-400 flex flex-col justify-between">
+                    <p class="font-bold text-purple-700 mb-1.5 text-xs">1차 면접관 A (H₁)</p>
+                    <div class="space-y-2 mb-1.5 bg-white p-2 rounded-lg border shadow-sm">
+                        <div>
+                            <div class="flex justify-between text-[10px] font-bold text-gray-600 mb-0.5">
+                                <span>가중치 (W₁)</span><span id="disp_w1_1" class="text-purple-600">5.0</span>
+                            </div>
+                            <input type="range" id="sl_w1_1" min="-10" max="10" step="0.5" value="5.0" class="weight-slider">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[10px] font-bold text-gray-600 mb-0.5">
+                                <span>가중치 (W₂)</span><span id="disp_w1_2" class="text-purple-600">2.0</span>
+                            </div>
+                            <input type="range" id="sl_w1_2" min="-10" max="10" step="0.5" value="2.0" class="weight-slider">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[10px] font-bold text-gray-600 mb-0.5">
+                                <span>편향 (B₁)</span><span id="disp_b1" class="text-red-500">-4.0</span>
+                            </div>
+                            <input type="range" id="sl_b1" min="-10" max="10" step="0.5" value="-4.0" class="weight-slider">
+                        </div>
+                    </div>
+                    <div class="bg-white p-2 rounded-lg border font-mono text-[10px] lg:text-[11px] text-gray-800 shadow-inner">
+                        <div class="text-gray-500 font-bold leading-tight">
+                            Z₁ = (<span id="m_x1_1" class="text-blue-600">0</span> × <span id="m_w1_1">5.0</span>) + (<span id="m_x2_1" class="text-blue-600">0</span> × <span id="m_w1_2">2.0</span>) + (<span id="m_b1" class="text-red-500">-4.0</span>) <br>
+                            <span class="text-gray-800">= <span id="m_z1" class="font-black text-[12px]">0.00</span></span>
+                        </div>
+                        <div class="mt-1 pt-1 border-t border-gray-100">
+                            <span class="text-gray-500 font-bold">H₁ = Sigmoid(Z₁) = </span><span id="m_h1" class="font-black text-purple-600 text-[13px]">0.000</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Node B (H2) -->
+                <div class="math-box p-2 rounded-xl bg-gray-50 border-l-4 border-purple-400 flex flex-col justify-between">
+                    <p class="font-bold text-purple-700 mb-1.5 text-xs">1차 면접관 B (H₂)</p>
+                    <div class="space-y-2 mb-1.5 bg-white p-2 rounded-lg border shadow-sm">
+                        <div>
+                            <div class="flex justify-between text-[10px] font-bold text-gray-600 mb-0.5">
+                                <span>가중치 (W₃)</span><span id="disp_w2_1" class="text-purple-600">1.0</span>
+                            </div>
+                            <input type="range" id="sl_w2_1" min="-10" max="10" step="0.5" value="1.0" class="weight-slider">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[10px] font-bold text-gray-600 mb-0.5">
+                                <span>가중치 (W₄)</span><span id="disp_w2_2" class="text-purple-600">6.0</span>
+                            </div>
+                            <input type="range" id="sl_w2_2" min="-10" max="10" step="0.5" value="6.0" class="weight-slider">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[10px] font-bold text-gray-600 mb-0.5">
+                                <span>편향 (B₂)</span><span id="disp_b2" class="text-red-500">-4.0</span>
+                            </div>
+                            <input type="range" id="sl_b2" min="-10" max="10" step="0.5" value="-4.0" class="weight-slider">
+                        </div>
+                    </div>
+                    <div class="bg-white p-2 rounded-lg border font-mono text-[10px] lg:text-[11px] text-gray-800 shadow-inner">
+                        <div class="text-gray-500 font-bold leading-tight">
+                            Z₂ = (<span id="m_x1_2" class="text-blue-600">0</span> × <span id="m_w2_1">1.0</span>) + (<span id="m_x2_2" class="text-blue-600">0</span> × <span id="m_w2_2">6.0</span>) + (<span id="m_b2" class="text-red-500">-4.0</span>) <br>
+                            <span class="text-gray-800">= <span id="m_z2" class="font-black text-[12px]">0.00</span></span>
+                        </div>
+                        <div class="mt-1 pt-1 border-t border-gray-100">
+                            <span class="text-gray-500 font-bold">H₂ = Sigmoid(Z₂) = </span><span id="m_h2" class="font-black text-purple-600 text-[13px]">0.000</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Node Out (Y) -->
+                <div class="math-box p-2 rounded-xl bg-blue-50 border-l-4 border-green-500 shadow-sm flex flex-col justify-between">
+                    <p class="font-bold text-green-700 mb-1.5 text-xs">최종 팀장 (Y)</p>
+                    <div class="space-y-2 mb-1.5 bg-white p-2 rounded-lg border shadow-sm">
+                        <div>
+                            <div class="flex justify-between text-[10px] font-bold text-gray-600 mb-0.5">
+                                <span>가중치 (W₅)</span><span id="disp_w_out_1" class="text-green-600">5.0</span>
+                            </div>
+                            <input type="range" id="sl_w_out_1" min="-10" max="10" step="0.5" value="5.0" class="weight-slider">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[10px] font-bold text-gray-600 mb-0.5">
+                                <span>가중치 (W₆)</span><span id="disp_w_out_2" class="text-green-600">5.0</span>
+                            </div>
+                            <input type="range" id="sl_w_out_2" min="-10" max="10" step="0.5" value="5.0" class="weight-slider">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[10px] font-bold text-gray-600 mb-0.5">
+                                <span>편향 (B₃)</span><span id="disp_b_out" class="text-red-500">-6.0</span>
+                            </div>
+                            <input type="range" id="sl_b_out" min="-10" max="10" step="0.5" value="-6.0" class="weight-slider">
+                        </div>
+                    </div>
+                    <div class="bg-white p-2 rounded-lg border font-mono text-[10px] lg:text-[11px] text-gray-800 shadow-inner flex flex-col justify-center h-full">
+                        <div class="text-gray-500 font-bold leading-tight">
+                            Z₃ = (<span id="m_h1_out" class="text-purple-600">0</span> × <span id="m_w_out_1">5.0</span>) + (<span id="m_h2_out" class="text-purple-600">0</span> × <span id="m_w_out_2">5.0</span>) + (<span id="m_b_out" class="text-red-500">-6.0</span>) <br>
+                            <span class="text-gray-800">= <span id="m_z_out" class="font-black text-[12px]">0.00</span></span>
+                        </div>
+                        <div class="mt-1 pt-1 border-t border-gray-100 flex justify-between items-center">
+                            <span class="text-gray-600 font-bold text-[10px]">Y = Sigmoid(Z₃)</span>
+                            <span id="m_y" class="font-black text-green-600 text-base">0.0000</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- 상황 설명 Popup -->
+    <div id="mainPopup" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 transition-opacity">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 transform transition-transform scale-95 popup-content">
+            <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                💡 인공신경망의 협동이란?
+            </h3>
+            <div class="text-sm text-gray-600 space-y-3 leading-relaxed">
+                <p>단일 퍼셉트론은 단순히 <b>직선 하나</b>로만 합격/불합격을 나눌 수 있습니다.</p>
+                <p>하지만 현실의 기준은 복잡합니다. "열정과 기술이 모두 뛰어나야만 합격"이라거나 "둘 중 하나라도 특출나면 합격"이라는 기준은 직선 하나로 그을 수 없습니다.</p>
+                <p>다층 퍼셉트론(MLP)은 <b>은닉층(Hidden Layer)</b>을 두어 이 문제를 해결합니다. 서로 다른 기준을 가진 노드(1차 면접관들)가 각자의 의견을 내고, 다음 층(팀장)이 이를 종합하면 복잡하고 유연한 판단 곡선이 만들어집니다.</p>
+            </div>
+            <button onclick="closePopup('mainPopup')" class="mt-6 w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors focus:outline-none">
+                이해했습니다
+            </button>
+        </div>
+    </div>
+
+    <!-- 시그모이드 설명 Popup -->
+    <div id="sigmoidPopup" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 transition-opacity">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 transform transition-transform scale-95 popup-content">
+            <h3 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                ❓ 시그모이드(Sigmoid) 함수란?
+            </h3>
+            <div class="text-sm text-gray-700 space-y-4 leading-relaxed">
+                <div class="bg-blue-50 p-4 rounded-lg text-center font-serif text-lg border border-blue-100 shadow-inner">
+                    <span class="italic">f(Z)</span> = 1 / (1 + e<sup>-Z</sup>)
+                </div>
+                <p>계산된 숫자 <b>Z</b>가 아무리 크거나 작아도, <b>무조건 0과 1 사이의 값으로 압축</b>해 주는 마법의 수학 함수입니다.</p>
+                <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                    <li><b>Z가 매우 큰 양수면:</b> 1(100% 합격)에 가까워집니다.</li>
+                    <li><b>Z가 0이면:</b> 0.5(50% 반반)가 됩니다.</li>
+                    <li><b>Z가 매우 작은 음수면:</b> 0(0% 불합격)에 가까워집니다.</li>
+                </ul>
+                <p class="bg-yellow-50 p-3 rounded text-yellow-800 text-xs">
+                    인공지능이 "100점 만점에 몇 점"이 아니라, "합격할 확률이 85%야(0.85)"라고 확률적으로 말할 수 있게 만들어주는 핵심 부품입니다!
+                </p>
+            </div>
+            <button onclick="closePopup('sigmoidPopup')" class="mt-6 w-full bg-gray-800 text-white font-bold py-3 rounded-xl hover:bg-gray-900 transition-colors focus:outline-none">
+                닫기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Neural Network Parameters ---
+        let W1_1 = 5.0, W1_2 = 2.0, B1 = -4.0;
+        let W2_1 = 1.0, W2_2 = 6.0, B2 = -4.0;
+        let W_OUT_1 = 5.0, W_OUT_2 = 5.0, B_OUT = -6.0;
+
+        // --- Variable Names Mapping ---
+        const edgeNames = {
+            'w1_1': 'W₁', 'w1_2': 'W₂',
+            'w2_1': 'W₃', 'w2_2': 'W₄',
+            'w_out_1': 'W₅', 'w_out_2': 'W₆'
+        };
+
+        // --- DOM Elements ---
+        const sliderP = document.getElementById('sliderPassion');
+        const sliderS = document.getElementById('sliderSkill');
+        const canvas = document.getElementById('boundaryCanvas');
+        const ctx = canvas.getContext('2d');
+        let bgImageData = null;
+
+        // Sliders
+        const sliders = {
+            w1_1: document.getElementById('sl_w1_1'), w1_2: document.getElementById('sl_w1_2'), b1: document.getElementById('sl_b1'),
+            w2_1: document.getElementById('sl_w2_1'), w2_2: document.getElementById('sl_w2_2'), b2: document.getElementById('sl_b2'),
+            w_out_1: document.getElementById('sl_w_out_1'), w_out_2: document.getElementById('sl_w_out_2'), b_out: document.getElementById('sl_b_out')
+        };
+        
+        // Display texts for sliders
+        const displays = {
+            w1_1: document.getElementById('disp_w1_1'), w1_2: document.getElementById('disp_w1_2'), b1: document.getElementById('disp_b1'),
+            w2_1: document.getElementById('disp_w2_1'), w2_2: document.getElementById('disp_w2_2'), b2: document.getElementById('disp_b2'),
+            w_out_1: document.getElementById('disp_w_out_1'), w_out_2: document.getElementById('disp_w_out_2'), b_out: document.getElementById('disp_b_out')
+        };
+
+        // Math spans for equation text
+        const mathElems = {
+            w1_1: document.getElementById('m_w1_1'), w1_2: document.getElementById('m_w1_2'), b1: document.getElementById('m_b1'),
+            w2_1: document.getElementById('m_w2_1'), w2_2: document.getElementById('m_w2_2'), b2: document.getElementById('m_b2'),
+            w_out_1: document.getElementById('m_w_out_1'), w_out_2: document.getElementById('m_w_out_2'), b_out: document.getElementById('m_b_out')
+        };
+
+        function sigmoid(z) {
+            return 1 / (1 + Math.exp(-z));
+        }
+
+        // --- Network Visual Updates (SVG & Labels) ---
+        function updateNetworkVisuals() {
+            const updateEdge = (id, weight) => {
+                const edge = document.getElementById(`edge_${id}`);
+                const lbl = document.getElementById(`lbl_${id}`);
+                
+                edge.style.stroke = weight >= 0 ? '#3b82f6' : '#ef4444';
+                edge.style.strokeWidth = Math.max(2, Math.min(10, Math.abs(weight) * 0.9)) + 'px';
+                edge.style.opacity = Math.max(0.2, Math.min(1, Math.abs(weight) * 0.2 + 0.3));
+                
+                lbl.innerHTML = `${edgeNames[id]}: ${weight.toFixed(1)}`;
+                lbl.style.color = weight >= 0 ? '#1d4ed8' : '#b91c1c'; 
+            };
+
+            updateEdge('w1_1', W1_1); updateEdge('w1_2', W1_2);
+            updateEdge('w2_1', W2_1); updateEdge('w2_2', W2_2);
+            updateEdge('w_out_1', W_OUT_1); updateEdge('w_out_2', W_OUT_2);
+
+            // Update Biases on nodes
+            const setBiasLabel = (id, name, bias) => {
+                const el = document.getElementById(`lbl_${id}`);
+                el.textContent = `${name}: ${bias.toFixed(1)}`;
+                if(bias >= 0) {
+                    el.classList.replace('border-red-400', 'border-blue-400') || el.classList.replace('border-red-500', 'border-blue-500') || el.classList.add('border-blue-500');
+                    el.style.color = '#3b82f6'; el.style.borderColor = '#3b82f6';
+                } else {
+                    el.classList.replace('border-blue-400', 'border-red-400') || el.classList.replace('border-blue-500', 'border-red-500') || el.classList.add('border-red-500');
+                    el.style.color = '#ef4444'; el.style.borderColor = '#ef4444';
+                }
+            };
+
+            setBiasLabel('b1', 'B₁', B1);
+            setBiasLabel('b2', 'B₂', B2);
+            setBiasLabel('b_out', 'B₃', B_OUT);
+        }
+
+        // --- Read Sliders and Update Global Weights ---
+        function updateWeightsFromSliders() {
+            W1_1 = parseFloat(sliders.w1_1.value); displays.w1_1.textContent = W1_1.toFixed(1); mathElems.w1_1.textContent = W1_1.toFixed(1);
+            W1_2 = parseFloat(sliders.w1_2.value); displays.w1_2.textContent = W1_2.toFixed(1); mathElems.w1_2.textContent = W1_2.toFixed(1);
+            B1 = parseFloat(sliders.b1.value);     displays.b1.textContent = B1.toFixed(1);     mathElems.b1.textContent = B1.toFixed(1);
+            
+            W2_1 = parseFloat(sliders.w2_1.value); displays.w2_1.textContent = W2_1.toFixed(1); mathElems.w2_1.textContent = W2_1.toFixed(1);
+            W2_2 = parseFloat(sliders.w2_2.value); displays.w2_2.textContent = W2_2.toFixed(1); mathElems.w2_2.textContent = W2_2.toFixed(1);
+            B2 = parseFloat(sliders.b2.value);     displays.b2.textContent = B2.toFixed(1);     mathElems.b2.textContent = B2.toFixed(1);
+            
+            W_OUT_1 = parseFloat(sliders.w_out_1.value); displays.w_out_1.textContent = W_OUT_1.toFixed(1); mathElems.w_out_1.textContent = W_OUT_1.toFixed(1);
+            W_OUT_2 = parseFloat(sliders.w_out_2.value); displays.w_out_2.textContent = W_OUT_2.toFixed(1); mathElems.w_out_2.textContent = W_OUT_2.toFixed(1);
+            B_OUT = parseFloat(sliders.b_out.value);     displays.b_out.textContent = B_OUT.toFixed(1);     mathElems.b_out.textContent = B_OUT.toFixed(1);
+            
+            updateNetworkVisuals();
+            precomputeCanvasBackground();
+            calculateAndRender();
+        }
+
+        // --- Presets ---
+        function setPreset(type) {
+            if(type === 'basic') {
+                sliders.w1_1.value = 5.0; sliders.w1_2.value = 2.0; sliders.b1.value = -4.0;
+                sliders.w2_1.value = 1.0; sliders.w2_2.value = 6.0; sliders.b2.value = -4.0;
+                sliders.w_out_1.value = 5.0; sliders.w_out_2.value = 5.0; sliders.b_out.value = -6.0;
+            } else if (type === 'passion') {
+                sliders.w1_1.value = 10.0; sliders.w1_2.value = 0.0; sliders.b1.value = -5.0;
+                sliders.w2_1.value = 8.0; sliders.w2_2.value = 0.0; sliders.b2.value = -4.0;
+                sliders.w_out_1.value = 6.0; sliders.w_out_2.value = 6.0; sliders.b_out.value = -4.0;
+            } else if (type === 'and') {
+                sliders.w1_1.value = 6.0; sliders.w1_2.value = 6.0; sliders.b1.value = -8.0;
+                sliders.w2_1.value = 5.0; sliders.w2_2.value = 5.0; sliders.b2.value = -7.0;
+                sliders.w_out_1.value = 8.0; sliders.w_out_2.value = 8.0; sliders.b_out.value = -10.0;
+            }
+            updateWeightsFromSliders();
+        }
+
+        Object.values(sliders).forEach(slider => {
+            if (slider) slider.addEventListener('input', updateWeightsFromSliders);
+        });
+
+        // --- Logic & Updates ---
+        function calculateAndRender() {
+            const rawP = parseFloat(sliderP.value);
+            const rawS = parseFloat(sliderS.value);
+            const X1 = rawP / 10;
+            const X2 = rawS / 10;
+
+            document.getElementById('valPassion').innerText = rawP.toFixed(1);
+            document.getElementById('valSkill').innerText = rawS.toFixed(1);
+            document.getElementById('node_x1').innerText = rawP.toFixed(1);
+            document.getElementById('node_x2').innerText = rawS.toFixed(1);
+            
+            document.getElementById('m_x1_1').innerText = rawP.toFixed(1); document.getElementById('m_x2_1').innerText = rawS.toFixed(1);
+            document.getElementById('m_x1_2').innerText = rawP.toFixed(1); document.getElementById('m_x2_2').innerText = rawS.toFixed(1);
+
+            // Forward Pass
+            const Z1 = (X1 * W1_1) + (X2 * W1_2) + B1;
+            const H1 = sigmoid(Z1);
+            const Z2 = (X1 * W2_1) + (X2 * W2_2) + B2;
+            const H2 = sigmoid(Z2);
+            const Z_OUT = (H1 * W_OUT_1) + (H2 * W_OUT_2) + B_OUT;
+            const Y = sigmoid(Z_OUT);
+
+            // Math UI Updates
+            document.getElementById('m_z1').innerText = Z1.toFixed(2); 
+            document.getElementById('m_h1').innerText = H1.toFixed(3);
+            
+            document.getElementById('m_z2').innerText = Z2.toFixed(2); 
+            document.getElementById('m_h2').innerText = H2.toFixed(3);
+            
+            document.getElementById('m_h1_out').innerText = H1.toFixed(3);
+            document.getElementById('m_h2_out').innerText = H2.toFixed(3);
+            document.getElementById('m_z_out').innerText = Z_OUT.toFixed(2); 
+            document.getElementById('m_y').innerText = Y.toFixed(4);
+
+            document.getElementById('node_h1').innerText = H1.toFixed(2);
+            document.getElementById('node_h2').innerText = H2.toFixed(2);
+            document.getElementById('node_y').innerText = Y.toFixed(2);
+
+            // Visual Colors
+            const isPass = Y >= 0.5;
+            const finalNode = document.getElementById('node_y_bg');
+            const finalTxt = document.getElementById('finalResultText');
+            
+            if (isPass) {
+                finalNode.classList.replace('border-red-400', 'border-green-500'); finalNode.classList.replace('bg-red-50', 'bg-white');
+                finalTxt.innerText = "🎉 최종 합격!"; finalTxt.className = "mt-2 text-[15px] font-bold text-green-600 bg-white/90 px-3 py-0.5 rounded-full shadow-md";
+                document.getElementById('node_y').classList.replace('text-red-600', 'text-green-600');
+            } else {
+                finalNode.classList.replace('border-green-500', 'border-red-400'); finalNode.classList.replace('bg-white', 'bg-red-50');
+                if(!finalNode.classList.contains('border-red-400')) finalNode.classList.add('border-red-400', 'bg-red-50');
+                finalTxt.innerText = "❌ 불합격"; finalTxt.className = "mt-2 text-[15px] font-bold text-red-500 bg-white/90 px-3 py-0.5 rounded-full shadow-md";
+                document.getElementById('node_y').classList.replace('text-green-600', 'text-red-600');
+                if(!document.getElementById('node_y').classList.contains('text-red-600')) document.getElementById('node_y').classList.add('text-red-600');
+            }
+
+            document.getElementById('node_h1_bg').style.backgroundColor = `rgba(168, 85, 247, ${H1 * 0.3})`;
+            document.getElementById('node_h2_bg').style.backgroundColor = `rgba(168, 85, 247, ${H2 * 0.3})`;
+
+            drawCanvasMarker(X1, X2, isPass);
+        }
+
+        // --- Canvas Graph Logic ---
+        function precomputeCanvasBackground() {
+            const width = canvas.width;
+            const height = canvas.height;
+            bgImageData = ctx.createImageData(width, height);
+            
+            for(let y = 0; y < height; y++) {
+                for(let x = 0; x < width; x++) {
+                    let nx = x / width;
+                    let ny = 1.0 - (y / height); 
+
+                    let h1 = sigmoid((nx * W1_1) + (ny * W1_2) + B1);
+                    let h2 = sigmoid((nx * W2_1) + (ny * W2_2) + B2);
+                    let out = sigmoid((h1 * W_OUT_1) + (h2 * W_OUT_2) + B_OUT);
+
+                    let idx = (y * width + x) * 4;
+                    if(out >= 0.5) {
+                        let intensity = (out - 0.5) * 2;
+                        bgImageData.data[idx] = 167 - (50 * intensity);     bgImageData.data[idx+1] = 243 - (40 * intensity);
+                        bgImageData.data[idx+2] = 208 - (50 * intensity);   bgImageData.data[idx+3] = 255;
+                    } else {
+                        let intensity = (0.5 - out) * 2;
+                        bgImageData.data[idx] = 254 - (20 * intensity);     bgImageData.data[idx+1] = 226 - (40 * intensity);
+                        bgImageData.data[idx+2] = 226 - (40 * intensity);   bgImageData.data[idx+3] = 255;
+                    }
+                }
+            }
+        }
+
+        function drawCanvasMarker(nx, ny, isPass) {
+            if (!bgImageData) precomputeCanvasBackground();
+            ctx.putImageData(bgImageData, 0, 0);
+
+            const px = nx * canvas.width;
+            const py = (1.0 - ny) * canvas.height;
+
+            ctx.beginPath(); ctx.arc(px, py, 5, 0, 2 * Math.PI, false);
+            ctx.fillStyle = isPass ? '#16a34a' : '#dc2626'; ctx.fill();
+            ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+
+            ctx.beginPath(); ctx.setLineDash([2, 4]);
+            ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height);
+            ctx.moveTo(0, py); ctx.lineTo(canvas.width, py);
+            ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.stroke(); ctx.setLineDash([]);
+        }
+
+        // Interactive Canvas Clicks
+        let isDragging = false;
+        canvas.addEventListener('mousedown', function(e) {
+            isDragging = true; handleCanvasClick(e);
+        });
+        window.addEventListener('mousemove', function(e) {
+            if(isDragging) handleCanvasClick(e);
+        });
+        window.addEventListener('mouseup', function() {
+            isDragging = false;
+        });
+
+        function handleCanvasClick(e) {
+            const rect = canvas.getBoundingClientRect();
+            let x = e.clientX - rect.left;
+            let y = e.clientY - rect.top;
+            
+            if(x < 0 || x > canvas.width || y < 0 || y > canvas.height) return;
+
+            let nx = Math.max(0, Math.min(1, x / canvas.width));
+            let ny = Math.max(0, Math.min(1, 1.0 - (y / canvas.height)));
+
+            sliderP.value = (nx * 10).toFixed(1);
+            sliderS.value = (ny * 10).toFixed(1);
+            calculateAndRender();
+        }
+
+        // --- Popup Logic ---
+        function showInfo(id) {
+            const popup = document.getElementById(id);
+            const content = popup.querySelector('.popup-content');
+            popup.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closePopup(id) {
+            const popup = document.getElementById(id);
+            const content = popup.querySelector('.popup-content');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                popup.classList.add('hidden');
+            }, 200);
+        }
+
+        // Init
+        sliderP.addEventListener('input', calculateAndRender);
+        sliderS.addEventListener('input', calculateAndRender);
+        window.onload = updateWeightsFromSliders;
+    </script>
+</body>
+</html>
